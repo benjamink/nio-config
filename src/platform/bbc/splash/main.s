@@ -120,6 +120,17 @@ _start:
 
         jsr set_video
 
+.ifdef CONFIG_CHAIN
+        ; Keep the splash visible while the main CONFIG application loads.
+        ldx #<confnio_load_command
+        ldy #>confnio_load_command
+        jsr OSCLI
+        ; The application owns the full BBC heap, including the splash range.
+        ; Restore the MOS screen before handing over so its startup writes are
+        ; never rendered through the splash CRTC geometry.
+        jsr restore_mode7
+        jmp CONFNIO_START
+.else
         ; Poll for a new key instead of calling blocking OSRDCH. OSRDCH enters
         ; the MOS input wait path, which assumes that MOS owns the display and
         ; can clear/redraw through the active screen geometry. OSBYTE 129 with
@@ -142,6 +153,7 @@ _start:
         jsr OSWRCH
 
         rts
+.endif
 
 ; ---------------------------------------------------------------------------
 ; Install the custom palette, CRTC geometry, and Mode 5 ULA format.
@@ -207,6 +219,12 @@ set_video_blank:
         plp
         rts
 
+restore_mode7:
+        lda #22                 ; VDU 22
+        jsr OSWRCH
+        lda #7                  ; MODE 7
+        jmp OSWRCH
+
 ; ---------------------------------------------------------------------------
 ; CRTC register values R0 through R13
 ; ---------------------------------------------------------------------------
@@ -221,7 +239,7 @@ set_video_blank:
 ; R5  vertical total adjustment         0
 ; R6  vertical displayed               12 rows = 96 lines
 ; R7  vertical sync position           34
-; R8  interlace/display mode            0
+; R8  interlace/display mode            1
 ; R9  scanlines per character - 1       7
 ; R10 cursor start                     32, cursor disabled
 ; R11 cursor end                        0
@@ -299,3 +317,12 @@ black_palette:
 
 load_command:
         .byte "LOAD SCREEN 5800", 13
+
+confnio_load_command:
+.ifdef CONFIG_MASTER
+        .byte "LOAD CONFNIO 0E00", 13
+CONFNIO_START = $0E00
+.else
+        .byte "LOAD CONFNIO 1900", 13
+CONFNIO_START = $1900
+.endif

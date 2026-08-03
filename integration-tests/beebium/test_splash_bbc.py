@@ -14,14 +14,14 @@ from helpers import command, wait_for_screen_text
 SCREEN_START = 0x7100
 SCREEN_SIZE = 0x0F00
 SCREEN_CRTC_ADDRESS = SCREEN_START // 8
-SPLASH_CRTC_REGISTERS = (63, 40, 49, 36, 38, 0, 12, 34, 0, 7, 32, 0, 0x0E, 0x20)
+SPLASH_CRTC_REGISTERS = (63, 40, 49, 36, 38, 0, 12, 34, 1, 7, 32, 0, 0x0E, 0x20)
 
 _HERE = Path(__file__).resolve()
 _NIO_CONFIG_ROOT = _HERE.parents[2]
 _SPLASH_DIR = _NIO_CONFIG_ROOT / "src" / "platform" / "bbc" / "splash"
 _SPLASH_BUILD = _NIO_CONFIG_ROOT / "build" / "bbc" / "splash"
 _DEFAULT_SPLASH_IMAGE = (
-    _NIO_CONFIG_ROOT / "images" / "fujinet-config-nio-splash-160x96x4.png"
+    _NIO_CONFIG_ROOT / "images" / "config-nio.png"
 )
 _SPLASH_IMAGE = Path(os.environ.get("SPLASH_IMAGE", _DEFAULT_SPLASH_IMAGE))
 
@@ -142,3 +142,16 @@ def test_bbc_splash_loads_short_mode5_screen_and_restores_mode7(
     type_text(bbc, " ")
     wait_for_screen_text(bbc, ">", evidence=screen_evidence, label="MODE 7 restored")
     assert bbc.video_ula.state.teletext_mode is True
+
+
+def test_config_boot_runs_splash_then_confnio(
+    beebium_config_nio, screen_evidence
+):
+    """The CONFIG boot disk runs the splash and chains into CONFNIO."""
+    bbc = beebium_config_nio
+
+    command(bbc, "*EXEC !BOOT")
+    wait_for_screen_text(bbc, "sd0:/", evidence=screen_evidence, label="CONFIG boot CONFNIO")
+    assert bbc.video_ula.state.teletext_mode is True
+    assert bbc.crtc.state.screen_start != SCREEN_CRTC_ADDRESS
+    assert bbc.crtc.state.vdisplayed == 25

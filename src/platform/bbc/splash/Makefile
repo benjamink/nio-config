@@ -12,20 +12,24 @@ LD65 ?= ld65
 PYTHON ?= python3
 SCREEN_PYTHON ?= uv run --with Pillow python3
 CREATE_SSD ?= $(REPO_ROOT)/../fujinet-nio-lib/scripts/create_ssd.py
-SCREEN_INPUT ?=
+SCREEN_INPUT ?= $(REPO_ROOT)/images/config-nio.png
 
-PROGRAM := $(BUILD_DIR)/SPLASH
-OBJECT := $(OBJ_DIR)/main.o
+PROGRAM_NAME ?= SPLASH
+PROGRAM := $(BUILD_DIR)/$(PROGRAM_NAME)
+OBJECT := $(OBJ_DIR)/$(PROGRAM_NAME).o
 SCREEN := $(BUILD_DIR)/SCREEN
 SSD := $(BUILD_DIR)/splash.ssd
 
-.PHONY: all check clean disk stage
+.PHONY: all check clean disk stage config
 
 all: $(PROGRAM) $(SCREEN) check
 
 $(OBJECT): $(SPLASH_DIR)/main.s
 	@mkdir -p "$(dir $@)"
-	$(CA65) --cpu 6502 --listing "$(@:.o=.lst)" -o "$@" "$<"
+	$(CA65) --cpu 6502 \
+		$(if $(CONFIG_CHAIN),-D CONFIG_CHAIN=1,) \
+		$(if $(CONFIG_MASTER),-D CONFIG_MASTER=1,) \
+		--listing "$(@:.o=.lst)" -o "$@" "$<"
 
 $(PROGRAM): $(OBJECT) $(SPLASH_DIR)/splash.cfg
 	@mkdir -p "$(dir $@)"
@@ -51,3 +55,6 @@ disk: stage
 
 clean:
 	rm -rf "$(BUILD_DIR)"
+
+config:
+	$(MAKE) clean all PROGRAM_NAME=CONFIG CONFIG_CHAIN=1 CONFIG_MASTER=$(CONFIG_MASTER)

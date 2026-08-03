@@ -263,3 +263,4 @@ def beebium_config_nio(beebium_paths, real_fujinet_config_nio, screen_evidence):
         finally:
             if screen_evidence is not None:
                 screen_evidence.capture(bbc, "final")
+
