@@ -242,7 +242,7 @@ crtc_values:
         .byte 0
         .byte SCREEN_ROWS
         .byte 34
-        .byte 0
+        .byte 1
         .byte 7
         .byte 32
         .byte 0
@@ -251,11 +251,41 @@ crtc_values:
 
 ; Complete Mode 5 palette command table. The generated solid bytes use:
 ;   &00 -> indices 0/1, &0F -> 3/7, &F0 -> 9/12, &FF -> 15.
+; palette_values:
+;         .byte $07, $17, $27, $36
+;         .byte $47, $57, $67, $76
+;         .byte $87, $94, $A7, $B7
+;         .byte $C4, $D7, $E7, $F0
+
 palette_values:
-        .byte $07, $17, $27, $36
-        .byte $47, $57, $67, $76
-        .byte $87, $94, $A7, $B7
-        .byte $C4, $D7, $E7, $F0
+        ; Logical 0: black, physical colour 0 EOR 7 = 7
+        ; Logical 1: red,   physical colour 1 EOR 7 = 6
+        ; Logical 2: yellow,physical colour 3 EOR 7 = 4
+        ; Logical 3: white, physical colour 7 EOR 7 = 0
+
+        ; ULA palette entries 0–3
+        .byte $07             ; 0:  logical 0 -> black
+        .byte $17             ; 1:  logical 0 -> black
+        .byte $26             ; 2:  logical 1 -> red
+        .byte $36             ; 3:  logical 1 -> red
+
+        ; ULA palette entries 4–7
+        .byte $47             ; 4:  logical 0 -> black
+        .byte $57             ; 5:  logical 0 -> black
+        .byte $66             ; 6:  logical 1 -> red
+        .byte $76             ; 7:  logical 1 -> red
+
+        ; ULA palette entries 8–11
+        .byte $84             ; 8:  logical 2 -> yellow
+        .byte $94             ; 9:  logical 2 -> yellow
+        .byte $A0             ; 10: logical 3 -> white
+        .byte $B0             ; 11: logical 3 -> white
+
+        ; ULA palette entries 12–15
+        .byte $C4             ; 12: logical 2 -> yellow
+        .byte $D4             ; 13: logical 2 -> yellow
+        .byte $E0             ; 14: logical 3 -> white
+        .byte $F0             ; 15: logical 3 -> white
 
 black_palette:
         .byte $07, $17, $27, $37
