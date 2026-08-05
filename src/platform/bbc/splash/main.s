@@ -268,18 +268,24 @@ crtc_values:
         .byte SCREEN_CRTC_LO
 
 ; Complete Mode 5 palette command table. The generated solid bytes use:
-;   &00 -> indices 0/1, &0F -> 3/7, &F0 -> 9/12, &FF -> 15.
-; palette_values:
-;         .byte $07, $17, $27, $36
-;         .byte $47, $57, $67, $76
-;         .byte $87, $94, $A7, $B7
-;         .byte $C4, $D7, $E7, $F0
 
 palette_values:
         ; Logical 0: black, physical colour 0 EOR 7 = 7
         ; Logical 1: red,   physical colour 1 EOR 7 = 6
         ; Logical 2: yellow,physical colour 3 EOR 7 = 4
         ; Logical 3: white, physical colour 7 EOR 7 = 0
+
+        ; The physical colours are.
+        ; 0 black
+        ; 1 red
+        ; 2 green
+        ; 3 yellow
+        ; 4 blue
+        ; 5 magenta
+        ; 6 cyan
+        ; 7 white
+
+        ; To embed them into the table, EOR the appropriate colour with 7 for the final digit, and place the index digit at the start (0..F)
 
         ; ULA palette entries 0–3
         .byte $07             ; 0:  logical 0 -> black
@@ -305,6 +311,7 @@ palette_values:
         .byte $E0             ; 14: logical 3 -> white
         .byte $F0             ; 15: logical 3 -> white
 
+; This is all black because every right hand nibble is 7 (black)
 black_palette:
         .byte $07, $17, $27, $37
         .byte $47, $57, $67, $77
