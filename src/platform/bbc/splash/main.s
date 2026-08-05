@@ -1,22 +1,19 @@
 ;
-; splash.s
+; main.s
 ;
-; Minimal BBC Micro custom Mode 5 splash-screen POC.
+; Minimal BBC Micro custom Mode 5 splash-screen
 ;
-; Program:
-;     load address: &6931
-;     execution:    &6931
 ;
-; Raw image:
-;     filename:     SCREEN
-;     address:      &7100
-;     size:         3840 bytes
+; Compressed image:
+;     filename:     SCREENZ
+;     load address: &5800 (temporary buffer)
+;     expanded to:  &7100 (3840 bytes of Mode 5 screen memory)
 ;     dimensions:   160 x 96, Mode 5 screen-memory order
 ;
 ; Build with ca65/ld65; see splash.cfg below.
 ;
 
-        .setcpu "6502"
+.setcpu "6502"
 
 ; ---------------------------------------------------------------------------
 ; MOS entry points
@@ -38,6 +35,14 @@ CRTC_DATA = $FE01
 ULA_CTRL  = $FE20
 ULA_PAL   = $FE21
 ULA_CTRL_SHADOW = $0248
+
+; ---------------------------------------------------------------------------
+; Zero-page scratch for decompress (BBC language workspace)
+; ---------------------------------------------------------------------------
+
+ptr1 = $70
+ptr2 = $72
+tmp1 = $74
 
 ; ---------------------------------------------------------------------------
 ; Custom screen layout
@@ -81,11 +86,11 @@ _start:
         jsr OSBYTE
 
         ; Put the display on the splash geometry with an all-black palette
-        ; before disk I/O. The image is loaded into temporary RAM, so neither
-        ; disk I/O nor a partially loaded bitmap can affect the visible screen.
+        ; before disk I/O. SCREENZ is loaded into temporary RAM and expanded
+        ; into screen memory while the palette is still black.
         jsr set_video_blank
 
-        ; Load the already converted raw Mode 5 file into temporary RAM.
+        ; Load the compressed Mode 5 file into temporary RAM.
         ;
         ; OSCLI does not require the leading '*' used at the BASIC prompt.
         ldx #<load_command
@@ -100,23 +105,13 @@ _start:
         jsr OSBYTE
 
         ; MOS disk I/O and OSRDCH may have restored their own video registers.
-        ; Reapply the blank custom state before copying the image.
+        ; Reapply the blank custom state before expanding the image.
         jsr set_video_blank
 
-        ; Copy the complete image into the actual CRTC display memory while
-        ; the palette is still black. The visible palette is installed only
-        ; after every byte is in place.
-        ldx #15
-        ldy #0
-@copy_page:
-        lda LOAD_BUFFER,y
-        sta SCREEN_START,y
-        iny
-        bne @copy_page
-        inc @copy_page+2      ; source high byte
-        inc @copy_page+5      ; destination high byte
-        dex
-        bne @copy_page
+        ; Expand SCREENZ directly into CRTC display memory while the palette
+        ; is still black. The visible palette is installed only after every
+        ; byte is in place.
+        jsr decompress_screen
 
         jsr set_video
 
@@ -154,6 +149,76 @@ _start:
 
         rts
 .endif
+
+; ---------------------------------------------------------------------------
+; Decompress LOAD_BUFFER -> SCREEN_START (config-nio LZ stream)
+; ---------------------------------------------------------------------------
+
+decompress_screen:
+        lda #<LOAD_BUFFER
+        sta ptr1
+        lda #>LOAD_BUFFER
+        sta ptr1+1
+        lda #<SCREEN_START
+        sta ptr2
+        lda #>SCREEN_START
+        sta ptr2+1
+
+decompress:
+        ldx #$00
+
+next_token:
+        ldy #$00
+        lda (ptr1),y
+        beq done
+        bmi copy_previous_token
+
+        tay
+        inc ptr1
+        bne raw_loop
+        inc ptr1+1
+raw_loop:
+        dey
+        bmi next_token
+        lda (ptr1,x)
+        sta (ptr2,x)
+        inc ptr1
+        bne :+
+        inc ptr1+1
+:       inc ptr2
+        bne raw_loop
+        inc ptr2+1
+        bne raw_loop
+
+copy_previous_token:
+        and #$7F
+        clc
+        adc #$02
+        sta tmp1
+        ldy #$01
+        lda (ptr1),y
+        tay
+        clc
+        lda ptr1
+        adc #$02
+        sta ptr1
+        bcc copy_previous_loop
+        inc ptr1+1
+
+copy_previous_loop:
+        dec ptr2+1
+        lda (ptr2),y
+        inc ptr2+1
+        sta (ptr2,x)
+        inc ptr2
+        bne :+
+        inc ptr2+1
+:       dec tmp1
+        bne copy_previous_loop
+        beq next_token
+
+done:
+        rts
 
 ; ---------------------------------------------------------------------------
 ; Install the custom palette, CRTC geometry, and Mode 5 ULA format.
@@ -267,49 +332,8 @@ crtc_values:
         .byte SCREEN_CRTC_HI
         .byte SCREEN_CRTC_LO
 
-; Complete Mode 5 palette command table. The generated solid bytes use:
-
-palette_values:
-        ; Logical 0: black, physical colour 0 EOR 7 = 7
-        ; Logical 1: red,   physical colour 1 EOR 7 = 6
-        ; Logical 2: yellow,physical colour 3 EOR 7 = 4
-        ; Logical 3: white, physical colour 7 EOR 7 = 0
-
-        ; The physical colours are.
-        ; 0 black
-        ; 1 red
-        ; 2 green
-        ; 3 yellow
-        ; 4 blue
-        ; 5 magenta
-        ; 6 cyan
-        ; 7 white
-
-        ; To embed them into the table, EOR the appropriate colour with 7 for the final digit, and place the index digit at the start (0..F)
-
-        ; ULA palette entries 0–3
-        .byte $07             ; 0:  logical 0 -> black
-        .byte $17             ; 1:  logical 0 -> black
-        .byte $26             ; 2:  logical 1 -> red
-        .byte $36             ; 3:  logical 1 -> red
-
-        ; ULA palette entries 4–7
-        .byte $47             ; 4:  logical 0 -> black
-        .byte $57             ; 5:  logical 0 -> black
-        .byte $66             ; 6:  logical 1 -> red
-        .byte $76             ; 7:  logical 1 -> red
-
-        ; ULA palette entries 8–11
-        .byte $84             ; 8:  logical 2 -> yellow
-        .byte $94             ; 9:  logical 2 -> yellow
-        .byte $A0             ; 10: logical 3 -> white
-        .byte $B0             ; 11: logical 3 -> white
-
-        ; ULA palette entries 12–15
-        .byte $C4             ; 12: logical 2 -> yellow
-        .byte $D4             ; 13: logical 2 -> yellow
-        .byte $E0             ; 14: logical 3 -> white
-        .byte $F0             ; 15: logical 3 -> white
+; Generated by tools.bbc_image (--ula-palette-asm) during the splash build.
+.include "palette.inc"
 
 ; This is all black because every right hand nibble is 7 (black)
 black_palette:
@@ -323,7 +347,7 @@ black_palette:
 ; ---------------------------------------------------------------------------
 
 load_command:
-        .byte "LOAD SCREEN 5800", 13
+        .byte "LOAD SCREENZ 5800", 13
 
 confnio_load_command:
 .ifdef CONFIG_MASTER

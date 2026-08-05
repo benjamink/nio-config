@@ -21,7 +21,7 @@ _NIO_CONFIG_ROOT = _HERE.parents[2]
 _SPLASH_DIR = _NIO_CONFIG_ROOT / "src" / "platform" / "bbc" / "splash"
 _SPLASH_BUILD = _NIO_CONFIG_ROOT / "build" / "bbc" / "splash"
 _DEFAULT_SPLASH_IMAGE = (
-    _NIO_CONFIG_ROOT / "images" / "config-nio.png"
+    _NIO_CONFIG_ROOT / "images" / "config-nio-160x96x4.png"
 )
 _SPLASH_IMAGE = Path(os.environ.get("SPLASH_IMAGE", _DEFAULT_SPLASH_IMAGE))
 
@@ -58,18 +58,14 @@ def wait_for_screen_bytes(bbc, expected: bytes, timeout: float = 5.0) -> None:
 
 @pytest.fixture(scope="session")
 def splash_bbc_artifacts():
-    subprocess.run(
-        [
-            "make",
-            "-C",
-            str(_SPLASH_DIR),
-            "clean",
-            "disk",
-            f"SCREEN_INPUT={_SPLASH_IMAGE}",
-        ],
-        check=True,
-    )
-    screen = _SPLASH_BUILD / "SCREEN"
+    # Default builds use checked-in SCREEN / SCREENZ assets. Only regenerate
+    # when SPLASH_IMAGE points at a non-default source (needs workspace tools).
+    make_cmd = ["make", "-C", str(_SPLASH_DIR), "clean"]
+    if _SPLASH_IMAGE.resolve() != _DEFAULT_SPLASH_IMAGE.resolve():
+        make_cmd.extend(["regen-screen", f"SCREEN_INPUT={_SPLASH_IMAGE}"])
+    make_cmd.append("disk")
+    subprocess.run(make_cmd, check=True)
+    screen = _SPLASH_DIR / "SCREEN"
     disk = _SPLASH_BUILD / "splash.ssd"
     assert screen.stat().st_size == SCREEN_SIZE
     assert disk.is_file()
@@ -106,11 +102,12 @@ def test_bbc_splash_loads_short_mode5_screen_and_restores_mode7(
     # MOS cursor flashing toggles the low control bit while retaining Mode 5.
     assert ula.control in (0xC4, 0xC5)
     assert ula.teletext_mode is False
+    # Logical colours: black, green, yellow, white (Mode 5 alias groups).
     assert tuple(ula.palette[i] for i in (0, 1, 3, 7, 9, 12, 15)) == (
         0,
         0,
-        1,
-        1,
+        2,
+        2,
         3,
         3,
         7,

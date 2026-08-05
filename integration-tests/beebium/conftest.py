@@ -201,7 +201,7 @@ def real_fujinet_config_nio(pytestconfig):
             (large_dir / name).write_bytes(b"")
         else:
             (large_dir / name).mkdir(exist_ok=True)
-    create_ssd = _WORKSPACE / "repos" / "fujinet-nio-lib" / "scripts" / "create_ssd.py"
+    create_ssd = _NIO_CONFIG_ROOT / "scripts" / "create_ssd.py"
     if not create_ssd.is_file():
         pytest.skip(f"SSD generator not found at {create_ssd}")
     missing = [tool for tool in ("basictool", "dfstool") if not shutil.which(tool)]
