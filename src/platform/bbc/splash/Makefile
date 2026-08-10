@@ -18,7 +18,7 @@ BBC_IMAGE ?= $(WORKSPACE_ROOT)/scripts/bbc-image
 COMPRESS ?= $(WORKSPACE_ROOT)/scripts/compress
 
 SCREEN_INPUT ?= $(REPO_ROOT)/images/config-nio-160x96x4.png
-SCREEN_PALETTE ?= black,green,yellow,white
+SCREEN_PALETTE ?= black,blue,yellow,white
 
 # Checked-in assets used by the default build (no workspace tools required).
 SCREEN_ASSET := $(SPLASH_DIR)/SCREEN
