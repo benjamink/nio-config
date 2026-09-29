@@ -9,9 +9,9 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | BBC / MS-DOS config | Amiga |
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
-| Browse a host, enter directories, assign a file to a slot | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / Assign, using the `Slot` field and `RO` box |
-| Slots: page through 0–255, edit, clear | **Catalogue** page: all 256 slots; selecting one loads it into `URI`, `Slot` and `RO`; Set / Clear |
-| Drive map and "Mount + Exit" | **Drives** page: Insert runs `FMOUNT slot drive RO/RW`, Eject runs `FUMOUNT drive`, immediately |
+| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
+| Slots: page through 0–255, edit, clear | **Catalogue** (Project menu): all 256 slots; Set / Clear / Mount… |
+| Drive map and "Mount + Exit" | **Drives** page: what is mounted where; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
 
 Every change is saved to the FujiNet as soon as you make it. For that
@@ -31,14 +31,14 @@ brackets, such as `(FMOUNT=...)`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `FMOUNT` | `SYS:C/fmount` | Command used by Insert |
+| `FMOUNT` | `SYS:C/fmount` | Command used by Mount |
 | `FUMOUNT` | `SYS:C/fumount` | Command used by Eject |
 | `SCRIPT` | none | Run commands from a file instead of waiting for input |
 | `RESULT` | `RAM:config-nio.result` | Transcript file for `SCRIPT` |
 
 Paths must not contain spaces.
 
-Insert and Eject need `FMOUNT`/`FUMOUNT` at those paths and the resident
+Mount and Eject need `FMOUNT`/`FUMOUNT` at those paths and the resident
 `fujinet-disk.device`. On a fresh system, run these commands from the
 package (the `NIO:` share on the Amiberry profiles):
 
@@ -53,23 +53,35 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 
 ## Using the window
 
-- Click a page button, or press Tab / Shift-Tab, to change page.
+- Click a page button (Hosts / Browse / Drives), or press Tab / Shift-Tab,
+  to change page. **Project ▸ Catalogue…** shows the catalogue.
 - Click a row to select it. Double-click it, or press Return, to run the
-  page's main action: Browse a host, open a drawer, edit a catalogue slot,
-  or insert into a drive.
+  page's main action: browse a host, open a drawer, mount an image file,
+  or edit a catalogue slot.
+
+To mount an image:
+
+1. On **Hosts**, double-click a host.
+2. On **Browse**, open drawers until you find the image, then double-click
+   it (or select it and press **Mount…**).
+3. The list shows the drives and what is in each. The first empty drive is
+   selected and `RO` is ticked. Pick a drive, untick `RO` for read/write if
+   you need it, and press **Mount**. If the drive already holds a disk the
+   button reads **Replace** and asks first. **Cancel** or Esc goes back.
+
+config-nio puts the image in a catalogue slot for you. It reuses the slot
+that already holds that image, otherwise the first empty one.
+
 - The cursor keys move the selection. With Shift they move a page at a time;
   with Alt they jump to the top or bottom. Backspace goes to the parent
   drawer. Help shows About. Esc quits.
-- The `RO` box is ticked when the program starts. It is also ticked when
-  you select an empty catalogue slot or an empty drive, so mounting is
-  read-only by default. A mapped drive or a catalogue entry shows its
-  stored mode.
-- Remove, Clear and Eject ask for confirmation first.
-- **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
+- Remove, Clear, Eject and Replace ask for confirmation first.
+- **Project** menu: Catalogue… (Right-Amiga-C), About… (Right-Amiga-?),
+  Quit (Right-Amiga-Q).
 
 ## Drives, FMOUNT and FMOUNTRESTORE
 
-Insert and Eject run the standard `FMOUNT` and `FUMOUNT` commands. The
+Mount and Eject run the standard `FMOUNT` and `FUMOUNT` commands. The
 resident `fujinet-disk.device` stores successful mappings, so
 `FMOUNTRESTORE` brings them back in a later session. After each command,
 config-nio re-reads the stored mapping to decide whether it succeeded. On
@@ -91,6 +103,7 @@ failed, and 5 otherwise.
 | `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
 | `browse`, `select NAME`, `enter`, `parent`, `assign SLOT ro\|rw` | Browse the selected host |
+| `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
 | `dump hosts\|entries\|drives\|status`, `dump slot N` | Write state to the transcript |

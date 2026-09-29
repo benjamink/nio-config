@@ -46,7 +46,7 @@ void test_ctl_browse(void)
   CHECK(amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
   CHECK_STR(uri, "tnfs://fujinet.online/boot.adf");
   CHECK(!amiga_ctl_browse_activate(&ctl));
-  CHECK_STR(state.status, "Choose a slot and press Assign");
+  CHECK_STR(state.status, "Press Mount... to mount this image");
   CHECK(amiga_ctl_browse_assign(&ctl, 12, 1));
   CHECK_STR(fake_slot_uri(12), "tnfs://fujinet.online/boot.adf");
   CHECK(fake_slot_readonly(12) == 1);

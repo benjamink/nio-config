@@ -126,20 +126,9 @@ void test_ctl_drives(void)
     CHECK(amiga_ctl_drive_slot(&ctl, 5) == NULL);   /* unmapped */
   }
 
-  /* Editor defaults: mapped drives show their mapping, anything else
-   * defaults to read-only. */
-  {
-    uint8_t slot = 99, ro = 0;
-
-    amiga_ctl_drive_editor(&ctl, 1, &slot, &ro);   /* mapped: slot 16 RW */
-    CHECK(slot == 16 && ro == 0);
-    slot = 99;
-    ro = 0;
-    amiga_ctl_drive_editor(&ctl, 6, &slot, &ro);   /* unmapped */
-    CHECK(slot == 99 && ro == 1);
-    CHECK(amiga_ctl_catalogue_readonly(&ctl, 16) == 0);  /* RW entry */
-    CHECK(amiga_ctl_catalogue_readonly(&ctl, 200) == 1); /* empty slot */
-  }
+  /* Catalogue RO shown: stored mode, or read-only for empty slots. */
+  CHECK(amiga_ctl_catalogue_readonly(&ctl, 16) == 0);
+  CHECK(amiga_ctl_catalogue_readonly(&ctl, 200) == 1);
 
   amiga_ctl_set_tools(&ctl, "Work:My Tools/fmount", "SYS:C/fumount");
   CHECK(!amiga_ctl_drive_insert(&ctl, 1, 12, 0));

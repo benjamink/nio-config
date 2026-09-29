@@ -9,7 +9,7 @@
 #define AMIGA_LAYOUT_MIN_ROWS 6
 #define AMIGA_LAYOUT_MAX_ROWS 16
 #define AMIGA_SCROLLER_W 16
-#define AMIGA_TAB_COUNT 4
+#define AMIGA_TAB_COUNT 3
 #define AMIGA_BUTTON_COUNT 6
 
 typedef struct {

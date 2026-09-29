@@ -9,6 +9,7 @@ typedef enum {
   AMIGA_PAGE_BROWSE,
   AMIGA_PAGE_CATALOGUE,
   AMIGA_PAGE_DRIVES,
+  AMIGA_PAGE_MOUNT,   /* drive picker; entered only via mount_begin_* */
   AMIGA_PAGE_COUNT
 } amiga_page_t;
 
@@ -50,6 +51,11 @@ typedef struct {
   char msg[CONFIG_NIO_STATUS_MAX + 1];
   char cmd[AMIGA_CMD_MAX];
   char cmd_out[AMIGA_CMD_OUT_MAX];
+  /* Pending mount: an image URI from Browse, or a catalogue slot. */
+  char mount_uri[CONFIG_NIO_URI_MAX + 1];
+  char mount_name[40];
+  int16_t mount_slot;
+  uint8_t mount_return;
 } amiga_ctl_t;
 
 void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
@@ -94,11 +100,17 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit);
  * reload or write); NULL when the drive is unmapped or the read failed. */
 const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit);
 
-/* Editor defaults.  A mapped drive loads its slot and mode; otherwise the
- * slot is left alone and mounting defaults to read-only. */
-void amiga_ctl_drive_editor(amiga_ctl_t *ctl, uint8_t unit, uint8_t *slot,
-                            uint8_t *readonly);
 /* RO flag to show for a catalogue slot: its stored mode, or 1 when empty. */
 uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot);
+
+/* Mount flow: pick an image (Browse) or slot (Catalogue), then a drive.
+ * Commit finds the catalogue slot already holding the image, else the
+ * first free one, writes the RO choice to it and runs FMOUNT. */
+int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit);
+uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl);
+int amiga_ctl_mount_begin_browse(amiga_ctl_t *ctl);
+int amiga_ctl_mount_begin_slot(amiga_ctl_t *ctl, uint8_t slot);
+int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly);
+void amiga_ctl_mount_cancel(amiga_ctl_t *ctl);
 
 #endif

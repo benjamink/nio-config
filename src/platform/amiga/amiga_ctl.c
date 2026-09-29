@@ -54,7 +54,7 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
 
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
 {
-  if (page < AMIGA_PAGE_COUNT)
+  if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT)
     ctl->page = page;
 }
 
@@ -256,7 +256,7 @@ int amiga_ctl_browse_activate(amiga_ctl_t *ctl)
     return 0;
   }
   if (!(e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)) {
-    status(ctl, "Choose a slot and press Assign");
+    status(ctl, "Press Mount... to mount this image");
     return 0;
   }
   len = (uint16_t) strlen(s->browse_path);
@@ -517,20 +517,6 @@ const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit)
   return &ctl->drive_cat[unit];
 }
 
-void amiga_ctl_drive_editor(amiga_ctl_t *ctl, uint8_t unit, uint8_t *slot,
-                            uint8_t *readonly)
-{
-  config_nio_mapping_t m;
-
-  if (unit < AMIGA_DRIVE_COUNT &&
-      config_nio_mapping_get(ctl->state, unit, &m) && m.valid) {
-    *slot = m.slot;
-    *readonly = m.readonly;
-    return;
-  }
-  *readonly = 1;
-}
-
 uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot)
 {
   const config_nio_slot_t *s = amiga_ctl_slot(ctl, slot);
@@ -538,4 +524,133 @@ uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot)
   if (!s || !s->enabled || !s->uri[0])
     return 1;
   return (uint8_t) (strcmp(s->mode, "r") == 0);
+}
+
+int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit)
+{
+  config_nio_mapping_t m;
+
+  return unit < AMIGA_DRIVE_COUNT &&
+         config_nio_mapping_get(ctl->state, unit, &m) && m.valid;
+}
+
+uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl)
+{
+  uint8_t unit;
+
+  for (unit = 0; unit < AMIGA_DRIVE_COUNT; unit++) {
+    if (!amiga_ctl_drive_mounted(ctl, unit))
+      return unit;
+  }
+  return 0;
+}
+
+static void set_mount_name(amiga_ctl_t *ctl, const char *uri)
+{
+  const char *name = strrchr(uri, '/');
+
+  name = name && name[1] ? name + 1 : uri;
+  strncpy(ctl->mount_name, name, sizeof(ctl->mount_name) - 1);
+  ctl->mount_name[sizeof(ctl->mount_name) - 1] = 0;
+}
+
+static void enter_mount(amiga_ctl_t *ctl)
+{
+  ctl->mount_return = ctl->page;
+  ctl->page = AMIGA_PAGE_MOUNT;
+  amiga_list_select(&ctl->drives, amiga_ctl_first_empty_drive(ctl));
+  sprintf(ctl->msg, "Choose a drive for %s", ctl->mount_name);
+  status(ctl, ctl->msg);
+}
+
+int amiga_ctl_mount_begin_browse(amiga_ctl_t *ctl)
+{
+  if (!amiga_ctl_browse_uri(ctl, ctl->mount_uri, sizeof(ctl->mount_uri)))
+    return 0;
+  ctl->mount_slot = -1;
+  set_mount_name(ctl, ctl->mount_uri);
+  enter_mount(ctl);
+  return 1;
+}
+
+int amiga_ctl_mount_begin_slot(amiga_ctl_t *ctl, uint8_t slot)
+{
+  const config_nio_slot_t *s = amiga_ctl_slot(ctl, slot);
+
+  if (!s)
+    return 0;
+  if (!s->enabled || !s->uri[0]) {
+    sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  strcpy(ctl->mount_uri, s->uri);
+  ctl->mount_slot = slot;
+  set_mount_name(ctl, ctl->mount_uri);
+  enter_mount(ctl);
+  return 1;
+}
+
+void amiga_ctl_mount_cancel(amiga_ctl_t *ctl)
+{
+  if (ctl->page == AMIGA_PAGE_MOUNT)
+    ctl->page = ctl->mount_return;
+  status(ctl, "Mount cancelled");
+}
+
+/* The slot already holding `uri`, else the first empty one. */
+static int find_slot(amiga_ctl_t *ctl, const char *uri, uint8_t *slot)
+{
+  int free_slot = -1;
+  uint16_t i;
+
+  for (i = 0; i < AMIGA_CAT_SLOTS; i++) {
+    const config_nio_slot_t *s = amiga_ctl_slot(ctl, (uint8_t) i);
+
+    if (!s)
+      return 0;
+    if (s->enabled && s->uri[0]) {
+      if (strcmp(s->uri, uri) == 0) {
+        *slot = (uint8_t) i;
+        return 1;
+      }
+    } else if (free_slot < 0) {
+      free_slot = (int) i;
+    }
+  }
+  if (free_slot < 0) {
+    status(ctl, "Catalogue is full");
+    return 0;
+  }
+  *slot = (uint8_t) free_slot;
+  return 1;
+}
+
+int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
+{
+  const config_nio_slot_t *s;
+  const char *label;
+  uint8_t slot;
+  uint8_t return_page = ctl->mount_return;
+
+  if (ctl->mount_slot >= 0)
+    slot = (uint8_t) ctl->mount_slot;
+  else if (!find_slot(ctl, ctl->mount_uri, &slot))
+    return 0;
+  s = amiga_ctl_slot(ctl, slot);
+  if (!s)
+    return 0;
+  if (!s->enabled || strcmp(s->uri, ctl->mount_uri) != 0 ||
+      (strcmp(s->mode, "r") == 0) != (readonly != 0)) {
+    if (!amiga_ctl_slot_set(ctl, slot, ctl->mount_uri, readonly))
+      return 0;
+  }
+  if (!amiga_ctl_drive_insert(ctl, unit, slot, readonly))
+    return 0;
+  label = amiga_drive_label(unit, ctl->kick13);
+  ctl->page = return_page;
+  sprintf(ctl->msg, "%s mounted on %s (%s)", ctl->mount_name, label,
+          readonly ? "RO" : "RW");
+  status(ctl, ctl->msg);
+  return 1;
 }

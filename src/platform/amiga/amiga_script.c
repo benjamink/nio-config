@@ -162,7 +162,8 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
                       amiga_script_out_fn out, void *out_ctx,
                       uint16_t *wait_ticks)
 {
-  static const char *const pages[AMIGA_PAGE_COUNT] = {
+  /* Pages a script may show; the mount picker is entered via "mount". */
+  static const char *const pages[AMIGA_PAGE_MOUNT] = {
     "hosts", "browse", "catalogue", "drives"
   };
   char *t[MAX_TOKENS];
@@ -184,7 +185,7 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
     return AMIGA_SCRIPT_WAIT;
   }
   if (is(t[0], "page") && n == 2) {
-    for (a = 0; a < AMIGA_PAGE_COUNT; a++) {
+    for (a = 0; a < AMIGA_PAGE_MOUNT; a++) {
       if (is(t[1], pages[a])) {
         amiga_ctl_set_page(ctl, a);
         return result(ctl, 1, out, out_ctx);
@@ -218,6 +219,18 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
     return result(ctl, amiga_ctl_drive_insert(ctl, (uint8_t) unit, a, ro),
                   out, out_ctx);
   }
+  if (is(t[0], "mount") && n == 3 && parse_mode(t[2], &ro)) {
+    unit = amiga_drive_unit(t[1], ctl->kick13);
+    if (unit < 0)
+      return fail(ctl, "No such drive", out, out_ctx);
+    if (!amiga_ctl_mount_begin_browse(ctl))
+      return result(ctl, 0, out, out_ctx);
+    if (!amiga_ctl_mount_commit(ctl, (uint8_t) unit, ro)) {
+      ctl->page = ctl->mount_return;   /* keep the failure status */
+      return result(ctl, 0, out, out_ctx);
+    }
+    return result(ctl, 1, out, out_ctx);
+  }
   if (is(t[0], "eject") && n == 2) {
     unit = amiga_drive_unit(t[1], ctl->kick13);
     if (unit < 0)
@@ -230,7 +243,7 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
   if (is(t[0], "insert") || is(t[0], "eject") || is(t[0], "assign") ||
       is(t[0], "slot") || is(t[0], "page") || is(t[0], "wait") ||
       is(t[0], "quit") || is(t[0], "browse") || is(t[0], "select") ||
-      is(t[0], "enter") || is(t[0], "parent"))
+      is(t[0], "enter") || is(t[0], "parent") || is(t[0], "mount"))
     return fail(ctl, "Bad arguments", out, out_ctx);
   return fail(ctl, "Unknown command", out, out_ctx);
 }
