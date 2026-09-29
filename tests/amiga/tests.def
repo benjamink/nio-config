@@ -1,2 +1,3 @@
 AMIGA_TEST(drives)
 AMIGA_TEST(list)
+AMIGA_TEST(format)
