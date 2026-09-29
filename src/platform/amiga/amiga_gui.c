@@ -67,6 +67,7 @@ enum {
   ACT_BROWSE_PARENT,
   ACT_BROWSE_REFRESH,
   ACT_BROWSE_MOUNT,
+  ACT_BROWSE_ADD,
   ACT_SLOT_SET,
   ACT_SLOT_CLEAR,
   ACT_SLOT_MOUNT,
@@ -99,7 +100,7 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { "Move Up", ACT_HOST_UP }, { "Move Down", ACT_HOST_DOWN } },
   { { "Open", ACT_BROWSE_OPEN }, { "Parent", ACT_BROWSE_PARENT },
     { "Refresh", ACT_BROWSE_REFRESH }, { "Mount...", ACT_BROWSE_MOUNT },
-    { NULL, ACT_NONE }, { NULL, ACT_NONE } },
+    { "Add to Slot", ACT_BROWSE_ADD }, { NULL, ACT_NONE } },
   { { "Mount...", ACT_SLOT_MOUNT }, { "Set", ACT_SLOT_SET },
     { "Clear", ACT_SLOT_CLEAR }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
@@ -1005,6 +1006,11 @@ static void gui_do_action(uint8_t action)
   case ACT_BROWSE_MOUNT:
     if (amiga_ctl_mount_begin_browse(gctl))
       set_ro(1);
+    break;
+  case ACT_BROWSE_ADD:
+    /* Read-only, like Mount's default; Set on the Catalogue page or a
+     * read/write mount changes it. */
+    (void) amiga_ctl_browse_add(gctl, 1);
     break;
   case ACT_SLOT_SET:
     if (read_slot(&slot) &&

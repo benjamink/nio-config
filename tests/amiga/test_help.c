@@ -69,6 +69,8 @@ void test_help(void)
   /* Each GUI action names the Shell command it matches. */
   CHECK(strstr(amiga_help_text(amiga_help_find("Browsing and mounting")),
                "FIN then FMOUNT") != NULL);
+  CHECK(strstr(amiga_help_text(amiga_help_find("Browsing and mounting")),
+               "Add to Slot") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Catalogue")), "FOUT") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Drives and ejecting")),
                "FUMOUNT") != NULL);

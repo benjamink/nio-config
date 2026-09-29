@@ -105,6 +105,9 @@ int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name);
 int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap);
 int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
                             uint8_t readonly);
+/* Browse > Add to Slot (FIN image): reuses the image's slot, else the
+ * first empty one. */
+int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly);
 
 /* Catalogue rows are read in aligned windows of AMIGA_CAT_WINDOW slots and
  * cached until the next write.  NULL means the read failed (see status). */

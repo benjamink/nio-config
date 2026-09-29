@@ -9,7 +9,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | BBC / MS-DOS config | Amiga |
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
-| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
+| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Add to Slot**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
@@ -20,6 +20,7 @@ side by side:
 | Window | Shell |
 | --- | --- |
 | Mount… (Browse) | `FIN` into a slot (the one already holding the image, else the first empty one), then `FMOUNT slot drive RO\|RW` |
+| Add to Slot (Browse) | `FIN image` (the image's slot, else the first empty one; RO) |
 | Catalogue page | `FLS` |
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
@@ -117,7 +118,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
-| `browse`, `select NAME`, `enter`, `parent`, `assign SLOT ro\|rw` | Browse the selected host |
+| `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is Add to Slot |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |

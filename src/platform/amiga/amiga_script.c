@@ -214,6 +214,8 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
     return result(ctl, amiga_ctl_browse_activate(ctl), out, out_ctx);
   if (is(t[0], "parent") && n == 1)
     return result(ctl, amiga_ctl_browse_parent(ctl), out, out_ctx);
+  if (is(t[0], "assign") && n == 2 && parse_mode(t[1], &ro))
+    return result(ctl, amiga_ctl_browse_add(ctl, ro), out, out_ctx);
   if (is(t[0], "assign") && n == 3 && parse_u8(t[1], &a) &&
       parse_mode(t[2], &ro))
     return result(ctl, amiga_ctl_browse_assign(ctl, a, ro), out, out_ctx);

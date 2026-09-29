@@ -348,6 +348,42 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
   return 1;
 }
 
+static int find_slot(amiga_ctl_t *ctl, const char *uri, uint8_t *slot);
+
+/* FIN without a slot number: the slot already holding the image, else the
+ * first empty one. */
+int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+  const config_nio_slot_t *s;
+  const char *name;
+  const char *mode = readonly ? "RO" : "RW";
+  uint8_t slot;
+
+  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)) ||
+      !find_slot(ctl, uri, &slot))
+    return 0;
+  name = strrchr(uri, '/');
+  name = name && name[1] ? name + 1 : uri;
+  s = amiga_ctl_slot(ctl, slot);
+  if (s && s->enabled && strcmp(s->uri, uri) == 0 &&
+      (strcmp(s->mode, "r") == 0) == (readonly != 0)) {
+    amiga_sprintf(ctl->msg, "%.40s is already in slot %u (%s)", name,
+                  (unsigned) slot, mode);
+    status(ctl, ctl->msg);
+    return 1;
+  }
+  cat_invalidate(ctl);
+  if (!config_nio_write_slot(ctl->state, slot, uri, readonly ? "r" : "rw")) {
+    status(ctl, "Unable to save slot");
+    return 0;
+  }
+  amiga_sprintf(ctl->msg, "%.40s added to slot %u (%s)", name, (unsigned) slot,
+                mode);
+  status(ctl, ctl->msg);
+  return 1;
+}
+
 const config_nio_slot_t *amiga_ctl_slot(amiga_ctl_t *ctl, uint8_t slot)
 {
   uint16_t base;
