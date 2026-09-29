@@ -7,6 +7,7 @@
 #include "amiga_gui.h"
 #include "amiga_drives.h"
 #include "amiga_format.h"
+#include "amiga_help.h"
 #include "amiga_input.h"
 #include "amiga_layout.h"
 #include "amiga_logo.h"
@@ -64,7 +65,11 @@ enum {
   ACT_SLOT_MOUNT,
   ACT_DRIVE_EJECT,
   ACT_MOUNT_COMMIT,
-  ACT_MOUNT_CANCEL
+  ACT_MOUNT_CANCEL,
+  ACT_HELP_CONTENTS,
+  ACT_HELP_PREV,
+  ACT_HELP_NEXT,
+  ACT_HELP_CLOSE
 };
 
 typedef struct {
@@ -97,6 +102,9 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_MOUNT_CANCEL } },
+  { { "Contents", ACT_HELP_CONTENTS }, { "Previous", ACT_HELP_PREV },
+    { "Next", ACT_HELP_NEXT }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { "Close", ACT_HELP_CLOSE } },
 };
 
 /* RKM wait pointer image; sprite data must live in chip RAM. */
@@ -141,16 +149,21 @@ static ULONG last_secs;
 static ULONG last_micros;
 static uint16_t last_index = AMIGA_LIST_NONE;
 
+/* Wrapped lines of the help topic being shown. */
+#define HELP_LINES_MAX 400
+static amiga_help_line_t help_lines[HELP_LINES_MAX];
+
 static char row_text[ROW_TEXT_MAX + 1];
 static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
 
 /* ---- Menus ------------------------------------------------------------ */
 
-static struct IntuiText menu_text[7];
+static struct IntuiText menu_text[7 + AMIGA_HELP_TOPICS];
 static struct MenuItem project_items[3];
 static struct MenuItem settings_items[4];
-static struct Menu menus[2];
+static struct MenuItem help_items[AMIGA_HELP_TOPICS];
+static struct Menu menus[3];
 static const char *const project_labels[3] = {
   "Catalogue...", "About...", "Quit"
 };
@@ -482,6 +495,8 @@ static amiga_list_t *page_list(void)
   case AMIGA_PAGE_DRIVES:
   case AMIGA_PAGE_MOUNT:
     return &gctl->drives;
+  case AMIGA_PAGE_HELP:
+    return &gctl->help;
   default:
     return &gctl->hosts;
   }
@@ -525,6 +540,18 @@ static void row_string(uint16_t idx, uint8_t cols)
   const char *uri;
 
   switch (gctl->page) {
+  case AMIGA_PAGE_HELP:
+    if (gctl->help_topic == AMIGA_HELP_CONTENTS) {
+      sprintf(tmp_text, "  %s", amiga_help_title((uint8_t) (idx + 1)));
+    } else {
+      const amiga_help_line_t *hl = &help_lines[idx];
+
+      memset(tmp_text, ' ', hl->indent);
+      memcpy(tmp_text + hl->indent,
+             amiga_help_text(gctl->help_topic) + hl->start, hl->len);
+      tmp_text[hl->indent + hl->len] = 0;
+    }
+    break;
   case AMIGA_PAGE_HOSTS:
     amiga_clip_head(uri_text, sizeof(uri_text), s->hosts[idx],
                     (uint8_t) (cols - 3));
@@ -592,7 +619,9 @@ static void gui_paint_rows(void)
   for (r = 0; r < layout.list_rows; r++) {
     amiga_rect_t row;
     uint16_t idx = (uint16_t) (l->top + r);
-    int selected = idx == l->selected;
+    int selected = idx == l->selected &&
+                   (gctl->page != AMIGA_PAGE_HELP ||
+                    gctl->help_topic == AMIGA_HELP_CONTENTS);
 
     row.left = in.left;
     row.top = (int16_t) (in.top + r * layout.row_h);
@@ -634,6 +663,9 @@ static void gui_paint_info(void)
     break;
   case AMIGA_PAGE_CATALOGUE:
     strcpy(tmp_text, "Catalogue: Slot Mode Image");
+    break;
+  case AMIGA_PAGE_HELP:
+    sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
     break;
   case AMIGA_PAGE_MOUNT:
     amiga_clip_head(uri_text, sizeof(uri_text), gctl->mount_name,
@@ -704,15 +736,15 @@ static void gui_paint_buttons(void)
   }
 }
 
+static uint8_t current_tab(void);
+
 static void gui_paint_tabs(void)
 {
+  uint8_t tab = current_tab();
   uint8_t i;
 
-  uint8_t page = gctl->page == AMIGA_PAGE_MOUNT ? gctl->mount_return
-                                                : gctl->page;
-
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
-    int selected = tab_pages[i] == page;
+    int selected = i == tab;
     amiga_rect_t in = amiga_rect_inset(layout.tab[i], 2, 1);
 
     fill(&in, selected ? theme.fill : theme.background);
@@ -816,10 +848,36 @@ static void gui_sync_editors(void)
     paint_checkbox();
 }
 
+/* Lays out the current help topic for the list width.  Contents lists the
+ * other topics' titles; a topic lists its wrapped text lines. */
+static void gui_help_sync(void)
+{
+  uint16_t count;
+
+  if (gctl->page != AMIGA_PAGE_HELP)
+    return;
+  if (gctl->help_topic == AMIGA_HELP_CONTENTS) {
+    count = AMIGA_HELP_TOPICS - 1;
+    config_nio_set_status(gctl->state,
+                          "Double-click a topic to read it");
+  } else {
+    count = amiga_help_layout(amiga_help_text(gctl->help_topic),
+                              list_cols(), help_lines, HELP_LINES_MAX);
+    sprintf(tmp_text, "Topic %u of %u", (unsigned) gctl->help_topic,
+            (unsigned) (AMIGA_HELP_TOPICS - 1));
+    config_nio_set_status(gctl->state, tmp_text);
+  }
+  gctl->help.top = 0;
+  gctl->help.selected = 0;
+  amiga_list_set_count(&gctl->help, count);
+}
+
 static void gui_set_page(uint8_t page)
 {
   if (gctl->page == AMIGA_PAGE_MOUNT && page != AMIGA_PAGE_MOUNT)
     amiga_ctl_mount_cancel(gctl);
+  if (gctl->page == AMIGA_PAGE_HELP && page != AMIGA_PAGE_HELP)
+    amiga_ctl_help_close(gctl);
   amiga_ctl_set_page(gctl, page);
   gui_sync_gadgets();
   gui_sync_editors();
@@ -829,6 +887,7 @@ static void gui_set_page(uint8_t page)
 /* Repaints after an action; a page change needs the full treatment. */
 static void gui_after_action(uint8_t old_page)
 {
+  gui_help_sync();
   if (gctl->page != old_page) {
     gui_set_page(gctl->page);
     return;
@@ -934,6 +993,18 @@ static void gui_do_action(uint8_t action)
   case ACT_MOUNT_CANCEL:
     amiga_ctl_mount_cancel(gctl);
     break;
+  case ACT_HELP_CONTENTS:
+    amiga_ctl_help_open(gctl, AMIGA_HELP_CONTENTS);
+    break;
+  case ACT_HELP_PREV:
+    amiga_ctl_help_step(gctl, -1);
+    break;
+  case ACT_HELP_NEXT:
+    amiga_ctl_help_step(gctl, 1);
+    break;
+  case ACT_HELP_CLOSE:
+    amiga_ctl_help_close(gctl);
+    break;
   case ACT_DRIVE_EJECT:
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
@@ -945,10 +1016,23 @@ static void gui_do_action(uint8_t action)
   gui_after_action(old_page);
 }
 
+static void gui_open_help(uint8_t topic)
+{
+  uint8_t old_page = gctl->page;
+
+  amiga_ctl_help_open(gctl, topic);
+  gui_after_action(old_page);
+}
+
 /* Return / double-click: the page's primary action. */
 static void gui_activate(void)
 {
   switch (gctl->page) {
+  case AMIGA_PAGE_HELP:
+    if (gctl->help_topic == AMIGA_HELP_CONTENTS &&
+        gctl->help.selected != AMIGA_LIST_NONE)
+      gui_open_help((uint8_t) (gctl->help.selected + 1));
+    break;
   case AMIGA_PAGE_HOSTS:
     gui_do_action(ACT_HOST_BROWSE);
     break;
@@ -1009,9 +1093,12 @@ static void gui_list_click(struct IntuiMessage *msg)
 /* The page button for the current page (Catalogue counts as Hosts). */
 static uint8_t current_tab(void)
 {
-  uint8_t page = gctl->page == AMIGA_PAGE_MOUNT ? gctl->mount_return
-                                                : gctl->page;
+  uint8_t page = gctl->page == AMIGA_PAGE_HELP ? gctl->help_return
+                                               : gctl->page;
   uint8_t i;
+
+  if (page == AMIGA_PAGE_MOUNT)
+    page = gctl->mount_return;
 
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
     if (tab_pages[i] == page)
@@ -1024,8 +1111,30 @@ static uint8_t current_tab(void)
 static int gui_handle_key(UWORD code, UWORD qualifier)
 {
   amiga_list_t *l = page_list();
+  amiga_key_t key = amiga_key_from_raw(code, qualifier);
 
-  switch (amiga_key_from_raw(code, qualifier)) {
+  /* A help topic has no selection: the movement keys scroll the text. */
+  if (gctl->page == AMIGA_PAGE_HELP &&
+      gctl->help_topic != AMIGA_HELP_CONTENTS) {
+    int32_t max_top = l->count > l->rows ? l->count - l->rows : 0;
+    int32_t top = l->top;
+
+    switch (key) {
+    case AMIGA_KEY_UP: top -= 1; break;
+    case AMIGA_KEY_DOWN: top += 1; break;
+    case AMIGA_KEY_PAGE_UP: top -= l->rows; break;
+    case AMIGA_KEY_PAGE_DOWN: top += l->rows; break;
+    case AMIGA_KEY_TOP: top = 0; break;
+    case AMIGA_KEY_BOTTOM: top = max_top; break;
+    default: goto not_scroll;
+    }
+    l->top = (uint16_t) (top < 0 ? 0 : (top > max_top ? max_top : top));
+    gui_paint_rows();
+    update_prop();
+    return 0;
+  }
+not_scroll:
+  switch (key) {
   case AMIGA_KEY_UP:
     amiga_list_move(l, -1);
     break;
@@ -1056,9 +1165,13 @@ static int gui_handle_key(UWORD code, UWORD qualifier)
       gui_do_action(ACT_MOUNT_CANCEL);
       return 0;
     }
+    if (gctl->page == AMIGA_PAGE_HELP) {
+      gui_do_action(ACT_HELP_CLOSE);
+      return 0;
+    }
     return 1;
   case AMIGA_KEY_HELP:
-    about();
+    gui_open_help(AMIGA_HELP_CONTENTS);
     return 0;
   case AMIGA_KEY_NEXT_PAGE:
     gui_set_page(tab_pages[(current_tab() + 1) % AMIGA_TAB_COUNT]);
@@ -1142,7 +1255,6 @@ static void gui_make_menus(void)
   uint8_t i;
   const config_nio_prefs_t *p = &gctl->state->prefs;
 
-  w = (WORD) (8 * FONT_W + COMMWIDTH + 8);
   w = (WORD) (12 * FONT_W + COMMWIDTH + 8);
   for (i = 0; i < 3; i++) {
     make_item(&project_items[i], &menu_text[i], project_labels[i],
@@ -1163,6 +1275,15 @@ static void gui_make_menus(void)
               (LONG) (1L << (i ^ 1)), 0);
     settings_items[i].NextItem = i + 1 < 4 ? &settings_items[i + 1] : NULL;
   }
+  /* Help menu: Contents (Right-Amiga-H), then every topic. */
+  w = (WORD) (22 * FONT_W + COMMWIDTH + 8);
+  for (i = 0; i < AMIGA_HELP_TOPICS; i++) {
+    make_item(&help_items[i], &menu_text[7 + i], amiga_help_title(i),
+              (WORD) (i * 10), w, (UWORD) (i == 0 ? COMMSEQ : 0), 0,
+              (BYTE) (i == 0 ? 'H' : 0));
+    help_items[i].NextItem = i + 1 < AMIGA_HELP_TOPICS ? &help_items[i + 1]
+                                                       : NULL;
+  }
   memset(menus, 0, sizeof(menus));
   menus[0].NextMenu = &menus[1];
   menus[0].LeftEdge = 0;
@@ -1177,6 +1298,13 @@ static void gui_make_menus(void)
   menus[1].Flags = MENUENABLED;
   menus[1].MenuName = (APTR) "Settings";
   menus[1].FirstItem = &settings_items[0];
+  menus[1].NextMenu = &menus[2];
+  menus[2].LeftEdge = 19 * FONT_W;
+  menus[2].Width = 5 * FONT_W;
+  menus[2].Height = 10;
+  menus[2].Flags = MENUENABLED;
+  menus[2].MenuName = (APTR) "Help";
+  menus[2].FirstItem = &help_items[0];
   menus_attached = SetMenuStrip(win, &menus[0]) ? 1 : 0;
 }
 
@@ -1200,6 +1328,8 @@ static int gui_handle_menu(UWORD code)
         quit = 1;
     } else if (MENUNUM(code) == 1) {
       settings = 1;
+    } else if (MENUNUM(code) == 2) {
+      gui_open_help((uint8_t) ITEMNUM(code));
     }
     code = item->NextSelect;
   }

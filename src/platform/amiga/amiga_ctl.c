@@ -1,5 +1,6 @@
 #include "amiga_ctl.h"
 #include "amiga_drives.h"
+#include "amiga_help.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,7 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   amiga_list_init(&ctl->entries, rows);
   amiga_list_init(&ctl->catalogue, rows);
   amiga_list_init(&ctl->drives, rows);
+  amiga_list_init(&ctl->help, rows);
   amiga_list_set_count(&ctl->hosts, state->host_count);
   amiga_list_set_count(&ctl->catalogue, AMIGA_CAT_SLOTS);
   amiga_list_set_count(&ctl->drives, AMIGA_DRIVE_COUNT);
@@ -50,11 +52,13 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
   amiga_list_set_rows(&ctl->entries, rows);
   amiga_list_set_rows(&ctl->catalogue, rows);
   amiga_list_set_rows(&ctl->drives, rows);
+  amiga_list_set_rows(&ctl->help, rows);
 }
 
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
 {
-  if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT)
+  if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT &&
+      page != AMIGA_PAGE_HELP)
     ctl->page = page;
 }
 
@@ -653,4 +657,29 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
           readonly ? "RO" : "RW");
   status(ctl, ctl->msg);
   return 1;
+}
+
+void amiga_ctl_help_open(amiga_ctl_t *ctl, uint8_t topic)
+{
+  if (ctl->page != AMIGA_PAGE_HELP)
+    ctl->help_return = ctl->page;
+  ctl->page = AMIGA_PAGE_HELP;
+  ctl->help_topic = topic < AMIGA_HELP_TOPICS ? topic : AMIGA_HELP_CONTENTS;
+}
+
+void amiga_ctl_help_step(amiga_ctl_t *ctl, int8_t delta)
+{
+  int16_t topic = (int16_t) ctl->help_topic + delta;
+
+  if (topic < 1)
+    topic = 1;
+  if (topic >= AMIGA_HELP_TOPICS)
+    topic = AMIGA_HELP_TOPICS - 1;
+  amiga_ctl_help_open(ctl, (uint8_t) topic);
+}
+
+void amiga_ctl_help_close(amiga_ctl_t *ctl)
+{
+  if (ctl->page == AMIGA_PAGE_HELP)
+    ctl->page = ctl->help_return;
 }
