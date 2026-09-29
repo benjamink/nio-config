@@ -1,4 +1,5 @@
 #include "amiga_drives.h"
+#include "amiga_fmt.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -69,7 +70,7 @@ int amiga_fmount_command(char *out, uint16_t cap, const char *fmount,
   /* " 255 DN0: RO" is at most 12 characters. */
   if (!out || !label || !path_ok(fmount, cap, 12))
     return 0;
-  sprintf(out, "%s %u %s %s", fmount, (unsigned) slot, label,
+  amiga_sprintf(out, "%s %u %s %s", fmount, (unsigned) slot, label,
           readonly ? "RO" : "RW");
   return 1;
 }
@@ -83,8 +84,8 @@ int amiga_fumount_command(char *out, uint16_t cap, const char *fumount,
   if (!out || !label || !path_ok(fumount, cap, 5))
     return 0;
   if (kick13)
-    sprintf(out, "%s %s", fumount, label);
+    amiga_sprintf(out, "%s %s", fumount, label);
   else
-    sprintf(out, "%s %u", fumount, (unsigned) unit);
+    amiga_sprintf(out, "%s %u", fumount, (unsigned) unit);
   return 1;
 }

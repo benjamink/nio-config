@@ -1,4 +1,5 @@
 #include "amiga_format.h"
+#include "amiga_fmt.h"
 #include "config_nio.h"
 
 #include <stdio.h>
@@ -17,7 +18,7 @@ void amiga_format_size(char *out, uint32_t size, uint8_t size_format)
   if (size_format != CONFIG_NIO_PREF_SIZE_COMPACT) {
     uint8_t len, src, dst, digits;
 
-    sprintf(plain, "%lu", (unsigned long) size);
+    amiga_sprintf(plain, "%lu", (unsigned long) size);
     len = (uint8_t) strlen(plain);
     dst = (uint8_t) (len + (len - 1) / 3);
     out[dst] = 0;
@@ -42,7 +43,7 @@ void amiga_format_size(char *out, uint32_t size, uint8_t size_format)
     unit++;
   }
   if (unit == 0) {
-    sprintf(out, "%lu", (unsigned long) size);
+    amiga_sprintf(out, "%lu", (unsigned long) size);
     return;
   }
   whole = (unsigned) (size / divisor);
@@ -57,9 +58,9 @@ void amiga_format_size(char *out, uint32_t size, uint8_t size_format)
     tenths = 0;
   }
   if (whole < 10 && tenths != 0)
-    sprintf(out, "%u.%u%s", whole, tenths, suffix[unit]);
+    amiga_sprintf(out, "%u.%u%s", whole, tenths, suffix[unit]);
   else
-    sprintf(out, "%u%s", whole, suffix[unit]);
+    amiga_sprintf(out, "%u%s", whole, suffix[unit]);
 }
 
 /* Days since 1970-01-01 to a proleptic Gregorian date (UTC).  Avoids
@@ -90,9 +91,9 @@ int amiga_format_date(char *out, uint32_t mtime, uint8_t date_format)
   }
   civil_from_days(mtime / 86400UL, &y, &m, &d);
   if (date_format == CONFIG_NIO_PREF_DATE_YDM)
-    sprintf(out, "%02u-%02u-%02u", y % 100, d, m);
+    amiga_sprintf(out, "%02u-%02u-%02u", y % 100, d, m);
   else
-    sprintf(out, "%02u-%02u-%02u", y % 100, m, d);
+    amiga_sprintf(out, "%02u-%02u-%02u", y % 100, m, d);
   return 1;
 }
 

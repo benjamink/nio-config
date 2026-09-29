@@ -14,6 +14,7 @@ TEST_CFLAGS := -std=c99 -Wall -Wextra -O0 -g \
 
 AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_drives.c \
+	src/platform/amiga/amiga_fmt.c \
 	src/platform/amiga/amiga_list.c \
 	src/platform/amiga/amiga_format.c \
 	src/platform/amiga/amiga_options.c \

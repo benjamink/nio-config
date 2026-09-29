@@ -1,4 +1,5 @@
 #include "amiga_ctl.h"
+#include "amiga_fmt.h"
 #include "amiga_drives.h"
 #include "amiga_help.h"
 
@@ -206,7 +207,7 @@ int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
   }
   if (!fnsvc_list_directory(uri, list_cb, s)) {
     s->entry_count = 0;
-    sprintf(ctl->msg, "Browse failed: error %u status %u",
+    amiga_sprintf(ctl->msg, "Browse failed: error %u status %u",
             (unsigned) fnsvc_last_error(), (unsigned) fnsvc_last_status());
     status(ctl, ctl->msg);
     return 0;
@@ -214,7 +215,7 @@ int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
   amiga_list_set_count(&ctl->entries, s->entry_count);
   amiga_list_select(&ctl->entries, 0);
   if (s->entries_truncated) {
-    sprintf(ctl->msg, "Showing %u of %u entries",
+    amiga_sprintf(ctl->msg, "Showing %u of %u entries",
             (unsigned) s->entry_count, (unsigned) s->entry_total);
     status(ctl, ctl->msg);
   } else {
@@ -339,7 +340,7 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
     return 0;
   }
   cat_invalidate(ctl);
-  sprintf(ctl->msg, "Assigned to slot %u", (unsigned) slot);
+  amiga_sprintf(ctl->msg, "Assigned to slot %u", (unsigned) slot);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -382,7 +383,7 @@ int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
     status(ctl, "Unable to save slot");
     return 0;
   }
-  sprintf(ctl->msg, "Slot %u saved", (unsigned) slot);
+  amiga_sprintf(ctl->msg, "Slot %u saved", (unsigned) slot);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -394,7 +395,7 @@ int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot)
     status(ctl, "Unable to clear slot");
     return 0;
   }
-  sprintf(ctl->msg, "Slot %u cleared", (unsigned) slot);
+  amiga_sprintf(ctl->msg, "Slot %u cleared", (unsigned) slot);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -423,10 +424,10 @@ static void command_failed(amiga_ctl_t *ctl, const char *tool,
                            const char *label, int rc)
 {
   if (ctl->cmd_out[0])
-    sprintf(ctl->msg, "%s failed for %s %.50s (rc %d)", tool, label,
+    amiga_sprintf(ctl->msg, "%s failed for %s %.50s (rc %d)", tool, label,
             ctl->cmd_out, rc);
   else
-    sprintf(ctl->msg, "%s failed for %s (rc %d)", tool, label, rc);
+    amiga_sprintf(ctl->msg, "%s failed for %s (rc %d)", tool, label, rc);
   status(ctl, ctl->msg);
 }
 
@@ -447,7 +448,7 @@ int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
   if (!entry)
     return 0;
   if (!entry->enabled || !entry->uri[0]) {
-    sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
+    amiga_sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
     status(ctl, ctl->msg);
     return 0;
   }
@@ -465,7 +466,7 @@ int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
     command_failed(ctl, "FMOUNT", label, rc);
     return 0;
   }
-  sprintf(ctl->msg, "Slot %u inserted in %s", (unsigned) slot, label);
+  amiga_sprintf(ctl->msg, "Slot %u inserted in %s", (unsigned) slot, label);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -482,7 +483,7 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit)
     return 0;
   }
   if (!config_nio_mapping_get(ctl->state, unit, &m) || !m.valid) {
-    sprintf(ctl->msg, "%s is empty", label);
+    amiga_sprintf(ctl->msg, "%s is empty", label);
     status(ctl, ctl->msg);
     return 0;
   }
@@ -499,7 +500,7 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit)
     command_failed(ctl, "FUMOUNT", label, rc);
     return 0;
   }
-  sprintf(ctl->msg, "%s ejected", label);
+  amiga_sprintf(ctl->msg, "%s ejected", label);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -575,7 +576,7 @@ int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit)
 
   if (amiga_ctl_drive_state(ctl, unit) != AMIGA_DRIVE_SAVED ||
       !config_nio_mapping_get(ctl->state, unit, &m)) {
-    sprintf(ctl->msg, "%s has nothing to remount", label ? label : "Drive");
+    amiga_sprintf(ctl->msg, "%s has nothing to remount", label ? label : "Drive");
     status(ctl, ctl->msg);
     return 0;
   }
@@ -587,7 +588,7 @@ int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit)
 
     name = name && name[1] ? name + 1 : (slot && slot->enabled ? slot->uri
                                                                : "Image");
-    sprintf(ctl->msg, "%.40s mounted on %s (%s)", name, label,
+    amiga_sprintf(ctl->msg, "%.40s mounted on %s (%s)", name, label,
             m.readonly ? "RO" : "RW");
     status(ctl, ctl->msg);
   }
@@ -608,7 +609,7 @@ static void enter_mount(amiga_ctl_t *ctl)
   ctl->mount_return = ctl->page;
   ctl->page = AMIGA_PAGE_MOUNT;
   amiga_list_select(&ctl->drives, amiga_ctl_first_empty_drive(ctl));
-  sprintf(ctl->msg, "Choose a drive for %s", ctl->mount_name);
+  amiga_sprintf(ctl->msg, "Choose a drive for %s", ctl->mount_name);
   status(ctl, ctl->msg);
 }
 
@@ -629,7 +630,7 @@ int amiga_ctl_mount_begin_slot(amiga_ctl_t *ctl, uint8_t slot)
   if (!s)
     return 0;
   if (!s->enabled || !s->uri[0]) {
-    sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
+    amiga_sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
     status(ctl, ctl->msg);
     return 0;
   }
@@ -698,7 +699,7 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
     return 0;
   label = amiga_drive_label(unit, ctl->kick13);
   ctl->page = return_page;
-  sprintf(ctl->msg, "%s mounted on %s (%s)", ctl->mount_name, label,
+  amiga_sprintf(ctl->msg, "%s mounted on %s (%s)", ctl->mount_name, label,
           readonly ? "RO" : "RW");
   status(ctl, ctl->msg);
   return 1;
@@ -744,11 +745,11 @@ int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
   case AMIGA_DRIVE_MOUNTED:
     break;
   case AMIGA_DRIVE_SAVED:
-    sprintf(ctl->msg, "%s is not mounted; press Remount", label);
+    amiga_sprintf(ctl->msg, "%s is not mounted; press Remount", label);
     status(ctl, ctl->msg);
     return 0;
   default:
-    sprintf(ctl->msg, "%s is empty", label);
+    amiga_sprintf(ctl->msg, "%s is empty", label);
     status(ctl, ctl->msg);
     return 0;
   }

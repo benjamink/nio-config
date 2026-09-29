@@ -1,4 +1,5 @@
 #include "amiga_script.h"
+#include "amiga_fmt.h"
 #include "amiga_drives.h"
 
 #include <stdio.h>
@@ -73,7 +74,7 @@ static int result(amiga_ctl_t *ctl, int ok, amiga_script_out_fn out,
     out("OK", ctx);
     return AMIGA_SCRIPT_OK;
   }
-  sprintf(out_buf, "ERR %s", ctl->state->status);
+  amiga_sprintf(out_buf, "ERR %s", ctl->state->status);
   out(out_buf, ctx);
   return AMIGA_SCRIPT_ERR;
 }
@@ -93,12 +94,12 @@ static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
 
   if (n == 2 && is(t[1], "hosts")) {
     for (i = 0; i < s->host_count; i++) {
-      sprintf(out_buf, "HOST %u %s", (unsigned) i, s->hosts[i]);
+      amiga_sprintf(out_buf, "HOST %u %s", (unsigned) i, s->hosts[i]);
       out(out_buf, ctx);
     }
   } else if (n == 2 && is(t[1], "entries")) {
     for (i = 0; i < s->entry_count; i++) {
-      sprintf(out_buf, "ENTRY %c %s %lu",
+      amiga_sprintf(out_buf, "ENTRY %c %s %lu",
               (s->entries[i].is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) ? 'D' : 'F',
               s->entries[i].name, (unsigned long) s->entries[i].size);
       out(out_buf, ctx);
@@ -108,10 +109,10 @@ static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
       config_nio_mapping_t m;
 
       if (config_nio_mapping_get(s, i, &m) && m.valid)
-        sprintf(out_buf, "DRIVE %s %u %s", amiga_drive_label(i, ctl->kick13),
+        amiga_sprintf(out_buf, "DRIVE %s %u %s", amiga_drive_label(i, ctl->kick13),
                 (unsigned) m.slot, m.readonly ? "RO" : "RW");
       else
-        sprintf(out_buf, "DRIVE %s - -", amiga_drive_label(i, ctl->kick13));
+        amiga_sprintf(out_buf, "DRIVE %s - -", amiga_drive_label(i, ctl->kick13));
       out(out_buf, ctx);
     }
   } else if (n == 3 && is(t[1], "slot") && parse_u8(t[2], &i)) {
@@ -120,13 +121,13 @@ static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
     if (!slot)
       return result(ctl, 0, out, ctx);
     if (slot->enabled && slot->uri[0])
-      sprintf(out_buf, "SLOT %u %s %s", (unsigned) i,
+      amiga_sprintf(out_buf, "SLOT %u %s %s", (unsigned) i,
               strcmp(slot->mode, "r") == 0 ? "RO" : "RW", slot->uri);
     else
-      sprintf(out_buf, "SLOT %u EMPTY", (unsigned) i);
+      amiga_sprintf(out_buf, "SLOT %u EMPTY", (unsigned) i);
     out(out_buf, ctx);
   } else if (n == 2 && is(t[1], "status")) {
-    sprintf(out_buf, "STATUS %s", s->status);
+    amiga_sprintf(out_buf, "STATUS %s", s->status);
     out(out_buf, ctx);
   } else {
     return fail(ctl, "Bad arguments", out, ctx);

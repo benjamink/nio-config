@@ -5,6 +5,7 @@
  * All state changes go through amiga_ctl, which the SCRIPT= driver shares.
  */
 #include "amiga_gui.h"
+#include "amiga_fmt.h"
 #include "amiga_drives.h"
 #include "amiga_format.h"
 #include "amiga_help.h"
@@ -553,7 +554,7 @@ static void row_string(uint16_t idx, uint8_t cols)
   switch (gctl->page) {
   case AMIGA_PAGE_HELP:
     if (gctl->help_topic == AMIGA_HELP_CONTENTS) {
-      sprintf(tmp_text, "  %s", amiga_help_title((uint8_t) (idx + 1)));
+      amiga_sprintf(tmp_text, "  %s", amiga_help_title((uint8_t) (idx + 1)));
     } else {
       const amiga_help_line_t *hl = &help_lines[idx];
 
@@ -566,7 +567,7 @@ static void row_string(uint16_t idx, uint8_t cols)
   case AMIGA_PAGE_HOSTS:
     amiga_clip_head(uri_text, sizeof(uri_text), s->hosts[idx],
                     (uint8_t) (cols - 3));
-    sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
+    amiga_sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
     break;
   case AMIGA_PAGE_BROWSE: {
     config_nio_entry_t *e = &s->entries[idx];
@@ -579,13 +580,13 @@ static void row_string(uint16_t idx, uint8_t cols)
       amiga_format_size(size_buf, e->size, s->prefs.size_format);
     (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
     strcpy(tmp_text, padded(uri_text, name_w));
-    sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
+    amiga_sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
     break;
   }
   case AMIGA_PAGE_CATALOGUE:
     uri = slot_uri((uint8_t) idx, &mode);
     amiga_clip_head(uri_text, sizeof(uri_text), uri, (uint8_t) (cols - 8));
-    sprintf(tmp_text, "%3u %s  %s", (unsigned) idx, mode, uri_text);
+    amiga_sprintf(tmp_text, "%3u %s  %s", (unsigned) idx, mode, uri_text);
     break;
   default: {
     config_nio_mapping_t m;
@@ -604,10 +605,10 @@ static void row_string(uint16_t idx, uint8_t cols)
 
       amiga_clip_head(uri_text, sizeof(uri_text), name,
                       (uint8_t) (cols - (saved ? 27 : 12)));
-      sprintf(tmp_text, "%-5s %s  %s%s", label, m.readonly ? "RO" : "RW",
+      amiga_sprintf(tmp_text, "%-5s %s  %s%s", label, m.readonly ? "RO" : "RW",
               uri_text, saved ? "  (not mounted)" : "");
     } else {
-      sprintf(tmp_text, "%-5s (empty)", label);
+      amiga_sprintf(tmp_text, "%-5s (empty)", label);
     }
     break;
   }
@@ -663,7 +664,7 @@ static void gui_paint_info(void)
   fill(&layout.info, theme.background);
   switch (gctl->page) {
   case AMIGA_PAGE_HOSTS:
-    sprintf(tmp_text, "FujiNet hosts (%u of %u)", (unsigned) s->host_count,
+    amiga_sprintf(tmp_text, "FujiNet hosts (%u of %u)", (unsigned) s->host_count,
             (unsigned) CONFIG_NIO_MAX_HOSTS);
     break;
   case AMIGA_PAGE_BROWSE:
@@ -671,7 +672,7 @@ static void gui_paint_info(void)
       strcpy(tmp_text, "Choose a host and press Browse");
     } else {
       /* host (<=255) + '/' + path (<=127) fits tmp_text, not uri_text. */
-      sprintf(tmp_text, "%s/%s", s->hosts[gctl->browse_host], s->browse_path);
+      amiga_sprintf(tmp_text, "%s/%s", s->hosts[gctl->browse_host], s->browse_path);
       amiga_clip_tail(uri_text, sizeof(uri_text), tmp_text, cols);
       strcpy(tmp_text, uri_text);
     }
@@ -680,12 +681,12 @@ static void gui_paint_info(void)
     strcpy(tmp_text, "Catalogue: Slot Mode Image");
     break;
   case AMIGA_PAGE_HELP:
-    sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
+    amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
     break;
   case AMIGA_PAGE_MOUNT:
     amiga_clip_head(uri_text, sizeof(uri_text), gctl->mount_name,
                     (uint8_t) (cols - 16));
-    sprintf(tmp_text, "Mount %s on drive:", uri_text);
+    amiga_sprintf(tmp_text, "Mount %s on drive:", uri_text);
     break;
   default:
     strcpy(tmp_text, "Drive Mode Image");
@@ -860,7 +861,7 @@ static void gui_sync_editors(void)
   case AMIGA_PAGE_CATALOGUE: {
     const config_nio_slot_t *slot = amiga_ctl_slot(gctl, (uint8_t) l->selected);
 
-    sprintf(num, "%u", (unsigned) l->selected);
+    amiga_sprintf(num, "%u", (unsigned) l->selected);
     set_string(GID_SLOT, num);
     set_string(GID_EDIT, slot && slot->enabled ? slot->uri : "");
     set_ro(amiga_ctl_catalogue_readonly(gctl, (uint8_t) l->selected));
@@ -888,7 +889,7 @@ static void gui_help_sync(void)
   } else {
     count = amiga_help_layout(amiga_help_text(gctl->help_topic),
                               list_cols(), help_lines, HELP_LINES_MAX);
-    sprintf(tmp_text, "Topic %u of %u", (unsigned) gctl->help_topic,
+    amiga_sprintf(tmp_text, "Topic %u of %u", (unsigned) gctl->help_topic,
             (unsigned) (AMIGA_HELP_TOPICS - 1));
     config_nio_set_status(gctl->state, tmp_text);
   }
@@ -938,14 +939,14 @@ static int gui_confirm_action(uint8_t action)
   case ACT_DRIVE_EJECT:
     if (gctl->drives.selected == AMIGA_LIST_NONE)
       return 1;
-    sprintf(tmp_text, "Eject %s?",
+    amiga_sprintf(tmp_text, "Eject %s?",
             amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13));
     return confirm(tmp_text);
   case ACT_MOUNT_COMMIT:
     if (gctl->drives.selected == AMIGA_LIST_NONE ||
         !amiga_ctl_drive_mounted(gctl, (uint8_t) gctl->drives.selected))
       return 1;
-    sprintf(tmp_text, "Replace the disk in %s\nwith %.40s?",
+    amiga_sprintf(tmp_text, "Replace the disk in %s\nwith %.40s?",
             amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13),
             gctl->mount_name);
     return confirm(tmp_text);
@@ -1099,9 +1100,9 @@ static void gui_open_drive_window(void)
     }
     busy_end();
     if (opened)
-      sprintf(tmp_text, "Opened %s on Workbench", name);
+      amiga_sprintf(tmp_text, "Opened %s on Workbench", name);
     else
-      sprintf(tmp_text, "Workbench could not open %s", name);
+      amiga_sprintf(tmp_text, "Workbench could not open %s", name);
     CloseLibrary(WorkbenchBase);
     WorkbenchBase = NULL;
   }
@@ -1455,7 +1456,8 @@ static int gui_handle_menu(UWORD code)
 
 static void script_out(const char *line, void *ctx)
 {
-  fprintf((FILE *) ctx, "%s\n", line);
+  fputs(line, (FILE *) ctx);
+  fputc('\n', (FILE *) ctx);
 }
 
 static int gui_run_script(const amiga_options_t *opts)
@@ -1483,7 +1485,9 @@ static int gui_run_script(const amiga_options_t *opts)
 
     if (nl)
       *nl = 0;
-    fprintf(out, "> %s\n", line);
+    fputs("> ", out);
+    fputs(line, out);
+    fputc('\n', out);
     busy_begin();
     rc = amiga_script_line(gctl, line, script_out, out, &ticks);
     busy_end();
@@ -1497,7 +1501,8 @@ static int gui_run_script(const amiga_options_t *opts)
     else if (line[0] && line[0] != ';')
       ok++;
   }
-  fprintf(out, "SCRIPT DONE ok=%u err=%u\n", ok, err);
+  amiga_sprintf(tmp_text, "SCRIPT DONE ok=%u err=%u\n", ok, err);
+  fputs(tmp_text, out);
   fclose(out);
   fclose(in);
   return err ? 5 : 0;
