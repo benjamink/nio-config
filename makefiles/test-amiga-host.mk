@@ -16,7 +16,9 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_drives.c \
 	src/platform/amiga/amiga_list.c \
 	src/platform/amiga/amiga_format.c \
-	src/platform/amiga/amiga_options.c
+	src/platform/amiga/amiga_options.c \
+	src/platform/amiga/amiga_theme.c \
+	src/platform/amiga/amiga_input.c
 PORTABLE_HOST_SRCS :=
 TEST_SUPPORT_SRCS := tests/amiga/run_tests.c
 TEST_SRCS := $(wildcard tests/amiga/test_*.c)
