@@ -570,16 +570,20 @@ static void row_string(uint16_t idx, uint8_t cols)
     break;
   }
   case AMIGA_PAGE_BROWSE: {
-    config_nio_entry_t *e = &s->entries[idx];
+    config_nio_entry_t *e = amiga_ctl_browse_row_entry(gctl, idx);
     uint8_t name_w = (uint8_t) (cols > 26 ? cols - 26 : 1);
-    int dir = (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
+    int dir = !e || (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
 
-    amiga_clip_head(uri_text, sizeof(uri_text), e->name, name_w);
+    /* No entry: the ".." row that leads to the parent drawer. */
+    amiga_clip_head(uri_text, sizeof(uri_text), e ? e->name : "..", name_w);
     if (dir)
       strcpy(size_buf, "Drawer");
     else
       amiga_format_size(size_buf, e->size, s->prefs.size_format);
-    (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
+    if (e)
+      (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
+    else
+      date_buf[0] = 0;
     strcpy(tmp_text, padded(uri_text, name_w));
     amiga_sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
     break;
@@ -966,6 +970,9 @@ static void catalogue_reselect(uint8_t slot)
     amiga_list_select(&gctl->catalogue, (uint16_t) idx);
 }
 
+/* Digits typed on the slot list. */
+static amiga_typeahead_t slot_typing;
+
 /* ---- Actions ------------------------------------------------------------- */
 
 /* Destructive actions ask first, before the window is marked busy. */
@@ -1055,8 +1062,10 @@ static void gui_do_action(uint8_t action)
   case ACT_BROWSE_ADD:
     /* All 256 slots, the cursor on the image's slot, else the first
      * empty one; RO is ticked as for Mount. */
-    if (amiga_ctl_add_begin(gctl))
+    if (amiga_ctl_add_begin(gctl)) {
       set_ro(1);
+      amiga_typeahead_reset(&slot_typing);
+    }
     break;
   case ACT_ADD_COMMIT:
     if (gctl->slots.selected != AMIGA_LIST_NONE)
@@ -1200,11 +1209,13 @@ static void gui_activate(void)
     break;
   case AMIGA_PAGE_BROWSE: {
     amiga_list_t *l = &gctl->entries;
+    config_nio_entry_t *e = l->selected == AMIGA_LIST_NONE
+                              ? NULL
+                              : amiga_ctl_browse_row_entry(gctl, l->selected);
 
-    /* Drawers open; image files go straight to the mount picker. */
-    if (l->selected != AMIGA_LIST_NONE &&
-        l->selected < gctl->state->entry_count &&
-        !(gctl->state->entries[l->selected].is_dir & CONFIG_NIO_ENTRY_FLAG_DIR))
+    /* Drawers and ".." open; image files go straight to the mount
+     * picker. */
+    if (e && !(e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR))
       gui_do_action(ACT_BROWSE_MOUNT);
     else
       gui_do_action(ACT_BROWSE_OPEN);
@@ -1282,10 +1293,20 @@ static uint8_t current_tab(void)
 }
 
 /* Returns 1 when the user asked to quit. */
-static int gui_handle_key(UWORD code, UWORD qualifier)
+static int gui_handle_key(UWORD code, UWORD qualifier, ULONG secs,
+                          ULONG micros)
 {
   amiga_list_t *l = page_list();
   amiga_key_t key = amiga_key_from_raw(code, qualifier);
+  int digit = amiga_digit_from_raw(code);
+
+  /* On the slot list, typing a number jumps to that slot. */
+  if (gctl->page == AMIGA_PAGE_ADD && digit >= 0) {
+    gui_select(amiga_typeahead_feed(&slot_typing, (uint8_t) digit,
+                                    (uint32_t) (secs * 1000UL + micros / 1000UL),
+                                    AMIGA_CAT_SLOTS - 1));
+    return 0;
+  }
 
   /* A help topic has no selection: the movement keys scroll the text. */
   if (gctl->page == AMIGA_PAGE_HELP &&
@@ -1779,7 +1800,7 @@ int amiga_gui_run(amiga_ctl_t *ctl, const amiga_options_t *opts)
         amiga_list_set_top_from_pot(page_list(), prop_pi.VertPot);
         gui_paint_rows();
       } else if (cls == RAWKEY)
-        done |= gui_handle_key(code, qual);
+        done |= gui_handle_key(code, qual, copy.Seconds, copy.Micros);
       else if (cls == MENUPICK)
         done |= gui_handle_menu(code);
     }

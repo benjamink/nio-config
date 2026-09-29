@@ -105,6 +105,10 @@ int amiga_ctl_browse_refresh(amiga_ctl_t *ctl);
 int amiga_ctl_browse_activate(amiga_ctl_t *ctl);
 int amiga_ctl_browse_parent(amiga_ctl_t *ctl);
 int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name);
+/* Browse rows: inside a drawer row 0 is ".." (the parent) and the entries
+ * follow; row_entry is NULL for ".." and past the end. */
+int amiga_ctl_browse_row_is_parent(amiga_ctl_t *ctl, uint16_t row);
+config_nio_entry_t *amiga_ctl_browse_row_entry(amiga_ctl_t *ctl, uint16_t row);
 int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap);
 int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
                             uint8_t readonly);

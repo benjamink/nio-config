@@ -196,6 +196,26 @@ static void list_cb(uint8_t is_dir, const char *name, uint32_t size,
   entry->name[n] = 0;
 }
 
+/* Inside a drawer the first Browse row is "..", the parent drawer. */
+static uint16_t parent_rows(amiga_ctl_t *ctl)
+{
+  return ctl->state->browse_path[0] ? 1 : 0;
+}
+
+int amiga_ctl_browse_row_is_parent(amiga_ctl_t *ctl, uint16_t row)
+{
+  return row == 0 && parent_rows(ctl);
+}
+
+config_nio_entry_t *amiga_ctl_browse_row_entry(amiga_ctl_t *ctl, uint16_t row)
+{
+  uint16_t up = parent_rows(ctl);
+
+  if (row < up || row - up >= ctl->state->entry_count)
+    return NULL;
+  return &ctl->state->entries[row - up];
+}
+
 int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
 {
   static char uri[FNSVC_MAX_URI + 1];
@@ -214,12 +234,15 @@ int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
   }
   if (!fnsvc_list_directory(uri, list_cb, s)) {
     s->entry_count = 0;
+    /* ".." still leads out of a drawer that cannot be read. */
+    amiga_list_set_count(&ctl->entries, parent_rows(ctl));
     amiga_sprintf(ctl->msg, "Browse failed: error %u status %u",
             (unsigned) fnsvc_last_error(), (unsigned) fnsvc_last_status());
     status(ctl, ctl->msg);
     return 0;
   }
-  amiga_list_set_count(&ctl->entries, s->entry_count);
+  amiga_list_set_count(&ctl->entries,
+                       (uint16_t) (s->entry_count + parent_rows(ctl)));
   amiga_list_select(&ctl->entries, 0);
   if (s->entries_truncated) {
     amiga_sprintf(ctl->msg, "Showing %u of %u entries",
@@ -245,12 +268,18 @@ int amiga_ctl_browse_open(amiga_ctl_t *ctl)
 
 static config_nio_entry_t *selected_entry(amiga_ctl_t *ctl)
 {
-  if (ctl->entries.selected == AMIGA_LIST_NONE ||
-      ctl->entries.selected >= ctl->state->entry_count) {
-    status(ctl, "Nothing selected");
+  config_nio_entry_t *e;
+
+  if (ctl->entries.selected != AMIGA_LIST_NONE &&
+      amiga_ctl_browse_row_is_parent(ctl, ctl->entries.selected)) {
+    status(ctl, "Pick a file, not a drawer");
     return NULL;
   }
-  return &ctl->state->entries[ctl->entries.selected];
+  e = ctl->entries.selected == AMIGA_LIST_NONE
+        ? NULL : amiga_ctl_browse_row_entry(ctl, ctl->entries.selected);
+  if (!e)
+    status(ctl, "Nothing selected");
+  return e;
 }
 
 int amiga_ctl_browse_activate(amiga_ctl_t *ctl)
@@ -260,6 +289,9 @@ int amiga_ctl_browse_activate(amiga_ctl_t *ctl)
   uint16_t len;
   uint16_t nlen;
 
+  if (ctl->entries.selected != AMIGA_LIST_NONE &&
+      amiga_ctl_browse_row_is_parent(ctl, ctl->entries.selected))
+    return amiga_ctl_browse_parent(ctl);
   e = selected_entry(ctl);
   if (!e)
     return 0;
@@ -302,11 +334,16 @@ int amiga_ctl_browse_parent(amiga_ctl_t *ctl)
 
 int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name)
 {
-  uint8_t i;
+  uint16_t up = parent_rows(ctl);
+  uint16_t i;
 
+  if (up && !strcmp(name, "..")) {
+    amiga_list_select(&ctl->entries, 0);
+    return 1;
+  }
   for (i = 0; i < ctl->state->entry_count; i++) {
     if (!strcmp(ctl->state->entries[i].name, name)) {
-      amiga_list_select(&ctl->entries, i);
+      amiga_list_select(&ctl->entries, (uint16_t) (i + up));
       return 1;
     }
   }

@@ -63,7 +63,30 @@ void test_ctl_browse(void)
   CHECK_STR(state.status, "Pick a file, not a drawer");
   CHECK(amiga_ctl_browse_activate(&ctl));
   CHECK_STR(state.browse_path, "GAMES/");
-  CHECK(ctl.entries.count == 1);
+  /* Inside a drawer the first row is "..", the parent, like cd .. */
+  CHECK(ctl.entries.count == 2 && ctl.entries.selected == 0);
+  CHECK(amiga_ctl_browse_row_is_parent(&ctl, 0));
+  CHECK(!amiga_ctl_browse_row_is_parent(&ctl, 1));
+  CHECK(amiga_ctl_browse_row_entry(&ctl, 0) == NULL);
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 1)->name, "a.adf");
+  CHECK(amiga_ctl_browse_row_entry(&ctl, 2) == NULL);
+  CHECK(!amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+  CHECK_STR(state.status, "Pick a file, not a drawer");
+  CHECK(amiga_ctl_browse_select_name(&ctl, "a.adf"));
+  CHECK(ctl.entries.selected == 1);
+  CHECK(amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+  CHECK_STR(uri, "tnfs://fujinet.online/GAMES/a.adf");
+  CHECK(amiga_ctl_browse_select_name(&ctl, ".."));
+  CHECK(ctl.entries.selected == 0);
+  CHECK(amiga_ctl_browse_activate(&ctl));           /* double-click ".." */
+  CHECK_STR(state.browse_path, "");
+  /* At the host's top there is no "..". */
+  CHECK(ctl.entries.count == 3);
+  CHECK(!amiga_ctl_browse_row_is_parent(&ctl, 0));
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 0)->name, "GAMES");
+  CHECK(!amiga_ctl_browse_select_name(&ctl, ".."));
+  CHECK(amiga_ctl_browse_select_name(&ctl, "GAMES"));
+  CHECK(amiga_ctl_browse_activate(&ctl));
   CHECK(amiga_ctl_browse_parent(&ctl));
   CHECK_STR(state.browse_path, "");
   CHECK(ctl.entries.count == 3);

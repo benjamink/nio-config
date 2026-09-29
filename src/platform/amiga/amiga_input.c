@@ -40,3 +40,45 @@ amiga_key_t amiga_key_from_raw(uint16_t code, uint16_t qualifier)
     return AMIGA_KEY_NONE;
   }
 }
+
+int amiga_digit_from_raw(uint16_t code)
+{
+  if (code & RAW_KEY_UP)
+    return -1;
+  if (code >= 0x01 && code <= 0x09)        /* 1-9 on the main row */
+    return (int) code;
+  switch (code) {
+  case 0x0A: case 0x0F: return 0;          /* 0, keypad 0 */
+  case 0x1D: return 1;
+  case 0x1E: return 2;
+  case 0x1F: return 3;
+  case 0x2D: return 4;
+  case 0x2E: return 5;
+  case 0x2F: return 6;
+  case 0x3D: return 7;
+  case 0x3E: return 8;
+  case 0x3F: return 9;
+  default: return -1;
+  }
+}
+
+void amiga_typeahead_reset(amiga_typeahead_t *t)
+{
+  t->value = 0;
+  t->active = 0;
+  t->last_ms = 0;
+}
+
+uint16_t amiga_typeahead_feed(amiga_typeahead_t *t, uint8_t digit,
+                              uint32_t now_ms, uint16_t max)
+{
+  uint32_t v = (uint32_t) t->value * 10u + digit;
+
+  if (!t->active || (uint32_t) (now_ms - t->last_ms) > AMIGA_TYPEAHEAD_MS ||
+      v > max)
+    v = digit;
+  t->value = (uint16_t) v;
+  t->active = 1;
+  t->last_ms = now_ms;
+  return t->value;
+}

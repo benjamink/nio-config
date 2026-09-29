@@ -86,7 +86,8 @@ To put an image in the catalogue without mounting it, select it on
 with what each holds, the cursor on the slot that already holds the image,
 otherwise the first empty one, and `RO` ticked. Move to the slot you want
 and press **Add** (or double-click, or Return); **Cancel** or Esc goes
-back. On a slot that holds a different image the button reads **Replace**
+back. Typing a number jumps to that slot: `2` then `3` goes to slot 23, and
+after a 2 second pause the next digit starts a new number. On a slot that holds a different image the button reads **Replace**
 and asks first.
 
 When mounting, config-nio puts the image in a catalogue slot for you, as `FIN` would. It
@@ -98,8 +99,8 @@ Mount reports that the catalogue is full; clear some slots on the Catalogue
 page.
 
 - The cursor keys move the selection. With Shift they move a page at a time;
-  with Alt they jump to the top or bottom. Backspace goes to the parent
-  drawer. Help shows About. Esc quits.
+  with Alt they jump to the top or bottom. Backspace, or double-clicking the
+  `..` row at the top of a drawer's listing, goes to the parent drawer. Help shows About. Esc quits.
 - Remove, Clear, Eject and Replace ask for confirmation first.
 - **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
 
