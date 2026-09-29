@@ -1,1 +1,2 @@
 AMIGA_TEST(drives)
+AMIGA_TEST(list)

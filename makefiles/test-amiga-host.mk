@@ -13,7 +13,8 @@ TEST_CFLAGS := -std=c99 -Wall -Wextra -O0 -g \
 	-DFNSVC_LIST_MAX_PAYLOAD=420
 
 AMIGA_HOST_SRCS := \
-	src/platform/amiga/amiga_drives.c
+	src/platform/amiga/amiga_drives.c \
+	src/platform/amiga/amiga_list.c
 PORTABLE_HOST_SRCS :=
 TEST_SUPPORT_SRCS := tests/amiga/run_tests.c
 TEST_SRCS := $(wildcard tests/amiga/test_*.c)
