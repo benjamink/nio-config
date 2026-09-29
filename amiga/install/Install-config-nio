@@ -59,6 +59,9 @@ EndIf
 If NOT EXISTS SYS:C/fujinet-load-resident
   Copy "{FROM}fujinet-load-resident" SYS:C/ CLONE QUIET
 EndIf
+If NOT EXISTS SYS:C/fmountrestore
+  Copy "{FROM}fmountrestore" SYS:C/ CLONE QUIET
+EndIf
 If NOT EXISTS DEVS:fujinet-nio.device
   Echo "Installing fujinet-nio.device in DEVS:"
   Copy "{FROM}fujinet-nio.device" DEVS: CLONE QUIET
@@ -82,6 +85,12 @@ Search >NIL: S:User-Startup "DEVS:fujinet-disk.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>S:User-Startup
   Set reboot "yes"
+EndIf
+; Mount the drives saved on the FujiNet again.  Run in the background so a
+; FujiNet that is off or unreachable cannot hold up or stop the boot.
+Search >NIL: S:User-Startup "fmountrestore"
+If WARN
+  Echo "Run >NIL: C:fmountrestore" >>S:User-Startup
 EndIf
 
 ; Autostart: a project icon in SYS:WBStartup that runs SYS:Tools/config-nio.

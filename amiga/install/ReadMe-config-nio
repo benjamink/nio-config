@@ -26,14 +26,17 @@ The installer:
 
 1. Copies FujiNet Config to SYS:Tools (config-nio and its icon). An
    existing icon is kept so your ToolTypes are not lost.
-2. Installs FMOUNT, FUMOUNT and fujinet-load-resident in SYS:C, and
-   fujinet-nio.device and fujinet-disk.device in DEVS:, if they are not
-   there already.
-3. Adds two lines to S:User-Startup, if they are missing, so both devices
-   load at every boot:
+2. Installs FMOUNT, FUMOUNT, FMOUNTRESTORE and fujinet-load-resident in
+   SYS:C, and fujinet-nio.device and fujinet-disk.device in DEVS:, if
+   they are not there already.
+3. Adds these lines to S:User-Startup, if they are missing. The first two
+   load both devices at every boot. The third mounts your drives again in
+   the background, so a FujiNet that is switched off cannot hold up the
+   boot:
 
        C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
        C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+       Run >NIL: C:fmountrestore
 
 4. Asks whether FujiNet Config should start automatically with
    Workbench.

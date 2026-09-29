@@ -70,6 +70,7 @@ enum {
   ACT_SLOT_CLEAR,
   ACT_SLOT_MOUNT,
   ACT_DRIVE_EJECT,
+  ACT_DRIVE_REMOUNT,
   ACT_MOUNT_COMMIT,
   ACT_MOUNT_CANCEL,
   ACT_HELP_CONTENTS,
@@ -102,7 +103,7 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Set", ACT_SLOT_SET }, { "Clear", ACT_SLOT_CLEAR },
     { "Mount...", ACT_SLOT_MOUNT }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
-  { { "Eject", ACT_DRIVE_EJECT }, { NULL, ACT_NONE },
+  { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
@@ -598,9 +599,13 @@ static void row_string(uint16_t idx, uint8_t cols)
       uri = !ds ? "?" : (ds->enabled ? ds->uri : "");
       name = strrchr(uri, '/');
       name = name && name[1] ? name + 1 : uri;
-      amiga_clip_head(uri_text, sizeof(uri_text), name, (uint8_t) (cols - 12));
-      sprintf(tmp_text, "%-5s %s  %s", label, m.readonly ? "RO" : "RW",
-              uri_text);
+      int saved = amiga_ctl_drive_state(gctl, (uint8_t) idx) ==
+                  AMIGA_DRIVE_SAVED;
+
+      amiga_clip_head(uri_text, sizeof(uri_text), name,
+                      (uint8_t) (cols - (saved ? 27 : 12)));
+      sprintf(tmp_text, "%-5s %s  %s%s", label, m.readonly ? "RO" : "RW",
+              uri_text, saved ? "  (not mounted)" : "");
     } else {
       sprintf(tmp_text, "%-5s (empty)", label);
     }
@@ -1035,6 +1040,14 @@ static void gui_do_action(uint8_t action)
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
     break;
+  case ACT_DRIVE_REMOUNT:
+    if (gctl->drives.selected != AMIGA_LIST_NONE) {
+      uint8_t unit = (uint8_t) gctl->drives.selected;
+
+      if (amiga_ctl_drive_remount(gctl, unit))
+        (void) gui_touch_drive(amiga_drive_label(unit, gctl->kick13));
+    }
+    break;
   default:
     break;
   }
@@ -1136,7 +1149,13 @@ static void gui_activate(void)
     gui_do_action(ACT_MOUNT_COMMIT);
     break;
   case AMIGA_PAGE_DRIVES:
-    gui_open_drive_window();
+    /* A saved drive that is not mounted yet is mounted again first. */
+    if (gctl->drives.selected != AMIGA_LIST_NONE &&
+        amiga_ctl_drive_state(gctl, (uint8_t) gctl->drives.selected) ==
+          AMIGA_DRIVE_SAVED)
+      gui_do_action(ACT_DRIVE_REMOUNT);
+    else
+      gui_open_drive_window();
     break;
   default:
     break;

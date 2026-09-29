@@ -25,6 +25,17 @@ typedef enum {
 typedef int (*amiga_exec_fn)(const char *command, char *output, uint16_t cap,
                              void *ctx);
 
+/* Reports whether a drive exists in AmigaDOS right now.  Mappings saved on
+ * the FujiNet outlive a reboot; the DOS drives do not until FMOUNT (or
+ * FMOUNTRESTORE) creates them again. */
+typedef int (*amiga_probe_fn)(uint8_t unit, void *ctx);
+
+enum {
+  AMIGA_DRIVE_EMPTY = 0,   /* no saved mapping */
+  AMIGA_DRIVE_MOUNTED,     /* mapped and present in AmigaDOS */
+  AMIGA_DRIVE_SAVED        /* mapped on the FujiNet but not mounted now */
+};
+
 /* Controller shared by the Intuition front end and the SCRIPT= driver.
  * Every operation commits to the FujiNet at once and reports through
  * state->status, like the other config-nio front ends. */
@@ -42,6 +53,8 @@ typedef struct {
   const char *fumount;
   amiga_exec_fn exec;
   void *exec_ctx;
+  amiga_probe_fn probe;     /* NULL: a mapping counts as mounted */
+  void *probe_ctx;
   /* Two catalogue windows (a visible list spans at most two) and one
    * record per drive; AMIGA_CAT_SLOTS / a clear bit mean "not cached". */
   uint16_t cat_base[2];
@@ -110,7 +123,11 @@ uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot);
 /* Mount flow: pick an image (Browse) or slot (Catalogue), then a drive.
  * Commit finds the catalogue slot already holding the image, else the
  * first free one, writes the RO choice to it and runs FMOUNT. */
+void amiga_ctl_set_probe(amiga_ctl_t *ctl, amiga_probe_fn probe, void *ctx);
+uint8_t amiga_ctl_drive_state(amiga_ctl_t *ctl, uint8_t unit);
 int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit);
+/* Mounts a saved-but-absent drive again with its saved slot and mode. */
+int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit);
 /* The DOS name to open in a Workbench window (e.g. "DN0:"), or 0 with a
  * status message when the drive is empty. */
 int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,

@@ -77,7 +77,10 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "density, FFS), DO0: and DO1: (double density, OFS) and HO0: and HO1: "
   "(high density, OFS).\n"
   "\n"
-  "Mounted drives come back after a reboot if you run FMOUNTRESTORE.",
+  "The FujiNet remembers which image is in each drive. After a reboot a "
+  "drive shows (not mounted) until it is mounted again: double-click it "
+  "or press Remount. The installer mounts them all again at every boot "
+  "with FMOUNTRESTORE.",
 
   "Project > Catalogue... shows the FujiNet slot catalogue: numbered slots "
   "0 to 255 that remember disk images. Mount fills these slots for you, "

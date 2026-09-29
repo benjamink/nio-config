@@ -530,12 +530,27 @@ uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot)
   return (uint8_t) (strcmp(s->mode, "r") == 0);
 }
 
-int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit)
+void amiga_ctl_set_probe(amiga_ctl_t *ctl, amiga_probe_fn probe, void *ctx)
+{
+  ctl->probe = probe;
+  ctl->probe_ctx = ctx;
+}
+
+uint8_t amiga_ctl_drive_state(amiga_ctl_t *ctl, uint8_t unit)
 {
   config_nio_mapping_t m;
 
-  return unit < AMIGA_DRIVE_COUNT &&
-         config_nio_mapping_get(ctl->state, unit, &m) && m.valid;
+  if (unit >= AMIGA_DRIVE_COUNT ||
+      !config_nio_mapping_get(ctl->state, unit, &m) || !m.valid)
+    return AMIGA_DRIVE_EMPTY;
+  if (ctl->probe && !ctl->probe(unit, ctl->probe_ctx))
+    return AMIGA_DRIVE_SAVED;
+  return AMIGA_DRIVE_MOUNTED;
+}
+
+int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit)
+{
+  return amiga_ctl_drive_state(ctl, unit) == AMIGA_DRIVE_MOUNTED;
 }
 
 uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl)
@@ -543,10 +558,40 @@ uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl)
   uint8_t unit;
 
   for (unit = 0; unit < AMIGA_DRIVE_COUNT; unit++) {
-    if (!amiga_ctl_drive_mounted(ctl, unit))
+    if (amiga_ctl_drive_state(ctl, unit) == AMIGA_DRIVE_EMPTY)
+      return unit;
+  }
+  for (unit = 0; unit < AMIGA_DRIVE_COUNT; unit++) {
+    if (amiga_ctl_drive_state(ctl, unit) == AMIGA_DRIVE_SAVED)
       return unit;
   }
   return 0;
+}
+
+int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit)
+{
+  const char *label = amiga_drive_label(unit, ctl->kick13);
+  config_nio_mapping_t m;
+
+  if (amiga_ctl_drive_state(ctl, unit) != AMIGA_DRIVE_SAVED ||
+      !config_nio_mapping_get(ctl->state, unit, &m)) {
+    sprintf(ctl->msg, "%s has nothing to remount", label ? label : "Drive");
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  if (!amiga_ctl_drive_insert(ctl, unit, m.slot, m.readonly))
+    return 0;
+  {
+    const config_nio_slot_t *slot = amiga_ctl_drive_slot(ctl, unit);
+    const char *name = slot && slot->enabled ? strrchr(slot->uri, '/') : NULL;
+
+    name = name && name[1] ? name + 1 : (slot && slot->enabled ? slot->uri
+                                                               : "Image");
+    sprintf(ctl->msg, "%.40s mounted on %s (%s)", name, label,
+            m.readonly ? "RO" : "RW");
+    status(ctl, ctl->msg);
+  }
+  return 1;
 }
 
 static void set_mount_name(amiga_ctl_t *ctl, const char *uri)
@@ -695,7 +740,14 @@ int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
     status(ctl, "No such drive");
     return 0;
   }
-  if (!amiga_ctl_drive_mounted(ctl, unit)) {
+  switch (amiga_ctl_drive_state(ctl, unit)) {
+  case AMIGA_DRIVE_MOUNTED:
+    break;
+  case AMIGA_DRIVE_SAVED:
+    sprintf(ctl->msg, "%s is not mounted; press Remount", label);
+    status(ctl, ctl->msg);
+    return 0;
+  default:
     sprintf(ctl->msg, "%s is empty", label);
     status(ctl, ctl->msg);
     return 0;

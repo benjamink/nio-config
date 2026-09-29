@@ -11,6 +11,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/icon.h>
+#include <dos/dosextens.h>
 
 #include <stdio.h>
 
@@ -26,6 +27,30 @@ static amiga_options_t options;
 #define AMIGA_KICK13 1
 #else
 #define AMIGA_KICK13 0
+#endif
+
+#ifndef __KICK13__
+/* A drive is mounted when its DOS device (DN0 ... DN7) exists: FMOUNT
+ * creates it and FUMOUNT removes it, and a reboot starts without it.
+ * WB1.3 uses permanent MountList entries, so it has no such probe. */
+static int drive_present(uint8_t unit, void *ctx)
+{
+  char name[4];
+  struct DosList *list;
+  int found = 0;
+
+  (void) ctx;
+  name[0] = 'D';
+  name[1] = 'N';
+  name[2] = (char) ('0' + unit);
+  name[3] = 0;
+  list = LockDosList(LDF_DEVICES | LDF_READ);
+  if (list) {
+    found = FindDosEntry(list, (CONST_STRPTR) name, LDF_DEVICES) != NULL;
+    UnLockDosList(LDF_DEVICES | LDF_READ);
+  }
+  return found;
+}
 #endif
 
 void config_nio_fatal_message(const char *message)
@@ -97,6 +122,10 @@ int main(int argc, char **argv)
   }
   amiga_ctl_init(&ctl, &state, AMIGA_KICK13, 8, amiga_exec_command, NULL);
   amiga_ctl_set_tools(&ctl, options.fmount, options.fumount);
+#ifndef __KICK13__
+  if (((struct Library *) DOSBase)->lib_Version >= 36)
+    amiga_ctl_set_probe(&ctl, drive_present, NULL);
+#endif
   rc = amiga_gui_run(&ctl, &options);
 
 shutdown:
