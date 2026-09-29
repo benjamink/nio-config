@@ -35,7 +35,14 @@ If NOT EXISTS "{FROM}config-nio"
 EndIf
 
 Echo "Installing FujiNet Config in SYS:Tools"
+If NOT EXISTS SYS:Tools
+  MakeDir SYS:Tools
+EndIf
 Copy "{FROM}config-nio" SYS:Tools/ CLONE QUIET
+If NOT EXISTS SYS:Tools/config-nio
+  Echo "Could not copy config-nio to SYS:Tools; nothing else was changed."
+  Quit 20
+EndIf
 ; Keep an existing icon so its ToolTypes survive a reinstall.
 If NOT EXISTS SYS:Tools/config-nio.info
   Copy "{FROM}config-nio.info" SYS:Tools/ CLONE QUIET
