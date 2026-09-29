@@ -145,10 +145,27 @@ void amiga_clip_tail(char *out, uint16_t cap, const char *s, uint8_t max_chars)
                (uint16_t) (max_chars - 3));
 }
 
+static int is_shell_trailer(const char *line, const char *stop)
+{
+  static const char marker[] = " failed returncode ";
+  size_t n = sizeof(marker) - 1;
+  const char *p;
+
+  for (p = line; p + n <= stop; p++) {
+    if (memcmp(p, marker, n) == 0)
+      return 1;
+  }
+  return 0;
+}
+
+/* Copies the last non-blank line, preferring any line over the Shell's
+ * "<cmd> failed returncode N" trailer, which only repeats the return code. */
 void amiga_last_line(char *out, uint16_t cap, const char *text)
 {
   const char *start = NULL;
   const char *end = NULL;
+  const char *trailer = NULL;
+  const char *trailer_end = NULL;
   const char *p;
 
   if (!out || cap == 0)
@@ -170,11 +187,20 @@ void amiga_last_line(char *out, uint16_t cap, const char *text)
     for (q = line; q < stop && (*q == ' ' || *q == '\t'); q++)
       ;
     if (q < stop) {
-      start = line;
-      end = stop;
+      if (is_shell_trailer(line, stop)) {
+        trailer = line;
+        trailer_end = stop;
+      } else {
+        start = line;
+        end = stop;
+      }
     }
     if (*p == '\n')
       p++;
+  }
+  if (!start) {
+    start = trailer;
+    end = trailer_end;
   }
   if (start)
     copy_bounded(out, cap, start, (uint16_t) (end - start));

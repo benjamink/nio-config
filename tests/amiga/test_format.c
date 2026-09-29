@@ -63,4 +63,16 @@ void test_format(void)
   CHECK_STR(buf, "");
   amiga_last_line(buf, 6, "abcdefghij\n");
   CHECK_STR(buf, "abcde");
+
+  /* The Shell appends "<cmd> failed returncode N" after the command's own
+   * message; the command's message is the useful one. */
+  amiga_last_line(buf, sizeof(buf),
+                  "FMOUNT INSPECT=ok\nUnsupported candidate media\n"
+                  "SYS:C/fmount failed returncode 10\n");
+  CHECK_STR(buf, "Unsupported candidate media");
+  amiga_last_line(buf, sizeof(buf), "fmount: Unknown command\n"
+                  "fmount failed returncode 10\n");
+  CHECK_STR(buf, "fmount: Unknown command");
+  amiga_last_line(buf, sizeof(buf), "SYS:C/fmount failed returncode 20\n");
+  CHECK_STR(buf, "SYS:C/fmount failed returncode 20");
 }
