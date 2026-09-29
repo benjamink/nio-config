@@ -422,8 +422,7 @@ static int page_has(uint8_t id)
     return gctl->page == AMIGA_PAGE_HOSTS ||
            gctl->page == AMIGA_PAGE_CATALOGUE;
   case GID_SLOT:
-    return gctl->page == AMIGA_PAGE_CATALOGUE ||
-           gctl->page == AMIGA_PAGE_ADD;
+    return gctl->page == AMIGA_PAGE_CATALOGUE;
   case GID_RO:
     return gctl->page == AMIGA_PAGE_CATALOGUE ||
            gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD;
@@ -504,8 +503,9 @@ static amiga_list_t *page_list(void)
 {
   switch (gctl->page) {
   case AMIGA_PAGE_BROWSE:
-  case AMIGA_PAGE_ADD:
     return &gctl->entries;
+  case AMIGA_PAGE_ADD:
+    return &gctl->slots;
   case AMIGA_PAGE_CATALOGUE:
     return &gctl->catalogue;
   case AMIGA_PAGE_DRIVES:
@@ -556,8 +556,20 @@ static void row_string(uint16_t idx, uint8_t cols)
                     (uint8_t) (cols - 3));
     amiga_sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
     break;
-  case AMIGA_PAGE_BROWSE:
   case AMIGA_PAGE_ADD: {
+    int c = amiga_ctl_catalogue_index(gctl, (uint8_t) idx);
+
+    if (c < 0) {
+      amiga_sprintf(tmp_text, "%4u      (empty)", (unsigned) idx);
+    } else {
+      amiga_clip_tail(uri_text, sizeof(uri_text), gctl->cat_uri[c],
+                      (uint8_t) (cols - 10));
+      amiga_sprintf(tmp_text, "%4u %s   %s", (unsigned) idx,
+                    gctl->cat_ro[c] ? "RO" : "RW", uri_text);
+    }
+    break;
+  }
+  case AMIGA_PAGE_BROWSE: {
     config_nio_entry_t *e = &s->entries[idx];
     uint8_t name_w = (uint8_t) (cols > 26 ? cols - 26 : 1);
     int dir = (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
@@ -744,6 +756,12 @@ static void gui_paint_buttons(void)
         gctl->drives.selected != AMIGA_LIST_NONE &&
         amiga_ctl_drive_mounted(gctl, (uint8_t) gctl->drives.selected))
       label = "Replace";
+    /* A filled slot other than the image's own is replaced. */
+    if (b->action == ACT_ADD_COMMIT &&
+        gctl->slots.selected != AMIGA_LIST_NONE &&
+        (int16_t) gctl->slots.selected != gctl->add_slot &&
+        amiga_ctl_catalogue_index(gctl, (uint8_t) gctl->slots.selected) >= 0)
+      label = "Replace";
     fill(&layout.button[i], theme.background);
     if (!label)
       continue;
@@ -914,8 +932,6 @@ static void gui_set_page(uint8_t page)
   gui_sync_gadgets();
   gui_sync_editors();
   gui_paint();
-  if (gctl->page == AMIGA_PAGE_ADD)
-    (void) ActivateGadget(&gad[GID_SLOT], win, NULL);
 }
 
 /* Repaints after an action; a page change needs the full treatment. */
@@ -967,10 +983,11 @@ static int gui_confirm_action(uint8_t action)
             amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13));
     return confirm(tmp_text);
   case ACT_ADD_COMMIT: {
-    uint8_t slot;
+    uint8_t slot = (uint8_t) gctl->slots.selected;
     const config_nio_slot_t *old;
 
-    if (!read_slot(&slot) || !amiga_ctl_add_replaces(gctl, slot))
+    if (gctl->slots.selected == AMIGA_LIST_NONE ||
+        !amiga_ctl_add_replaces(gctl, slot))
       return 1;
     old = amiga_ctl_slot(gctl, slot);
     amiga_sprintf(tmp_text, "Slot %u holds %.40s.\nReplace it with %.40s?",
@@ -1036,21 +1053,15 @@ static void gui_do_action(uint8_t action)
       set_ro(1);
     break;
   case ACT_BROWSE_ADD:
-    /* Ask for the slot: the field starts at the image's slot, else the
-     * first empty one, and RO is ticked as for Mount. */
-    if (amiga_ctl_add_begin(gctl)) {
-      char num[4];
-
-      num[0] = 0;
-      if (gctl->add_slot >= 0)
-        amiga_sprintf(num, "%u", (unsigned) gctl->add_slot);
-      set_string(GID_SLOT, num);
+    /* All 256 slots, the cursor on the image's slot, else the first
+     * empty one; RO is ticked as for Mount. */
+    if (amiga_ctl_add_begin(gctl))
       set_ro(1);
-    }
     break;
   case ACT_ADD_COMMIT:
-    if (read_slot(&slot))
-      (void) amiga_ctl_add_commit(gctl, slot, (uint8_t) read_ro());
+    if (gctl->slots.selected != AMIGA_LIST_NONE)
+      (void) amiga_ctl_add_commit(gctl, (uint8_t) gctl->slots.selected,
+                                  (uint8_t) read_ro());
     break;
   case ACT_ADD_CANCEL:
     amiga_ctl_add_cancel(gctl);
@@ -1227,7 +1238,7 @@ static void gui_select(uint16_t index)
   amiga_list_select(page_list(), index);
   gui_sync_editors();
   gui_paint_rows();
-  if (gctl->page == AMIGA_PAGE_MOUNT)
+  if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
   update_prop();
 }
@@ -1237,9 +1248,6 @@ static void gui_list_click(struct IntuiMessage *msg)
   amiga_rect_t in = list_interior();
   uint16_t index;
 
-  /* The Add prompt is about the image already chosen. */
-  if (gctl->page == AMIGA_PAGE_ADD)
-    return;
   if (!amiga_list_hit(page_list(), (int16_t) (msg->MouseY - in.top),
                       layout.row_h, &index))
     return;
@@ -1279,9 +1287,6 @@ static int gui_handle_key(UWORD code, UWORD qualifier)
   amiga_list_t *l = page_list();
   amiga_key_t key = amiga_key_from_raw(code, qualifier);
 
-  if (gctl->page == AMIGA_PAGE_ADD && key != AMIGA_KEY_CANCEL &&
-      key != AMIGA_KEY_ACTIVATE && key != AMIGA_KEY_HELP)
-    return 0;
   /* A help topic has no selection: the movement keys scroll the text. */
   if (gctl->page == AMIGA_PAGE_HELP &&
       gctl->help_topic != AMIGA_HELP_CONTENTS) {
@@ -1358,7 +1363,7 @@ not_scroll:
   }
   gui_sync_editors();
   gui_paint_rows();
-  if (gctl->page == AMIGA_PAGE_MOUNT)
+  if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
   update_prop();
   return 0;
@@ -1392,8 +1397,6 @@ static int gui_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
       gui_do_action(action);
   } else if (id == GID_RO) {
     paint_checkbox();
-  } else if (id == GID_SLOT && gctl->page == AMIGA_PAGE_ADD) {
-    gui_do_action(ACT_ADD_COMMIT);            /* Return in Slot */
   } else if (id == GID_SLOT && gctl->page == AMIGA_PAGE_CATALOGUE) {
     uint8_t slot;
     int idx;

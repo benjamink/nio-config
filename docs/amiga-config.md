@@ -20,7 +20,7 @@ side by side:
 | Window | Shell |
 | --- | --- |
 | Mount… (Browse) | `FIN` into a slot (the one already holding the image, else the first empty one), then `FMOUNT slot drive RO\|RW` |
-| Add to Slot (Browse) | `FIN slot image`; the Slot field starts at the image's slot, else the first empty one |
+| Add to Slot (Browse) | `FIN slot image`; pick the slot from the list of all 256 |
 | Catalogue page | `FLS` |
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
@@ -82,11 +82,12 @@ To mount an image:
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
 To put an image in the catalogue without mounting it, select it on
-**Browse** and press **Add to Slot**. The page asks for the slot: the
-`Slot` field starts at the slot that already holds the image, otherwise the
-first empty one, and `RO` is ticked. Change either, then press **Add** (or
-Return in `Slot`); **Cancel** or Esc goes back. A slot that holds a
-different image is replaced only after asking.
+**Browse** and press **Add to Slot**. The list then shows all 256 slots
+with what each holds, the cursor on the slot that already holds the image,
+otherwise the first empty one, and `RO` ticked. Move to the slot you want
+and press **Add** (or double-click, or Return); **Cancel** or Esc goes
+back. On a slot that holds a different image the button reads **Replace**
+and asks first.
 
 When mounting, config-nio puts the image in a catalogue slot for you, as `FIN` would. It
 reuses the slot that already holds that image, otherwise the first empty

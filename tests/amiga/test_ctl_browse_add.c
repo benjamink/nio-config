@@ -85,8 +85,8 @@ void test_ctl_browse_add(void)
   CHECK(strstr(transcript, "OK\n") != NULL);
   CHECK_STR(state.status, "work.adf is already in slot 3 (RO)");
 
-  /* The GUI asks for the slot first: Add to Slot opens a prompt whose
-   * Slot field defaults to the image's slot, else the first empty one. */
+  /* The GUI asks for the slot first: Add to Slot lists all 256 slots with
+   * the cursor on the image's slot, else the first empty one. */
   CHECK(amiga_ctl_browse_select_name(&ctl, "GAMES"));
   CHECK(!amiga_ctl_add_begin(&ctl));
   CHECK(ctl.page == AMIGA_PAGE_BROWSE);
@@ -94,6 +94,10 @@ void test_ctl_browse_add(void)
   CHECK(amiga_ctl_browse_select_name(&ctl, "work.adf"));
   CHECK(amiga_ctl_add_begin(&ctl));
   CHECK(ctl.page == AMIGA_PAGE_ADD && ctl.add_slot == 3);
+  CHECK(ctl.slots.count == 256 && ctl.slots.selected == 3);
+  CHECK(ctl.slots.top <= 3 && 3 < ctl.slots.top + ctl.slots.rows);
+  /* The occupied slots were read for the rows, image 4 included. */
+  CHECK(amiga_ctl_catalogue_index(&ctl, 4) >= 0);
   CHECK_STR(ctl.mount_name, "work.adf");
   CHECK_STR(state.status, "Choose a slot for work.adf");
   amiga_ctl_set_page(&ctl, AMIGA_PAGE_HOSTS);       /* tabs do not leave */
@@ -106,7 +110,7 @@ void test_ctl_browse_add(void)
   CHECK(amiga_ctl_browse_select_name(&ctl, "boot.adf"));
   CHECK(amiga_ctl_slot_clear(&ctl, 1));
   CHECK(amiga_ctl_add_begin(&ctl));
-  CHECK(ctl.add_slot == 1);                         /* first empty */
+  CHECK(ctl.add_slot == 1 && ctl.slots.selected == 1);   /* first empty */
   /* Replacing another image is flagged so the GUI can ask. */
   CHECK(!amiga_ctl_add_replaces(&ctl, 1));
   CHECK(amiga_ctl_add_replaces(&ctl, 4));
@@ -137,5 +141,6 @@ void test_ctl_browse_add(void)
   /* The prompt still opens, empty, so a slot can be replaced. */
   CHECK(amiga_ctl_add_begin(&ctl));
   CHECK(ctl.page == AMIGA_PAGE_ADD && ctl.add_slot == -1);
-  CHECK_STR(state.status, "Catalogue is full: type a slot to replace");
+  CHECK(ctl.slots.selected == 0);
+  CHECK_STR(state.status, "Catalogue is full: choose a slot to replace");
 }

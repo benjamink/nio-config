@@ -47,6 +47,7 @@ typedef struct {
   amiga_list_t hosts;
   amiga_list_t entries;
   amiga_list_t catalogue;
+  amiga_list_t slots;      /* all 256 slots, for the Add to Slot prompt */
   amiga_list_t drives;
   uint8_t browse_host;
   uint8_t browse_open;
@@ -111,8 +112,9 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
  * first empty one. */
 int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly);
 
-/* The Add to Slot prompt: begin suggests add_slot (the image's slot, else
- * the first empty one, -1 when full); replaces says the slot holds a
+/* The Add to Slot prompt lists all 256 slots (slots, rows from cat_*).
+ * begin puts the cursor on add_slot (the image's slot, else the first
+ * empty one; -1 and slot 0 when full); replaces says the slot holds a
  * different image; commit writes and returns to Browse. */
 int amiga_ctl_add_begin(amiga_ctl_t *ctl);
 int amiga_ctl_add_replaces(amiga_ctl_t *ctl, uint8_t slot);

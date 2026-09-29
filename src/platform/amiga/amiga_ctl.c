@@ -37,6 +37,8 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   amiga_list_init(&ctl->hosts, rows);
   amiga_list_init(&ctl->entries, rows);
   amiga_list_init(&ctl->catalogue, rows);
+  amiga_list_init(&ctl->slots, rows);
+  amiga_list_set_count(&ctl->slots, AMIGA_CAT_SLOTS);
   amiga_list_init(&ctl->drives, rows);
   amiga_list_init(&ctl->help, rows);
   amiga_list_set_count(&ctl->hosts, state->host_count);
@@ -55,6 +57,7 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
   amiga_list_set_rows(&ctl->hosts, rows);
   amiga_list_set_rows(&ctl->entries, rows);
   amiga_list_set_rows(&ctl->catalogue, rows);
+  amiga_list_set_rows(&ctl->slots, rows);
   amiga_list_set_rows(&ctl->drives, rows);
   amiga_list_set_rows(&ctl->help, rows);
 }
@@ -400,6 +403,9 @@ int amiga_ctl_add_begin(amiga_ctl_t *ctl)
   if (!amiga_ctl_browse_uri(ctl, ctl->mount_uri, sizeof(ctl->mount_uri)))
     return 0;
   set_mount_name(ctl, ctl->mount_uri);
+  /* The rows show what each slot holds. */
+  if (!amiga_ctl_catalogue_refresh(ctl))
+    return 0;
   ctl->mount_return = ctl->page;
   ctl->page = AMIGA_PAGE_ADD;
   if (find_slot(ctl, ctl->mount_uri, &slot)) {
@@ -408,8 +414,10 @@ int amiga_ctl_add_begin(amiga_ctl_t *ctl)
     status(ctl, ctl->msg);
   } else {
     ctl->add_slot = -1;
-    status(ctl, "Catalogue is full: type a slot to replace");
+    slot = 0;
+    status(ctl, "Catalogue is full: choose a slot to replace");
   }
+  amiga_list_select(&ctl->slots, slot);
   return 1;
 }
 
