@@ -126,9 +126,14 @@ static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
     else
       amiga_sprintf(out_buf, "SLOT %u EMPTY", (unsigned) i);
     out(out_buf, ctx);
-  } else if (n == 2 && is(t[1], "favorites")) {
-    for (i = 0; i < ctl->fav_count; i++) {
-      amiga_sprintf(out_buf, "FAV %u %s", (unsigned) i, ctl->fav[i]);
+  } else if (n == 2 && is(t[1], "catalogue")) {
+    uint16_t k;
+
+    if (!amiga_ctl_catalogue_refresh(ctl))
+      return result(ctl, 0, out, ctx);
+    for (k = 0; k < ctl->cat_count; k++) {
+      amiga_sprintf(out_buf, "SLOT %u %s %s", (unsigned) ctl->cat_slot[k],
+                    ctl->cat_ro[k] ? "RO" : "RW", ctl->cat_uri[k]);
       out(out_buf, ctx);
     }
   } else if (n == 2 && is(t[1], "status")) {
@@ -170,7 +175,7 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
 {
   /* Pages a script may show; the mount picker is entered via "mount". */
   static const char *const pages[AMIGA_PAGE_MOUNT] = {
-    "hosts", "browse", "catalogue", "drives", "favorites"
+    "hosts", "browse", "catalogue", "drives"
   };
   char *t[MAX_TOKENS];
   int n;

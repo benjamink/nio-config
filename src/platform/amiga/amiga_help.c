@@ -8,7 +8,6 @@ static const char *const titles[AMIGA_HELP_TOPICS] = {
   "Hosts",
   "Browsing and mounting",
   "Drives and ejecting",
-  "Favorites",
   "Catalogue",
   "Settings",
   "Keyboard",
@@ -55,7 +54,6 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Double-click a drawer, or press Open, to enter it.\n"
   "- Parent, or Backspace, goes up one level.\n"
   "- Refresh reads the listing again.\n"
-  "- Favorite stars or un-stars the selected image.\n"
   "- Double-click a disk image, or select it and press Mount..., to mount "
   "it.\n"
   "\n"
@@ -64,16 +62,22 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "drive already holds a disk the button reads Replace and asks first. "
   "Cancel or Esc goes back without mounting.\n"
   "\n"
+  "Mount is the same as FIN then FMOUNT in the Shell: the image is put in "
+  "a catalogue slot (the one already holding it, else the first empty "
+  "one) and that slot is mounted on the drive. The message says which "
+  "slot was used.\n"
+  "\n"
   "Very large drawers show their first 200 entries.",
 
-  "The Drives page shows every FujiNet drive with the image mounted in it "
-  "and whether it is read-only (RO) or read/write (RW).\n"
+  "The Drives page shows every FujiNet drive with the image mounted in it, "
+  "its catalogue slot and whether it is read-only (RO) or read/write (RW), "
+  "as FDRIVE does in the Shell.\n"
   "\n"
   "- Double-click a drive holding a disk, or press Return, to open its "
   "window on Workbench, as double-clicking its disk icon does (Workbench "
   "3.5 or later).\n"
-  "- Eject unmounts the selected drive after asking.\n"
-  "- Favorite stars or un-stars the image in the selected drive.\n"
+  "- Eject unmounts the selected drive after asking, like FUMOUNT. The "
+  "image stays in the catalogue.\n"
   "\n"
   "On Workbench 2.0 and later the drives are DN0: to DN7:. On Workbench 1.3 "
   "they are DN0: and DN1: (double density, FFS), HN0: and HN1: (high "
@@ -85,32 +89,20 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "or press Remount. The installer mounts them all again at every boot "
   "with FMOUNTRESTORE.",
 
-  "Favorites are the disk images you have starred, so you can mount them "
-  "again without browsing for them. They are kept on the FujiNet.\n"
+  "The Catalogue page lists the FujiNet's numbered slots that hold a disk "
+  "image, as FLS does in the Shell. FMOUNT mounts a slot by its number, "
+  "and Mount fills slots for you, so the images you have mounted before "
+  "are here to mount again without browsing.\n"
   "\n"
-  "- On the Browse page, select an image and press Favorite.\n"
-  "- On the Drives page, select a drive and press Favorite to star the "
-  "image in it.\n"
-  "- Press Favorite again to remove the star. Starred images show a * "
-  "before their name.\n"
-  "\n"
-  "On the Favorites page, double-click a favorite (or press Mount...) to "
-  "choose a drive for it, or press Remove to un-star it. Up to 24 "
-  "favorites are kept.",
-
-  "Project > Catalogue... shows the FujiNet slot catalogue: numbered slots "
-  "0 to 255 that FMOUNT mounts from. Mount fills these slots for you, so "
-  "you normally never need this page; it is there for FMOUNT slot numbers "
-  "in the Shell.\n"
-  "\n"
+  "- Double-click a slot, or press Mount..., to mount it on a drive you "
+  "choose (FMOUNT).\n"
   "- Selecting a slot copies it into the URI, Slot and RO fields.\n"
-  "- Set stores the URI field in the slot number given.\n"
-  "- Clear empties the selected slot after asking.\n"
-  "- Mount... mounts the slot on a drive you choose.\n"
+  "- Set stores the URI field in the slot number given (FIN).\n"
+  "- Clear empties the selected slot after asking (FOUT). A drive that "
+  "has the image mounted keeps it.\n"
   "\n"
-  "Typing a number in Slot and pressing Return jumps to that slot. When "
-  "all 256 slots are used, Mount reports that the catalogue is full; "
-  "clear some slots here.",
+  "There are 256 slots, 0 to 255. When all are used, Mount reports that "
+  "the catalogue is full; clear some here.",
 
   "The Settings menu changes how the Browse page shows files. Settings "
   "are saved on the FujiNet at once.\n"
@@ -125,10 +117,9 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "with Alt they go to the top or bottom.\n"
   "- Return, or a double-click, runs the page's main action.\n"
   "- Backspace goes to the parent drawer on the Browse page.\n"
-  "- Tab and Shift-Tab change page.\n"
+  "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives.\n"
   "- Help opens this help. Esc closes help, cancels Mount, or quits.\n"
-  "- Right-Amiga-C opens the catalogue, Right-Amiga-? shows About and "
-  "Right-Amiga-Q quits.",
+  "- Right-Amiga-? shows About and Right-Amiga-Q quits.",
 
   "To start FujiNet Config every time Workbench starts, run the installer "
   "from the NIO package in a Shell:\n"

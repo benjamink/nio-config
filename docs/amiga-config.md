@@ -10,10 +10,20 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
 | Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
-| Slots: page through 0–255, edit, clear | **Catalogue** (Project menu): all 256 slots that FMOUNT mounts from; Set / Clear / Mount… |
-| — | **Favorites** page: images you starred with the **Favorite** button on Browse or Drives; Mount… / Remove |
-| Drive map and "Mount + Exit" | **Drives** page: what is mounted where; Eject runs `FUMOUNT drive` |
+| Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
+| Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
+
+The pages use the same model as the Shell commands, so the two can be used
+side by side:
+
+| Window | Shell |
+| --- | --- |
+| Mount… (Browse) | `FIN` into a slot (the one already holding the image, else the first empty one), then `FMOUNT slot drive RO\|RW` |
+| Catalogue page | `FLS` |
+| Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
+| Drives page | `FDRIVE` |
+| Eject | `FUMOUNT drive` (the image stays in its slot) |
 
 Every change is saved to the FujiNet as soon as you make it. For that
 reason the window has no Save/Use/Cancel buttons.
@@ -54,12 +64,11 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 
 ## Using the window
 
-- Click a page button (Hosts / Browse / Favorites / Drives), or press Tab /
-  Shift-Tab, to change page. **Project ▸ Catalogue…** shows the raw slot
-  catalogue.
+- Click a page button (Hosts / Browse / Catalogue / Drives), or press Tab /
+  Shift-Tab, to change page.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
-  mount a favorite, or edit a catalogue slot.
+  mount a catalogue slot, or open (or remount) a drive.
 
 To mount an image:
 
@@ -71,23 +80,19 @@ To mount an image:
    you need it, and press **Mount**. If the drive already holds a disk the
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
-config-nio puts the image in a catalogue slot for you. It reuses the slot
-that already holds that image, otherwise the first empty one. When all 256
-slots are used, Mount reports that the catalogue is full; clear some slots
-from **Project ▸ Catalogue…**.
-
-To keep an image handy, press **Favorite** on the Browse page (selected
-file) or the Drives page (selected drive's image). Starred images show a `*`
-and appear on the **Favorites** page, where double-click or **Mount…** opens
-the drive list and **Remove** un-stars them. Up to 24 favorites are kept on
-the FujiNet (`config-nio/favorites`).
+config-nio puts the image in a catalogue slot for you, as `FIN` would. It
+reuses the slot that already holds that image, otherwise the first empty
+one, and the status line names the slot. The **Catalogue** page lists the
+occupied slots (read a page at a time with range requests), so images you
+mounted before can be mounted again from there. When all 256 slots are used,
+Mount reports that the catalogue is full; clear some slots on the Catalogue
+page.
 
 - The cursor keys move the selection. With Shift they move a page at a time;
   with Alt they jump to the top or bottom. Backspace goes to the parent
   drawer. Help shows About. Esc quits.
 - Remove, Clear, Eject and Replace ask for confirmation first.
-- **Project** menu: Catalogue… (Right-Amiga-C), About… (Right-Amiga-?),
-  Quit (Right-Amiga-Q).
+- **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
 
 ## Drives, FMOUNT and FMOUNTRESTORE
 
@@ -110,13 +115,13 @@ failed, and 5 otherwise.
 
 | Command | Action |
 | --- | --- |
-| `page hosts\|browse\|favorites\|catalogue\|drives` | Show a page |
+| `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
 | `browse`, `select NAME`, `enter`, `parent`, `assign SLOT ro\|rw` | Browse the selected host |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `dump hosts\|entries\|drives\|favorites\|status`, `dump slot N` | Write state to the transcript |
+| `dump hosts\|entries\|drives\|catalogue\|status`, `dump slot N` | Write state to the transcript (`dump catalogue` writes `SLOT N RO\|RW URI` per occupied slot) |
 | `wait TICKS` | Pause (1/50 s) so the window can be inspected |
 | `quit` | Stop |
 

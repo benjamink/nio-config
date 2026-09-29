@@ -29,7 +29,7 @@ void test_ctl_hosts(void)
   /* First load seeds the same three hosts as every other target. */
   CHECK(state.host_count == 3);
   CHECK(ctl.hosts.count == 3 && ctl.hosts.selected == 0);
-  CHECK(ctl.catalogue.count == 256 && ctl.drives.count == 8);
+  CHECK(ctl.catalogue.count == 0 && ctl.drives.count == 8);
 
   CHECK(amiga_ctl_host_add(&ctl, "tnfs://example.org"));
   CHECK(state.host_count == 4 && ctl.hosts.selected == 3);

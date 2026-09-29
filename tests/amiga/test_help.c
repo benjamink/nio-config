@@ -1,4 +1,6 @@
 #include "check.h"
+
+#include <string.h>
 #include "amiga_help.h"
 
 #define MAX_LINES 400
@@ -62,7 +64,13 @@ void test_help(void)
   }
   CHECK(amiga_help_title(AMIGA_HELP_TOPICS) == amiga_help_title(0));
   CHECK(amiga_help_find("Starting automatically") != 0);
-  CHECK(amiga_help_find("Favorites") != 0);
+  CHECK(amiga_help_find("Favorites") == AMIGA_HELP_CONTENTS);
   CHECK(amiga_help_find("Catalogue") != 0);
+  /* Each GUI action names the Shell command it matches. */
+  CHECK(strstr(amiga_help_text(amiga_help_find("Browsing and mounting")),
+               "FIN then FMOUNT") != NULL);
+  CHECK(strstr(amiga_help_text(amiga_help_find("Catalogue")), "FOUT") != NULL);
+  CHECK(strstr(amiga_help_text(amiga_help_find("Drives and ejecting")),
+               "FUMOUNT") != NULL);
   CHECK(amiga_help_find("No such topic") == AMIGA_HELP_CONTENTS);
 }

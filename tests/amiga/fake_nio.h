@@ -19,6 +19,7 @@ void fake_slot_put(uint8_t index, const char *uri, uint8_t readonly);
 const char *fake_slot_uri(uint8_t index);
 uint8_t fake_slot_readonly(uint8_t index);
 unsigned fake_slot_get_calls(void);
+unsigned fake_slot_range_calls(void);
 void fake_dir_put(const char *uri, const fake_dir_entry_t *entries,
                   uint8_t count);
 void fake_dir_fail(const char *uri);

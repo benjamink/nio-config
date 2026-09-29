@@ -72,10 +72,6 @@ enum {
   ACT_SLOT_MOUNT,
   ACT_DRIVE_EJECT,
   ACT_DRIVE_REMOUNT,
-  ACT_DRIVE_FAV,
-  ACT_BROWSE_FAV,
-  ACT_FAV_MOUNT,
-  ACT_FAV_REMOVE,
   ACT_MOUNT_COMMIT,
   ACT_MOUNT_CANCEL,
   ACT_HELP_CONTENTS,
@@ -89,13 +85,12 @@ typedef struct {
   uint8_t action;
 } gui_button_t;
 
-/* Catalogue is reached from the Project menu; the mount picker and help
- * have no page button. */
+/* The mount picker and help have no page button. */
 static const char *const tab_labels[AMIGA_TAB_COUNT] = {
-  "Hosts", "Browse", "Favorites", "Drives"
+  "Hosts", "Browse", "Catalogue", "Drives"
 };
 static const uint8_t tab_pages[AMIGA_TAB_COUNT] = {
-  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_FAVORITES, AMIGA_PAGE_DRIVES
+  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_CATALOGUE, AMIGA_PAGE_DRIVES
 };
 
 static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
@@ -104,15 +99,11 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { "Move Up", ACT_HOST_UP }, { "Move Down", ACT_HOST_DOWN } },
   { { "Open", ACT_BROWSE_OPEN }, { "Parent", ACT_BROWSE_PARENT },
     { "Refresh", ACT_BROWSE_REFRESH }, { "Mount...", ACT_BROWSE_MOUNT },
-    { "Favorite", ACT_BROWSE_FAV }, { NULL, ACT_NONE } },
-  { { "Set", ACT_SLOT_SET }, { "Clear", ACT_SLOT_CLEAR },
-    { "Mount...", ACT_SLOT_MOUNT }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE } },
+  { { "Mount...", ACT_SLOT_MOUNT }, { "Set", ACT_SLOT_SET },
+    { "Clear", ACT_SLOT_CLEAR }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
-    { "Favorite", ACT_DRIVE_FAV }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
-    { NULL, ACT_NONE } },
-  /* AMIGA_PAGE_FAVORITES */
-  { { "Mount...", ACT_FAV_MOUNT }, { "Remove", ACT_FAV_REMOVE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
@@ -172,19 +163,15 @@ static amiga_help_line_t help_lines[HELP_LINES_MAX];
 static char row_text[ROW_TEXT_MAX + 1];
 static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
-static char row_uri[FNSVC_MAX_URI + 1];
-
 /* ---- Menus ------------------------------------------------------------ */
 
-static struct IntuiText menu_text[7 + AMIGA_HELP_TOPICS];
-static struct MenuItem project_items[3];
+static struct IntuiText menu_text[6 + AMIGA_HELP_TOPICS];
+static struct MenuItem project_items[2];
 static struct MenuItem settings_items[4];
 static struct MenuItem help_items[AMIGA_HELP_TOPICS];
 static struct Menu menus[3];
-static const char *const project_labels[3] = {
-  "Catalogue...", "About...", "Quit"
-};
-static const char project_keys[3] = { 'C', '?', 'Q' };
+static const char *const project_labels[2] = { "About...", "Quit" };
+static const char project_keys[2] = { '?', 'Q' };
 static const char *const settings_labels[4] = {
   "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact"
 };
@@ -316,7 +303,7 @@ static int confirm(const char *message)
 
 static void about(void)
 {
-  (void) requester(win, "FujiNet Config\nHosts, favorites and drives\n"
+  (void) requester(win, "FujiNet Config\nHosts, catalogue and drives\n"
                    "for FujiNet NIO on the Amiga", NULL, "OK");
 }
 
@@ -518,8 +505,6 @@ static amiga_list_t *page_list(void)
     return &gctl->drives;
   case AMIGA_PAGE_HELP:
     return &gctl->help;
-  case AMIGA_PAGE_FAVORITES:
-    return &gctl->favorites;
   default:
     return &gctl->hosts;
   }
@@ -538,28 +523,11 @@ static uint8_t list_cols(void)
   return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
 }
 
-static const char *slot_uri(uint8_t slot, const char **mode)
-{
-  const config_nio_slot_t *s = amiga_ctl_slot(gctl, slot);
-
-  if (!s) {
-    *mode = "  ";
-    return "?";
-  }
-  if (!s->enabled || !s->uri[0]) {
-    *mode = "  ";
-    return "";
-  }
-  *mode = strcmp(s->mode, "r") == 0 ? "RO" : "RW";
-  return s->uri;
-}
-
 static void row_string(uint16_t idx, uint8_t cols)
 {
   config_nio_state_t *s = gctl->state;
   char size_buf[AMIGA_SIZE_TEXT_MAX];
   char date_buf[AMIGA_DATE_TEXT_MAX];
-  const char *mode;
   const char *uri;
 
   switch (gctl->page) {
@@ -584,42 +552,23 @@ static void row_string(uint16_t idx, uint8_t cols)
     config_nio_entry_t *e = &s->entries[idx];
     uint8_t name_w = (uint8_t) (cols > 26 ? cols - 26 : 1);
     int dir = (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
-    char star = ' ';
 
-    /* Starred images show a '*' before their name. */
-    if (!dir && config_nio_compose_uri(s->hosts[gctl->browse_host],
-                                       s->browse_path, e->name, row_uri,
-                                       sizeof(row_uri)) &&
-        amiga_ctl_fav_is(gctl, row_uri))
-      star = '*';
     amiga_clip_head(uri_text, sizeof(uri_text), e->name, name_w);
     if (dir)
       strcpy(size_buf, "Drawer");
     else
       amiga_format_size(size_buf, e->size, s->prefs.size_format);
     (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
-    tmp_text[0] = star;
-    tmp_text[1] = ' ';
-    strcpy(tmp_text + 2, padded(uri_text, name_w));
+    strcpy(tmp_text, padded(uri_text, name_w));
     amiga_sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
     break;
   }
-  case AMIGA_PAGE_FAVORITES: {
-    const char *fav = gctl->fav[idx];
-    const char *name = strrchr(fav, '/');
-
-    name = name && name[1] ? name + 1 : fav;
-    amiga_clip_head(uri_text, sizeof(uri_text), name, 24);
-    strcpy(tmp_text, padded(uri_text, 24));
-    amiga_clip_tail(uri_text, sizeof(uri_text), fav, (uint8_t) (cols - 26));
-    strcat(tmp_text, "  ");
-    strcat(tmp_text, uri_text);
-    break;
-  }
   case AMIGA_PAGE_CATALOGUE:
-    uri = slot_uri((uint8_t) idx, &mode);
-    amiga_clip_head(uri_text, sizeof(uri_text), uri, (uint8_t) (cols - 8));
-    amiga_sprintf(tmp_text, "%3u %s  %s", (unsigned) idx, mode, uri_text);
+    /* The address's tail holds the file name, so keep that end. */
+    amiga_clip_tail(uri_text, sizeof(uri_text), gctl->cat_uri[idx],
+                    (uint8_t) (cols - 10));
+    amiga_sprintf(tmp_text, "%4u %s   %s", (unsigned) gctl->cat_slot[idx],
+                  gctl->cat_ro[idx] ? "RO" : "RW", uri_text);
     break;
   default: {
     config_nio_mapping_t m;
@@ -635,9 +584,9 @@ static void row_string(uint16_t idx, uint8_t cols)
       name = strrchr(uri, '/');
       name = name && name[1] ? name + 1 : uri;
       amiga_clip_head(uri_text, sizeof(uri_text), name,
-                      (uint8_t) (cols - (saved ? 28 : 13)));
-      amiga_sprintf(tmp_text, "%-5s %s %c%s%s", label, m.readonly ? "RO" : "RW",
-                    amiga_ctl_fav_is(gctl, uri) ? '*' : ' ', uri_text,
+                      (uint8_t) (cols - (saved ? 32 : 17)));
+      amiga_sprintf(tmp_text, "%-5s %s %6u  %s%s", label,
+                    m.readonly ? "RO" : "RW", (unsigned) m.slot, uri_text,
                     saved ? "  (not mounted)" : "");
     } else {
       amiga_sprintf(tmp_text, "%-5s (empty)", label);
@@ -715,14 +664,11 @@ static void gui_paint_info(void)
     }
     break;
   case AMIGA_PAGE_CATALOGUE:
-    strcpy(tmp_text, "Slot Mode Image");
+    amiga_sprintf(tmp_text, "Slot Mode Image   (%u of %u slots used)",
+                  (unsigned) gctl->cat_count, (unsigned) AMIGA_CAT_SLOTS);
     break;
   case AMIGA_PAGE_HELP:
     amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
-    break;
-  case AMIGA_PAGE_FAVORITES:
-    amiga_sprintf(tmp_text, "Favorites (%u of %u)", (unsigned) gctl->fav_count,
-                  (unsigned) AMIGA_FAV_MAX);
     break;
   case AMIGA_PAGE_MOUNT:
     amiga_clip_head(uri_text, sizeof(uri_text), gctl->mount_name,
@@ -730,7 +676,7 @@ static void gui_paint_info(void)
     amiga_sprintf(tmp_text, "Mount %s on drive:", uri_text);
     break;
   default:
-    strcpy(tmp_text, "Drive Mode Image");
+    strcpy(tmp_text, "Drive Mode Slot  Image");
     break;
   }
   text_at(layout.info.left, (WORD) (layout.info.top + 1), tmp_text,
@@ -900,12 +846,13 @@ static void gui_sync_editors(void)
     set_string(GID_EDIT, s->hosts[l->selected]);
     break;
   case AMIGA_PAGE_CATALOGUE: {
-    const config_nio_slot_t *slot = amiga_ctl_slot(gctl, (uint8_t) l->selected);
+    uint8_t n = gctl->cat_slot[l->selected];
+    const config_nio_slot_t *slot = amiga_ctl_slot(gctl, n);
 
-    amiga_sprintf(num, "%u", (unsigned) l->selected);
+    amiga_sprintf(num, "%u", (unsigned) n);
     set_string(GID_SLOT, num);
     set_string(GID_EDIT, slot && slot->enabled ? slot->uri : "");
-    set_ro(amiga_ctl_catalogue_readonly(gctl, (uint8_t) l->selected));
+    set_ro(gctl->cat_ro[l->selected]);
     break;
   }
   default:
@@ -946,6 +893,8 @@ static void gui_set_page(uint8_t page)
   if (gctl->page == AMIGA_PAGE_HELP && page != AMIGA_PAGE_HELP)
     amiga_ctl_help_close(gctl);
   amiga_ctl_set_page(gctl, page);
+  if (gctl->page == AMIGA_PAGE_CATALOGUE)
+    (void) amiga_ctl_catalogue_refresh(gctl);
   gui_sync_gadgets();
   gui_sync_editors();
   gui_paint();
@@ -967,6 +916,22 @@ static void gui_after_action(uint8_t old_page)
   update_prop();
 }
 
+/* After Set or Clear: re-read the catalogue and keep the cursor on that
+ * slot, or the row that took its place. */
+static void catalogue_reselect(uint8_t slot)
+{
+  int idx;
+
+  if (!amiga_ctl_catalogue_refresh(gctl))
+    return;
+  idx = amiga_ctl_catalogue_index(gctl, slot);
+  if (idx < 0 && gctl->catalogue.selected >= gctl->cat_count &&
+      gctl->cat_count)
+    idx = gctl->cat_count - 1;
+  if (idx >= 0)
+    amiga_list_select(&gctl->catalogue, (uint16_t) idx);
+}
+
 /* ---- Actions ------------------------------------------------------------- */
 
 /* Destructive actions ask first, before the window is marked busy. */
@@ -983,8 +948,6 @@ static int gui_confirm_action(uint8_t action)
     amiga_sprintf(tmp_text, "Eject %s?",
             amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13));
     return confirm(tmp_text);
-  case ACT_FAV_REMOVE:
-    return confirm("Remove this favorite?");
   case ACT_MOUNT_COMMIT:
     if (gctl->drives.selected == AMIGA_LIST_NONE ||
         !amiga_ctl_drive_mounted(gctl, (uint8_t) gctl->drives.selected))
@@ -1044,13 +1007,14 @@ static void gui_do_action(uint8_t action)
       set_ro(1);
     break;
   case ACT_SLOT_SET:
-    if (read_slot(&slot))
-      (void) amiga_ctl_slot_set(gctl, slot, (const char *) edit_buf,
-                                (uint8_t) read_ro());
+    if (read_slot(&slot) &&
+        amiga_ctl_slot_set(gctl, slot, (const char *) edit_buf,
+                           (uint8_t) read_ro()))
+      catalogue_reselect(slot);
     break;
   case ACT_SLOT_CLEAR:
-    if (read_slot(&slot))
-      (void) amiga_ctl_slot_clear(gctl, slot);
+    if (read_slot(&slot) && amiga_ctl_slot_clear(gctl, slot))
+      catalogue_reselect(slot);
     break;
   case ACT_SLOT_MOUNT:
     if (read_slot(&slot) && amiga_ctl_mount_begin_slot(gctl, slot))
@@ -1083,20 +1047,6 @@ static void gui_do_action(uint8_t action)
   case ACT_DRIVE_EJECT:
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
-    break;
-  case ACT_BROWSE_FAV:
-    (void) amiga_ctl_fav_toggle_browse(gctl);
-    break;
-  case ACT_DRIVE_FAV:
-    if (gctl->drives.selected != AMIGA_LIST_NONE)
-      (void) amiga_ctl_fav_toggle_drive(gctl, (uint8_t) gctl->drives.selected);
-    break;
-  case ACT_FAV_MOUNT:
-    if (amiga_ctl_mount_begin_favorite(gctl))
-      set_ro(1);
-    break;
-  case ACT_FAV_REMOVE:
-    (void) amiga_ctl_fav_remove(gctl);
     break;
   case ACT_DRIVE_REMOUNT:
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
@@ -1201,13 +1151,10 @@ static void gui_activate(void)
     break;
   }
   case AMIGA_PAGE_CATALOGUE:
-    (void) ActivateGadget(&gad[GID_EDIT], win, NULL);
+    gui_do_action(ACT_SLOT_MOUNT);
     break;
   case AMIGA_PAGE_MOUNT:
     gui_do_action(ACT_MOUNT_COMMIT);
-    break;
-  case AMIGA_PAGE_FAVORITES:
-    gui_do_action(ACT_FAV_MOUNT);
     break;
   case AMIGA_PAGE_DRIVES:
     /* A saved drive that is not mounted yet is mounted again first. */
@@ -1254,7 +1201,7 @@ static void gui_list_click(struct IntuiMessage *msg)
   gui_select(index);
 }
 
-/* The page button for the current page (Catalogue counts as Hosts). */
+/* The page button for the current page. */
 static uint8_t current_tab(void)
 {
   uint8_t page = gctl->page == AMIGA_PAGE_HELP ? gctl->help_return
@@ -1385,9 +1332,12 @@ static int gui_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
     paint_checkbox();
   } else if (id == GID_SLOT && gctl->page == AMIGA_PAGE_CATALOGUE) {
     uint8_t slot;
+    int idx;
 
-    if (read_slot(&slot))
-      gui_select(slot);
+    /* Return in Slot selects that slot when it holds an image; an empty
+     * one stays typed in for Set. */
+    if (read_slot(&slot) && (idx = amiga_ctl_catalogue_index(gctl, slot)) >= 0)
+      gui_select((uint16_t) idx);
     else
       gui_paint_status();
   }
@@ -1420,10 +1370,10 @@ static void gui_make_menus(void)
   const config_nio_prefs_t *p = &gctl->state->prefs;
 
   w = (WORD) (12 * FONT_W + COMMWIDTH + 8);
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < 2; i++) {
     make_item(&project_items[i], &menu_text[i], project_labels[i],
               (WORD) (i * 10), w, COMMSEQ, 0, project_keys[i]);
-    project_items[i].NextItem = i + 1 < 3 ? &project_items[i + 1] : NULL;
+    project_items[i].NextItem = i + 1 < 2 ? &project_items[i + 1] : NULL;
   }
   w = (WORD) (14 * FONT_W + CHECKWIDTH + 8);
   for (i = 0; i < 4; i++) {
@@ -1434,7 +1384,7 @@ static void gui_make_menus(void)
         (i == 2 && p->size_format != CONFIG_NIO_PREF_SIZE_COMPACT) ||
         (i == 3 && p->size_format == CONFIG_NIO_PREF_SIZE_COMPACT))
       checked = CHECKED;
-    make_item(&settings_items[i], &menu_text[3 + i], settings_labels[i],
+    make_item(&settings_items[i], &menu_text[2 + i], settings_labels[i],
               (WORD) (i * 10), w, (UWORD) (CHECKIT | checked),
               (LONG) (1L << (i ^ 1)), 0);
     settings_items[i].NextItem = i + 1 < 4 ? &settings_items[i + 1] : NULL;
@@ -1442,7 +1392,7 @@ static void gui_make_menus(void)
   /* Help menu: Contents (Right-Amiga-H), then every topic. */
   w = (WORD) (22 * FONT_W + COMMWIDTH + 8);
   for (i = 0; i < AMIGA_HELP_TOPICS; i++) {
-    make_item(&help_items[i], &menu_text[7 + i], amiga_help_title(i),
+    make_item(&help_items[i], &menu_text[6 + i], amiga_help_title(i),
               (WORD) (i * 10), w, (UWORD) (i == 0 ? COMMSEQ : 0), 0,
               (BYTE) (i == 0 ? 'H' : 0));
     help_items[i].NextItem = i + 1 < AMIGA_HELP_TOPICS ? &help_items[i + 1]
@@ -1485,8 +1435,6 @@ static int gui_handle_menu(UWORD code)
       break;
     if (MENUNUM(code) == 0) {
       if (ITEMNUM(code) == 0)
-        gui_set_page(AMIGA_PAGE_CATALOGUE);
-      else if (ITEMNUM(code) == 1)
         about();
       else
         quit = 1;

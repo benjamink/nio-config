@@ -90,7 +90,7 @@ void test_ctl_mount(void)
   CHECK_STR(last_cmd, "SYS:C/fmount 1 DN0: RO");
   CHECK(fake_slot_readonly(1) == 1);
   CHECK(ctl.page == AMIGA_PAGE_BROWSE);
-  CHECK_STR(state.status, "boot.adf mounted on DN0: (RO)");
+  CHECK_STR(state.status, "boot.adf mounted on DN0: (RO, slot 1)");
   CHECK(amiga_ctl_drive_mounted(&ctl, 0));
   CHECK(amiga_ctl_first_empty_drive(&ctl) == 1);
 
@@ -117,7 +117,7 @@ void test_ctl_mount(void)
   CHECK_STR(fake_slot_uri(2), "tnfs://fujinet.online/new.adf");
   CHECK(fake_slot_readonly(2) == 0);
   CHECK_STR(last_cmd, "SYS:C/fmount 2 DN0: RW");
-  CHECK_STR(state.status, "new.adf mounted on DN0: (RW)");
+  CHECK_STR(state.status, "new.adf mounted on DN0: (RW, slot 2)");
 
   /* Drawers cannot be mounted; the page does not change. */
   open_root();

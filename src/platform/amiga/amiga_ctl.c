@@ -4,6 +4,9 @@
 #include "amiga_help.h"
 #include "fujinet-nio.h"
 
+static uint8_t cat_io_buf[1024];
+static fn_slot_catalog_io_t cat_io = { cat_io_buf, sizeof(cat_io_buf) };
+
 #include <stdio.h>
 #include <string.h>
 
@@ -11,8 +14,6 @@ static void status(amiga_ctl_t *ctl, const char *msg)
 {
   config_nio_set_status(ctl->state, msg);
 }
-
-static void fav_load(amiga_ctl_t *ctl);
 
 static void cat_invalidate(amiga_ctl_t *ctl)
 {
@@ -38,11 +39,8 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   amiga_list_init(&ctl->catalogue, rows);
   amiga_list_init(&ctl->drives, rows);
   amiga_list_init(&ctl->help, rows);
-  amiga_list_init(&ctl->favorites, rows);
   amiga_list_set_count(&ctl->hosts, state->host_count);
-  amiga_list_set_count(&ctl->catalogue, AMIGA_CAT_SLOTS);
   amiga_list_set_count(&ctl->drives, AMIGA_DRIVE_COUNT);
-  fav_load(ctl);
 }
 
 void amiga_ctl_set_tools(amiga_ctl_t *ctl, const char *fmount,
@@ -59,7 +57,6 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
   amiga_list_set_rows(&ctl->catalogue, rows);
   amiga_list_set_rows(&ctl->drives, rows);
   amiga_list_set_rows(&ctl->help, rows);
-  amiga_list_set_rows(&ctl->favorites, rows);
 }
 
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
@@ -594,8 +591,8 @@ int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit)
 
     name = name && name[1] ? name + 1 : (slot && slot->enabled ? slot->uri
                                                                : "Image");
-    amiga_sprintf(ctl->msg, "%.40s mounted on %s (%s)", name, label,
-            m.readonly ? "RO" : "RW");
+    amiga_sprintf(ctl->msg, "%.40s mounted on %s (%s, slot %u)", name, label,
+                  m.readonly ? "RO" : "RW", (unsigned) m.slot);
     status(ctl, ctl->msg);
   }
   return 1;
@@ -654,32 +651,121 @@ void amiga_ctl_mount_cancel(amiga_ctl_t *ctl)
   status(ctl, "Mount cancelled");
 }
 
-/* The slot already holding `uri`, else the first empty one. */
+/* The slot already holding `uri`, else the first empty one.  Range reads
+ * page through the occupied slots instead of reading all 256. */
 static int find_slot(amiga_ctl_t *ctl, const char *uri, uint8_t *slot)
 {
-  int free_slot = -1;
+  static uint8_t used[AMIGA_CAT_SLOTS / 8];
+  fn_slot_catalog_page_t page;
+  uint16_t want = (uint16_t) strlen(uri);
+  uint8_t cursor = 0;
   uint16_t i;
 
-  for (i = 0; i < AMIGA_CAT_SLOTS; i++) {
-    const config_nio_slot_t *s = amiga_ctl_slot(ctl, (uint8_t) i);
+  memset(used, 0, sizeof(used));
+  for (;;) {
+    uint16_t off = 0;
 
-    if (!s)
+    if (fn_slot_catalog_range(&cat_io, 0, 255, cursor, 0,
+                              (uint8_t) CONFIG_NIO_URI_MAX,
+                              (uint16_t) (sizeof(cat_io_buf) - 7),
+                              &page) != FN_OK) {
+      status(ctl, "Unable to read catalogue");
       return 0;
-    if (s->enabled && s->uri[0]) {
-      if (strcmp(s->uri, uri) == 0) {
-        *slot = (uint8_t) i;
+    }
+    for (i = 0; i < page.entry_count; i++) {
+      fn_slot_catalog_entry_t e;
+
+      if (fn_slot_catalog_next_entry(&page, &off, &e) != FN_OK)
+        break;
+      if (!(e.flags & FN_SLOT_CATALOG_ENTRY_VALID))
+        continue;
+      used[e.index / 8] = (uint8_t) (used[e.index / 8] | (1u << (e.index % 8)));
+      if (e.uri_len == want && memcmp(e.uri, uri, want) == 0 &&
+          !(e.flags & FN_SLOT_CATALOG_ENTRY_URI_TRUNCATED)) {
+        *slot = e.index;
         return 1;
       }
-    } else if (free_slot < 0) {
-      free_slot = (int) i;
+    }
+    if (!(page.flags & FN_SLOT_CATALOG_MORE) || page.next_index <= cursor)
+      break;
+    cursor = page.next_index;
+  }
+  for (i = 0; i < AMIGA_CAT_SLOTS; i++) {
+    if (!(used[i / 8] & (1u << (i % 8)))) {
+      *slot = (uint8_t) i;
+      return 1;
     }
   }
-  if (free_slot < 0) {
-    status(ctl, "Catalogue is full");
-    return 0;
+  status(ctl, "Catalogue is full");
+  return 0;
+}
+
+int amiga_ctl_catalogue_refresh(amiga_ctl_t *ctl)
+{
+  fn_slot_catalog_page_t page;
+  uint8_t cursor = 0;
+  uint16_t i;
+
+  ctl->cat_count = 0;
+  for (;;) {
+    uint16_t off = 0;
+
+    if (fn_slot_catalog_range(&cat_io, 0, 255, cursor,
+                              FN_SLOT_CATALOG_TAIL_URI,
+                              (uint8_t) AMIGA_CAT_URI_MAX,
+                              (uint16_t) (sizeof(cat_io_buf) - 7),
+                              &page) != FN_OK) {
+      amiga_list_set_count(&ctl->catalogue, ctl->cat_count);
+      status(ctl, "Unable to read catalogue");
+      return 0;
+    }
+    for (i = 0; i < page.entry_count; i++) {
+      fn_slot_catalog_entry_t e;
+      char *dst;
+      uint16_t len;
+
+      if (fn_slot_catalog_next_entry(&page, &off, &e) != FN_OK)
+        break;
+      if (!(e.flags & FN_SLOT_CATALOG_ENTRY_VALID) ||
+          ctl->cat_count >= AMIGA_CAT_SLOTS)
+        continue;
+      ctl->cat_slot[ctl->cat_count] = e.index;
+      ctl->cat_ro[ctl->cat_count] =
+        (uint8_t) ((e.flags & FN_SLOT_CATALOG_ENTRY_READ_ONLY) != 0);
+      dst = ctl->cat_uri[ctl->cat_count];
+      len = e.uri_len;
+      if (e.flags & FN_SLOT_CATALOG_ENTRY_URI_TRUNCATED) {
+        /* Only the tail came back: mark the cut. */
+        if (len > AMIGA_CAT_URI_MAX - 3)
+          len = AMIGA_CAT_URI_MAX - 3;
+        strcpy(dst, "...");
+        memcpy(dst + 3, e.uri + e.uri_len - len, len);
+        dst[3 + len] = 0;
+      } else {
+        if (len > AMIGA_CAT_URI_MAX)
+          len = AMIGA_CAT_URI_MAX;
+        memcpy(dst, e.uri, len);
+        dst[len] = 0;
+      }
+      ctl->cat_count++;
+    }
+    if (!(page.flags & FN_SLOT_CATALOG_MORE) || page.next_index <= cursor)
+      break;
+    cursor = page.next_index;
   }
-  *slot = (uint8_t) free_slot;
+  amiga_list_set_count(&ctl->catalogue, ctl->cat_count);
   return 1;
+}
+
+int amiga_ctl_catalogue_index(amiga_ctl_t *ctl, uint8_t slot)
+{
+  uint16_t i;
+
+  for (i = 0; i < ctl->cat_count; i++) {
+    if (ctl->cat_slot[i] == slot)
+      return (int) i;
+  }
+  return -1;
 }
 
 int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
@@ -705,8 +791,8 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
     return 0;
   label = amiga_drive_label(unit, ctl->kick13);
   ctl->page = return_page;
-  amiga_sprintf(ctl->msg, "%s mounted on %s (%s)", ctl->mount_name, label,
-          readonly ? "RO" : "RW");
+  amiga_sprintf(ctl->msg, "%s mounted on %s (%s, slot %u)", ctl->mount_name,
+                label, readonly ? "RO" : "RW", (unsigned) slot);
   status(ctl, ctl->msg);
   return 1;
 }
@@ -763,204 +849,3 @@ int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
   return 1;
 }
 
-/* ---- Favorites ------------------------------------------------------------- */
-
-#define FAV_KEY "favorites"
-#define FAV_TEXT_MAX (AMIGA_FAV_MAX * (CONFIG_NIO_URI_MAX + 1) + 1)
-#define FAV_CHUNK 900
-
-static uint8_t fav_io_buf[1024];
-static fn_appstore_io_t fav_io = { fav_io_buf, sizeof(fav_io_buf) };
-static char fav_text[FAV_TEXT_MAX];
-
-static const char *uri_name(const char *uri)
-{
-  const char *name = strrchr(uri, '/');
-
-  return name && name[1] ? name + 1 : uri;
-}
-
-static void fav_load(amiga_ctl_t *ctl)
-{
-  fn_appstore_read_t rr;
-  uint16_t total = 0;
-  const char *p;
-
-  ctl->fav_count = 0;
-  do {
-    uint16_t want = (uint16_t) (sizeof(fav_text) - 1 - total);
-
-    if (want > FAV_CHUNK)
-      want = FAV_CHUNK;
-    if (want == 0 ||
-        fn_appstore_read(&fav_io, CONFIG_NIO_NS, FAV_KEY, total,
-                         (uint8_t *) fav_text + total, want, &rr) != FN_OK ||
-        !(rr.flags & FN_APPSTORE_READ_EXISTS))
-      break;
-    total = (uint16_t) (total + rr.bytes_read);
-  } while (!(rr.flags & FN_APPSTORE_READ_EOF) && rr.bytes_read);
-  fav_text[total] = 0;
-
-  for (p = fav_text; *p && ctl->fav_count < AMIGA_FAV_MAX;) {
-    const char *end = p;
-    uint16_t len;
-
-    while (*end && *end != '\n' && *end != '\r')
-      end++;
-    len = (uint16_t) (end - p);
-    if (len > 0 && len <= CONFIG_NIO_URI_MAX) {
-      memcpy(ctl->fav[ctl->fav_count], p, len);
-      ctl->fav[ctl->fav_count][len] = 0;
-      ctl->fav_count++;
-    }
-    while (*end == '\n' || *end == '\r')
-      end++;
-    p = end;
-  }
-  amiga_list_set_count(&ctl->favorites, ctl->fav_count);
-}
-
-static int fav_save(amiga_ctl_t *ctl)
-{
-  fn_appstore_write_t wr;
-  uint16_t len = 0;
-  uint16_t off = 0;
-  uint8_t i;
-
-  for (i = 0; i < ctl->fav_count; i++) {
-    uint16_t n = (uint16_t) strlen(ctl->fav[i]);
-
-    memcpy(fav_text + len, ctl->fav[i], n);
-    len = (uint16_t) (len + n);
-    fav_text[len++] = '\n';
-  }
-  fav_text[len] = 0;
-  amiga_list_set_count(&ctl->favorites, ctl->fav_count);
-  if (len == 0)
-    return fn_appstore_write(&fav_io, CONFIG_NIO_NS, FAV_KEY, 0,
-                             (const uint8_t *) "", 0, &wr) == FN_OK;
-  while (off < len) {
-    uint16_t chunk = (uint16_t) (len - off);
-
-    if (chunk > FAV_CHUNK)
-      chunk = FAV_CHUNK;
-    if (fn_appstore_write(&fav_io, CONFIG_NIO_NS, FAV_KEY, off,
-                          (const uint8_t *) fav_text + off, chunk,
-                          &wr) != FN_OK || wr.bytes_written != chunk) {
-      status(ctl, "Unable to save favorites");
-      return 0;
-    }
-    off = (uint16_t) (off + chunk);
-  }
-  return 1;
-}
-
-static int fav_index(amiga_ctl_t *ctl, const char *uri)
-{
-  uint8_t i;
-
-  for (i = 0; i < ctl->fav_count; i++) {
-    if (strcmp(ctl->fav[i], uri) == 0)
-      return i;
-  }
-  return -1;
-}
-
-int amiga_ctl_fav_is(amiga_ctl_t *ctl, const char *uri)
-{
-  return uri && fav_index(ctl, uri) >= 0;
-}
-
-int amiga_ctl_fav_add(amiga_ctl_t *ctl, const char *uri)
-{
-  if (!uri || !uri[0] || strlen(uri) > CONFIG_NIO_URI_MAX)
-    return 0;
-  if (fav_index(ctl, uri) < 0) {
-    if (ctl->fav_count >= AMIGA_FAV_MAX) {
-      status(ctl, "Favorites are full");
-      return 0;
-    }
-    strcpy(ctl->fav[ctl->fav_count++], uri);
-    if (!fav_save(ctl))
-      return 0;
-  }
-  amiga_sprintf(ctl->msg, "Added %.40s to Favorites", uri_name(uri));
-  status(ctl, ctl->msg);
-  return 1;
-}
-
-static int fav_remove_at(amiga_ctl_t *ctl, uint8_t index)
-{
-  static char name[CONFIG_NIO_URI_MAX + 1];
-  uint8_t i;
-
-  strcpy(name, uri_name(ctl->fav[index]));
-  for (i = index; (uint8_t) (i + 1) < ctl->fav_count; i++)
-    strcpy(ctl->fav[i], ctl->fav[i + 1]);
-  ctl->fav_count--;
-  if (!fav_save(ctl))
-    return 0;
-  amiga_sprintf(ctl->msg, "Removed %.40s from Favorites", name);
-  status(ctl, ctl->msg);
-  return 1;
-}
-
-static int fav_toggle(amiga_ctl_t *ctl, const char *uri)
-{
-  int index = fav_index(ctl, uri);
-
-  if (index >= 0)
-    return fav_remove_at(ctl, (uint8_t) index);
-  return amiga_ctl_fav_add(ctl, uri);
-}
-
-int amiga_ctl_fav_toggle_browse(amiga_ctl_t *ctl)
-{
-  static char uri[FNSVC_MAX_URI + 1];
-
-  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)))
-    return 0;
-  return fav_toggle(ctl, uri);
-}
-
-int amiga_ctl_fav_toggle_drive(amiga_ctl_t *ctl, uint8_t unit)
-{
-  const config_nio_slot_t *slot;
-  const char *label = amiga_drive_label(unit, ctl->kick13);
-
-  if (amiga_ctl_drive_state(ctl, unit) == AMIGA_DRIVE_EMPTY) {
-    amiga_sprintf(ctl->msg, "%s is empty", label ? label : "Drive");
-    status(ctl, ctl->msg);
-    return 0;
-  }
-  slot = amiga_ctl_drive_slot(ctl, unit);
-  if (!slot || !slot->enabled || !slot->uri[0]) {
-    status(ctl, "Unable to read the drive's image");
-    return 0;
-  }
-  return fav_toggle(ctl, slot->uri);
-}
-
-int amiga_ctl_fav_remove(amiga_ctl_t *ctl)
-{
-  if (ctl->favorites.selected == AMIGA_LIST_NONE ||
-      ctl->favorites.selected >= ctl->fav_count) {
-    status(ctl, "No favorite selected");
-    return 0;
-  }
-  return fav_remove_at(ctl, (uint8_t) ctl->favorites.selected);
-}
-
-int amiga_ctl_mount_begin_favorite(amiga_ctl_t *ctl)
-{
-  if (ctl->favorites.selected == AMIGA_LIST_NONE ||
-      ctl->favorites.selected >= ctl->fav_count) {
-    status(ctl, "No favorite selected");
-    return 0;
-  }
-  strcpy(ctl->mount_uri, ctl->fav[ctl->favorites.selected]);
-  ctl->mount_slot = -1;
-  set_mount_name(ctl, ctl->mount_uri);
-  enter_mount(ctl);
-  return 1;
-}

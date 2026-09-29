@@ -7,7 +7,7 @@
  * Help menu.  AmigaGuide is not part of Workbench 1.3, so the text is
  * shown in the main window instead. */
 #define AMIGA_HELP_CONTENTS 0
-#define AMIGA_HELP_TOPICS 13
+#define AMIGA_HELP_TOPICS 12
 
 typedef struct {
   uint16_t start;   /* offset into the topic text */

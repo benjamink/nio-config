@@ -54,8 +54,8 @@ void test_script(void)
 
   CHECK(run("page drives") == AMIGA_SCRIPT_OK && ctl.page == AMIGA_PAGE_DRIVES);
   CHECK(run("page nope") == AMIGA_SCRIPT_ERR);
-  CHECK(run("page favorites") == AMIGA_SCRIPT_OK &&
-        ctl.page == AMIGA_PAGE_FAVORITES);
+  CHECK(run("page catalogue") == AMIGA_SCRIPT_OK &&
+        ctl.page == AMIGA_PAGE_CATALOGUE);
   CHECK(run("host add tnfs://example") == AMIGA_SCRIPT_OK);
   CHECK(run("dump hosts") == AMIGA_SCRIPT_OK);
   CHECK(run("slot set 12 tnfs://x/boot.adf RO") == AMIGA_SCRIPT_OK);

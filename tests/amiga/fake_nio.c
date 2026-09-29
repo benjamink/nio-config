@@ -38,6 +38,8 @@ static fake_key_t keys[FAKE_KEYS];
 static fake_slot_t slots[256];
 static fake_dir_t dirs[FAKE_DIRS];
 static unsigned slot_get_calls;
+static unsigned slot_range_calls;
+static uint8_t range_buf[1024];
 static uint8_t last_error;
 static uint8_t last_status;
 
@@ -47,6 +49,7 @@ void fake_nio_reset(void)
   memset(slots, 0, sizeof(slots));
   memset(dirs, 0, sizeof(dirs));
   slot_get_calls = 0;
+  slot_range_calls = 0;
   last_error = 0;
   last_status = 0;
 }
@@ -294,4 +297,78 @@ int fnctl_set_unit_slot(uint8_t unit, uint8_t slot)
   (void) unit;
   (void) slot;
   return 1;
+}
+
+unsigned fake_slot_range_calls(void)
+{
+  return slot_range_calls;
+}
+
+/* Pages of at most five entries, in the library's [slot, flags, len, uri]
+ * entry format, so callers must follow next_index/MORE. */
+uint8_t fn_slot_catalog_range(fn_slot_catalog_io_t *io, uint8_t lower,
+                              uint8_t upper, uint8_t cursor,
+                              uint8_t request_flags, uint8_t max_uri_bytes,
+                              uint16_t max_payload_bytes,
+                              fn_slot_catalog_page_t *out)
+{
+  uint16_t pos = 0;
+  uint16_t i;
+  uint8_t count = 0;
+
+  (void) io;
+  (void) max_payload_bytes;
+  slot_range_calls++;
+  if (lower > upper || cursor < lower || cursor > upper || !max_uri_bytes)
+    return FN_ERR_INVALID;
+  memset(out, 0, sizeof(*out));
+  for (i = cursor; i <= upper; i++) {
+    const char *uri;
+    uint16_t len;
+    uint8_t flags;
+
+    if (!slots[i].used)
+      continue;
+    if (count == 5) {
+      out->flags = FN_SLOT_CATALOG_MORE;
+      out->next_index = (uint8_t) i;
+      break;
+    }
+    uri = slots[i].uri;
+    len = (uint16_t) strlen(uri);
+    flags = (uint8_t) (FN_SLOT_CATALOG_ENTRY_VALID |
+                       (slots[i].readonly ? FN_SLOT_CATALOG_ENTRY_READ_ONLY : 0));
+    if (len > max_uri_bytes) {
+      flags |= FN_SLOT_CATALOG_ENTRY_URI_TRUNCATED;
+      if (request_flags & FN_SLOT_CATALOG_TAIL_URI)
+        uri += len - max_uri_bytes;
+      len = max_uri_bytes;
+    }
+    range_buf[pos++] = (uint8_t) i;
+    range_buf[pos++] = flags;
+    range_buf[pos++] = (uint8_t) len;
+    memcpy(range_buf + pos, uri, len);
+    pos = (uint16_t) (pos + len);
+    count++;
+  }
+  out->entry_count = count;
+  out->entry_data_len = pos;
+  out->entry_data = range_buf;
+  return FN_OK;
+}
+
+uint8_t fn_slot_catalog_next_entry(const fn_slot_catalog_page_t *page,
+                                   uint16_t *offset,
+                                   fn_slot_catalog_entry_t *out)
+{
+  uint16_t pos = *offset;
+
+  if ((uint16_t) (pos + 3) > page->entry_data_len)
+    return FN_ERR_IO;
+  out->index = page->entry_data[pos];
+  out->flags = page->entry_data[pos + 1];
+  out->uri_len = page->entry_data[pos + 2];
+  out->uri = &page->entry_data[pos + 3];
+  *offset = (uint16_t) (pos + 3 + out->uri_len);
+  return FN_OK;
 }
