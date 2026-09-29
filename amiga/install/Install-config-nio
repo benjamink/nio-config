@@ -86,6 +86,17 @@ If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>S:User-Startup
   Set reboot "yes"
 EndIf
+; Some minimal systems (e.g. the Workbench 3.2 install floppy) never run
+; S:User-Startup; then nothing above loads at boot.
+Search >NIL: S:Startup-Sequence "User-Startup"
+If WARN
+  Echo "WARNING: S:Startup-Sequence does not run S:User-Startup, so the"
+  Echo "FujiNet devices and saved drives will not load at boot.  Add these"
+  Echo "lines to S:Startup-Sequence before the LoadWB line:"
+  Echo "  If EXISTS S:User-Startup"
+  Echo "    Execute S:User-Startup"
+  Echo "  EndIf"
+EndIf
 ; Mount the drives saved on the FujiNet again.  Run in the background so a
 ; FujiNet that is off or unreachable cannot hold up or stop the boot.
 Search >NIL: S:User-Startup "fmountrestore"
