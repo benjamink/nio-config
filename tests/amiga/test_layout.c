@@ -42,13 +42,13 @@ void test_layout(void)
 {
   amiga_layout_t o;
   /* KS1.3 NTSC Workbench, topaz 8 everywhere. */
-  amiga_layout_in_t ntsc13 = { 640, 200, 4, 11, 4, 2, 8, 8, 8 };
+  amiga_layout_in_t ntsc13 = { 640, 200, 4, 11, 4, 2, 8, 8, 8, 0, 0 };
   /* WB3.2 PAL. */
-  amiga_layout_in_t pal32 = { 640, 256, 4, 11, 4, 2, 8, 8, 8 };
+  amiga_layout_in_t pal32 = { 640, 256, 4, 11, 4, 2, 8, 8, 8, 0, 0 };
   /* WB3.x with a 16px title font and a 13px screen font. */
-  amiga_layout_in_t tall = { 640, 200, 4, 19, 4, 2, 8, 8, 13 };
-  amiga_layout_in_t narrow = { 320, 200, 4, 11, 4, 2, 8, 8, 8 };
-  amiga_layout_in_t shallow = { 640, 150, 4, 11, 4, 2, 8, 8, 8 };
+  amiga_layout_in_t tall = { 640, 200, 4, 19, 4, 2, 8, 8, 13, 0, 0 };
+  amiga_layout_in_t narrow = { 320, 200, 4, 11, 4, 2, 8, 8, 8, 0, 0 };
+  amiga_layout_in_t shallow = { 640, 150, 4, 11, 4, 2, 8, 8, 8, 0, 0 };
 
   CHECK(amiga_layout_compute(&ntsc13, &o));
   CHECK(o.win_w == 624 && o.win_h == 194 && o.list_rows == 10 && o.row_h == 9);
@@ -64,4 +64,27 @@ void test_layout(void)
 
   CHECK(!amiga_layout_compute(&narrow, &o));
   CHECK(!amiga_layout_compute(&shallow, &o));
+
+  /* The logo sits top-right beside the page buttons and info line and
+   * costs no list rows. */
+  {
+    amiga_layout_in_t logo = { 640, 200, 4, 11, 4, 2, 8, 8, 8, 84, 27 };
+
+    CHECK(amiga_layout_compute(&logo, &o));
+    check_geometry(&logo, &o);
+    CHECK(o.list_rows == 10 && o.win_h == 194);
+    CHECK(o.logo.width == 84 && o.logo.height == 27);
+    CHECK(inside(&logo, &o, o.logo));
+    CHECK(o.logo.left + o.logo.width == o.list.left + o.list.width +
+                                        AMIGA_SCROLLER_W);
+    CHECK(o.logo.top == o.tab[0].top);
+    CHECK(o.logo.top + o.logo.height <= o.list.top);
+    CHECK(o.tab[AMIGA_TAB_COUNT - 1].left + o.tab[AMIGA_TAB_COUNT - 1].width +
+          AMIGA_LAYOUT_GAP <= o.logo.left);
+    CHECK(o.info.left + o.info.width + AMIGA_LAYOUT_GAP <= o.logo.left);
+  }
+  /* Without a logo the header spans the full width. */
+  CHECK(amiga_layout_compute(&ntsc13, &o));
+  CHECK(o.logo.width == 0);
+  CHECK(o.info.width == o.list.width + AMIGA_SCROLLER_W);
 }

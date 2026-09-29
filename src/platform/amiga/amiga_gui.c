@@ -9,6 +9,7 @@
 #include "amiga_format.h"
 #include "amiga_input.h"
 #include "amiga_layout.h"
+#include "amiga_logo.h"
 #include "amiga_script.h"
 #include "amiga_theme.h"
 
@@ -130,6 +131,9 @@ static UBYTE slot_undo[4];
 static uint8_t prop_active;
 
 static UWORD *busy_sprite;
+/* Chip-RAM copies of the logo masks; BltTemplate reads them by blitter. */
+static UWORD *logo_chip;
+#define LOGO_MASK_BYTES (sizeof(amiga_logo_emblem))
 static struct Requester block_req;
 static uint8_t busy_depth;
 
@@ -718,6 +722,28 @@ static void gui_paint_tabs(void)
   }
 }
 
+/* Emblem in the fill pen, lettering in the text pen: orange/white on a
+ * 1.3 Workbench, the DrawInfo pens (e.g. blue/black) on 2.0 and later. */
+static void gui_paint_logo(void)
+{
+  struct RastPort *rp = win->RPort;
+  WORD x;
+  WORD y;
+
+  if (!logo_chip || layout.logo.width == 0)
+    return;
+  fill(&layout.logo, theme.background);
+  x = layout.logo.left;
+  y = (WORD) (layout.logo.top + (layout.logo.height - AMIGA_LOGO_H) / 2);
+  SetDrMd(rp, JAM1);
+  SetAPen(rp, theme.fill);
+  BltTemplate((PLANEPTR) logo_chip, 0, AMIGA_LOGO_WORDS * 2, rp, x, y,
+              AMIGA_LOGO_W, AMIGA_LOGO_H);
+  SetAPen(rp, theme.text);
+  BltTemplate((PLANEPTR) ((UBYTE *) logo_chip + LOGO_MASK_BYTES), 0,
+              AMIGA_LOGO_WORDS * 2, rp, x, y, AMIGA_LOGO_W, AMIGA_LOGO_H);
+}
+
 static void gui_paint_editors(void)
 {
   WORD label_top = (WORD) (layout.edit.top + (layout.edit.height - FONT_H) / 2);
@@ -749,6 +775,7 @@ static void gui_paint(void)
   inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
   inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
   fill(&inner, theme.background);
+  gui_paint_logo();
   gui_paint_tabs();
   gui_paint_info();
   bevel(&layout.list, 1);
@@ -1259,6 +1286,8 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
   in.font_w = FONT_W;
   in.font_h = FONT_H;
   in.gadget_font_h = (uint8_t) (scr->Font ? scr->Font->ta_YSize : FONT_H);
+  in.logo_w = AMIGA_LOGO_W;
+  in.logo_h = AMIGA_LOGO_H;
   *ok = amiga_layout_compute(&in, &layout);
 }
 
@@ -1354,6 +1383,12 @@ static int gui_open(void)
   if (font)
     SetFont(win->RPort, font);
   load_theme();
+  logo_chip = (UWORD *) AllocMem(2 * LOGO_MASK_BYTES, MEMF_CHIP);
+  if (logo_chip) {
+    CopyMem((APTR) amiga_logo_emblem, logo_chip, LOGO_MASK_BYTES);
+    CopyMem((APTR) amiga_logo_text, (UBYTE *) logo_chip + LOGO_MASK_BYTES,
+            LOGO_MASK_BYTES);
+  }
   busy_sprite = (UWORD *) AllocMem(sizeof(busy_image), MEMF_CHIP);
   if (busy_sprite)
     CopyMem((APTR) busy_image, busy_sprite, sizeof(busy_image));
@@ -1380,6 +1415,10 @@ static void gui_close(void)
   if (busy_sprite) {
     FreeMem(busy_sprite, sizeof(busy_image));
     busy_sprite = NULL;
+  }
+  if (logo_chip) {
+    FreeMem(logo_chip, 2 * LOGO_MASK_BYTES);
+    logo_chip = NULL;
   }
   if (font) {
     CloseFont(font);

@@ -35,7 +35,7 @@ static void spread(amiga_rect_t *out, uint8_t n, int16_t x0, int16_t y,
 int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
 {
   int16_t cw, x0, y, btn_h, str_h, info_h, status_h, list_top, fixed_below;
-  int16_t label_w, slot_w, ro_w, ro_label_w, avail, rows, right;
+  int16_t label_w, slot_w, ro_w, ro_label_w, avail, rows, right, head_w;
   uint8_t gfh;
 
   cw = (int16_t) (AMIGA_LAYOUT_COLS * in->font_w);
@@ -52,10 +52,19 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
   status_h = (int16_t) (in->font_h + 4);
   out->row_h = (uint8_t) (in->font_h + 1);
 
+  /* The logo shares the page-button and info rows at the right, so it
+   * costs no list rows; those rows narrow to make room. */
+  head_w = cw;
   y = (int16_t) (in->border_t + AMIGA_LAYOUT_PAD);
-  spread(out->tab, AMIGA_TAB_COUNT, x0, y, cw, btn_h);
+  out->logo = rect((int16_t) (x0 + cw), y, 0, 0);
+  if (in->logo_w) {
+    head_w = (int16_t) (cw - in->logo_w - AMIGA_LAYOUT_GAP);
+    out->logo = rect((int16_t) (x0 + cw - in->logo_w), y, in->logo_w,
+                     (int16_t) (btn_h + AMIGA_LAYOUT_GAP + info_h));
+  }
+  spread(out->tab, AMIGA_TAB_COUNT, x0, y, head_w, btn_h);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
-  out->info = rect(x0, y, cw, info_h);
+  out->info = rect(x0, y, head_w, info_h);
   y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
 
   list_top = y;

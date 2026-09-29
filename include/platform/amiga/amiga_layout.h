@@ -24,6 +24,7 @@ typedef struct {
   uint8_t border_l, border_t, border_r, border_b; /* the opened window's real borders */
   uint8_t font_w, font_h;                         /* rendering font (topaz 8 = 8, 8) */
   uint8_t gadget_font_h;                          /* font string gadgets draw with */
+  uint8_t logo_w, logo_h;                         /* 0,0 = no logo */
 } amiga_layout_in_t;
 
 /* Rectangles are frames; the GUI insets gadgets inside them. */
@@ -31,6 +32,7 @@ typedef struct {
   uint16_t win_w, win_h;
   uint8_t row_h, list_rows;
   amiga_rect_t tab[AMIGA_TAB_COUNT];
+  amiga_rect_t logo;       /* top right, beside tabs and info; 0 width = none */
   amiga_rect_t info;
   amiga_rect_t list;
   amiga_rect_t scroller;

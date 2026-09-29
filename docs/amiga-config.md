@@ -136,7 +136,13 @@ make amiga AMIGA_PROFILE=wb32
 make amiga AMIGA_PROFILE=wb13
 ```
 
-To regenerate the checked-in icon from `amiga/gfx/config-nio.icon.txt`:
+The logo in the window and the icon both come from
+`images/config-nio-160x96x4.png`. `amiga/tools/mklogo.py` resamples it for
+hires pixels, which are about twice as tall as they are wide: 84x27 masks
+in `src/platform/amiga/amiga_logo_data.c` and 96x30 icon art in
+`amiga/gfx/config-nio.icon.txt`. The emblem is drawn in the fill pen and
+the lettering in the text pen, so it suits both the 1.3 and the 2.x+
+palettes. To regenerate both, and then the icon:
 
 ```sh
 make regen-amiga-icons

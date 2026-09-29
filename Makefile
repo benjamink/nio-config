@@ -49,4 +49,5 @@ amiga:
 # Regenerate the checked-in Workbench icon (needs Python; Pillow for preview).
 regen-amiga-icons:
 	mkdir -p build
+	python3 amiga/tools/mklogo.py
 	cd amiga && python3 tools/mkinfo.py --preview ../build/amiga-icon-preview.png
