@@ -332,3 +332,53 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
   status(ctl, ctl->msg);
   return 1;
 }
+
+const config_nio_slot_t *amiga_ctl_slot(amiga_ctl_t *ctl, uint8_t slot)
+{
+  uint16_t base;
+  uint8_t i;
+
+  base = (uint16_t) (slot & ~(AMIGA_CAT_WINDOW - 1));
+  if (ctl->cat_base != base) {
+    for (i = 0; i < AMIGA_CAT_WINDOW; i++) {
+      /* config_nio_read_slot: 1 = entry present, or missing (zeroed);
+       * 0 = transport/format error. */
+      if (!config_nio_read_slot((uint8_t) (base + i), &ctl->cat[i])) {
+        ctl->cat_base = AMIGA_CAT_SLOTS;
+        status(ctl, "Unable to read catalogue");
+        return NULL;
+      }
+    }
+    ctl->cat_base = base;
+  }
+  return &ctl->cat[slot - base];
+}
+
+int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
+                       uint8_t readonly)
+{
+  if (!uri || !uri[0]) {
+    status(ctl, "URI is empty");
+    return 0;
+  }
+  ctl->cat_base = AMIGA_CAT_SLOTS;
+  if (!config_nio_write_slot(ctl->state, slot, uri, readonly ? "r" : "rw")) {
+    status(ctl, "Unable to save slot");
+    return 0;
+  }
+  sprintf(ctl->msg, "Slot %u saved", (unsigned) slot);
+  status(ctl, ctl->msg);
+  return 1;
+}
+
+int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot)
+{
+  ctl->cat_base = AMIGA_CAT_SLOTS;
+  if (!config_nio_delete_slot(ctl->state, slot)) {
+    status(ctl, "Unable to clear slot");
+    return 0;
+  }
+  sprintf(ctl->msg, "Slot %u cleared", (unsigned) slot);
+  status(ctl, ctl->msg);
+  return 1;
+}

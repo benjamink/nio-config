@@ -66,4 +66,11 @@ int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap);
 int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
                             uint8_t readonly);
 
+/* Catalogue rows are read in aligned windows of AMIGA_CAT_WINDOW slots and
+ * cached until the next write.  NULL means the read failed (see status). */
+const config_nio_slot_t *amiga_ctl_slot(amiga_ctl_t *ctl, uint8_t slot);
+int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
+                       uint8_t readonly);
+int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot);
+
 #endif
