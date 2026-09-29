@@ -19,9 +19,13 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_options.c \
 	src/platform/amiga/amiga_theme.c \
 	src/platform/amiga/amiga_input.c \
-	src/platform/amiga/amiga_layout.c
-PORTABLE_HOST_SRCS :=
-TEST_SUPPORT_SRCS := tests/amiga/run_tests.c
+	src/platform/amiga/amiga_layout.c \
+	src/platform/amiga/amiga_ctl.c
+PORTABLE_HOST_SRCS := \
+	src/platform/portable/config_nio_state.c \
+	src/platform/portable/config_nio_store.c \
+	src/platform/portable/config_nio_tables.c
+TEST_SUPPORT_SRCS := tests/amiga/run_tests.c tests/amiga/fake_nio.c
 TEST_SRCS := $(wildcard tests/amiga/test_*.c)
 
 .PHONY: all
