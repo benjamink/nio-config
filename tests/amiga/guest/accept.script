@@ -1,0 +1,17 @@
+; config-nio Workbench acceptance
+page hosts
+host add host:/
+dump hosts
+host select 3
+browse
+wait 25
+select standard.adf
+assign 30 ro
+dump slot 30
+page catalogue
+wait 25
+page drives
+insert 30 DN0: ro
+dump drives
+wait 25
+quit

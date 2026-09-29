@@ -1,7 +1,18 @@
+/*
+ * Intuition front end for config-nio.  Uses only the V33 (Kickstart 1.3)
+ * gadget, menu and requester structures; DrawInfo pens and new-look props
+ * are used when running on V36+ and the build is not the WB1.3 profile.
+ * All state changes go through amiga_ctl, which the SCRIPT= driver shares.
+ */
 #include "amiga_gui.h"
+#include "amiga_drives.h"
+#include "amiga_format.h"
+#include "amiga_input.h"
 #include "amiga_layout.h"
+#include "amiga_script.h"
 #include "amiga_theme.h"
 
+#include <exec/memory.h>
 #include <exec/types.h>
 #include <graphics/gfxbase.h>
 #include <graphics/rastport.h>
@@ -9,42 +20,222 @@
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/screens.h>
+#include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern struct IntuitionBase *IntuitionBase;
 
 #define FONT_W 8
 #define FONT_H 8
+#define ROW_TEXT_MAX 128
 
-static struct TextAttr topaz8 = { (STRPTR) "topaz.font", 8, 0, 0 };
+enum {
+  GID_TAB0 = 0,
+  GID_LIST = GID_TAB0 + AMIGA_TAB_COUNT,
+  GID_PROP,
+  GID_EDIT,
+  GID_SLOT,
+  GID_RO,
+  GID_BTN0
+};
+#define GID_COUNT (GID_BTN0 + AMIGA_BUTTON_COUNT)
+
+enum {
+  ACT_NONE = 0,
+  ACT_HOST_BROWSE,
+  ACT_HOST_ADD,
+  ACT_HOST_REPLACE,
+  ACT_HOST_REMOVE,
+  ACT_HOST_UP,
+  ACT_HOST_DOWN,
+  ACT_BROWSE_OPEN,
+  ACT_BROWSE_PARENT,
+  ACT_BROWSE_REFRESH,
+  ACT_BROWSE_ASSIGN,
+  ACT_SLOT_SET,
+  ACT_SLOT_CLEAR,
+  ACT_DRIVE_INSERT,
+  ACT_DRIVE_EJECT
+};
+
+typedef struct {
+  const char *label;
+  uint8_t action;
+} gui_button_t;
+
 static const char *const tab_labels[AMIGA_TAB_COUNT] = {
   "Hosts", "Browse", "Catalogue", "Drives"
 };
+
+static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
+  { { "Browse", ACT_HOST_BROWSE }, { "Add", ACT_HOST_ADD },
+    { "Replace", ACT_HOST_REPLACE }, { "Remove", ACT_HOST_REMOVE },
+    { "Move Up", ACT_HOST_UP }, { "Move Down", ACT_HOST_DOWN } },
+  { { "Open", ACT_BROWSE_OPEN }, { "Parent", ACT_BROWSE_PARENT },
+    { "Refresh", ACT_BROWSE_REFRESH }, { "Assign", ACT_BROWSE_ASSIGN },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE } },
+  { { "Set", ACT_SLOT_SET }, { "Clear", ACT_SLOT_CLEAR },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE } },
+  { { "Insert", ACT_DRIVE_INSERT }, { "Eject", ACT_DRIVE_EJECT },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE } },
+};
+
+/* RKM wait pointer image; sprite data must live in chip RAM. */
+static const UWORD busy_image[] = {
+  0x0000, 0x0000,
+  0x0400, 0x07C0, 0x0000, 0x07C0, 0x0100, 0x0380, 0x0000, 0x07E0,
+  0x07C0, 0x1FF8, 0x1FF0, 0x3FEC, 0x3FF8, 0x7FDE, 0x3FF8, 0x7FBE,
+  0x7FFC, 0xFF7F, 0x7EFC, 0xFFFF, 0x7FFC, 0xFFFF, 0x3FF8, 0x7FFE,
+  0x3FF8, 0x7FFE, 0x1FF0, 0x3FFC, 0x07C0, 0x1FF8, 0x0000, 0x07E0,
+  0x0000, 0x0000
+};
+
+static struct TextAttr topaz8 = { (STRPTR) "topaz.font", 8, 0, 0 };
 
 static struct Window *win;
 static struct TextFont *font;
 static amiga_layout_t layout;
 static amiga_theme_t theme;
 static amiga_ctl_t *gctl;
+static uint8_t new_look;
 
-void amiga_gui_fatal(const char *message)
+static struct Gadget gad[GID_COUNT];
+static uint8_t attached[GID_COUNT];
+static struct StringInfo edit_si;
+static struct StringInfo slot_si;
+static struct PropInfo prop_pi;
+static struct Image prop_knob;
+static UBYTE edit_buf[CONFIG_NIO_URI_MAX + 1];
+static UBYTE edit_undo[CONFIG_NIO_URI_MAX + 1];
+static UBYTE slot_buf[4];
+static UBYTE slot_undo[4];
+static uint8_t prop_active;
+
+static UWORD *busy_sprite;
+static struct Requester block_req;
+static uint8_t busy_depth;
+
+static ULONG last_secs;
+static ULONG last_micros;
+static uint16_t last_index = AMIGA_LIST_NONE;
+
+static char row_text[ROW_TEXT_MAX + 1];
+static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
+static char uri_text[CONFIG_NIO_URI_MAX + 1];
+
+/* ---- Menus ------------------------------------------------------------ */
+
+static struct IntuiText menu_text[6];
+static struct MenuItem project_items[2];
+static struct MenuItem settings_items[4];
+static struct Menu menus[2];
+static const char *const project_labels[2] = { "About...", "Quit" };
+static const char project_keys[2] = { '?', 'Q' };
+static const char *const settings_labels[4] = {
+  "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact"
+};
+static uint8_t menus_attached;
+
+/* ---- Small drawing helpers ------------------------------------------- */
+
+static void fill(const amiga_rect_t *r, uint8_t pen)
+{
+  if (r->width <= 0 || r->height <= 0)
+    return;
+  SetAPen(win->RPort, pen);
+  RectFill(win->RPort, r->left, r->top, (WORD) (r->left + r->width - 1),
+           (WORD) (r->top + r->height - 1));
+}
+
+/* 2.0 hires style: double left edge, single top edge. */
+static void bevel(const amiga_rect_t *r, int recessed)
+{
+  struct RastPort *rp = win->RPort;
+  WORD x0 = r->left;
+  WORD y0 = r->top;
+  WORD x1 = (WORD) (r->left + r->width - 1);
+  WORD y1 = (WORD) (r->top + r->height - 1);
+
+  SetAPen(rp, recessed ? theme.shadow : theme.shine);
+  Move(rp, x0, y1);
+  Draw(rp, x0, y0);
+  Draw(rp, (WORD) (x1 - 1), y0);
+  Move(rp, (WORD) (x0 + 1), (WORD) (y1 - 1));
+  Draw(rp, (WORD) (x0 + 1), (WORD) (y0 + 1));
+  SetAPen(rp, recessed ? theme.shine : theme.shadow);
+  Move(rp, x1, y0);
+  Draw(rp, x1, y1);
+  Draw(rp, (WORD) (x0 + 1), y1);
+  Move(rp, (WORD) (x1 - 1), (WORD) (y0 + 1));
+  Draw(rp, (WORD) (x1 - 1), (WORD) (y1 - 1));
+}
+
+static void text_at(WORD x, WORD top, const char *s, WORD len, uint8_t pen)
+{
+  struct RastPort *rp = win->RPort;
+
+  SetAPen(rp, pen);
+  SetDrMd(rp, JAM1);
+  Move(rp, x, (WORD) (top + rp->TxBaseline));
+  Text(rp, (CONST_STRPTR) s, len);
+}
+
+static void text_centred(const amiga_rect_t *r, const char *s, uint8_t pen)
+{
+  WORD len = (WORD) strlen(s);
+  WORD w = TextLength(win->RPort, (CONST_STRPTR) s, len);
+
+  text_at((WORD) (r->left + (r->width - w) / 2),
+          (WORD) (r->top + (r->height - FONT_H) / 2), s, len, pen);
+}
+
+/* Copies `s` into row_text padded or clipped to exactly `cols` characters. */
+static const char *padded(const char *s, uint8_t cols)
+{
+  uint8_t i;
+
+  for (i = 0; i < cols && i < ROW_TEXT_MAX && s[i]; i++)
+    row_text[i] = s[i];
+  for (; i < cols && i < ROW_TEXT_MAX; i++)
+    row_text[i] = ' ';
+  row_text[i] = 0;
+  return row_text;
+}
+
+/* ---- Requesters -------------------------------------------------------- */
+
+static void make_itext(struct IntuiText *t, WORD left, WORD top,
+                       const char *s, struct IntuiText *next)
+{
+  t->FrontPen = 0;
+  t->BackPen = 1;
+  t->DrawMode = JAM1;
+  t->LeftEdge = left;
+  t->TopEdge = top;
+  t->ITextFont = &topaz8;
+  t->IText = (UBYTE *) s;
+  t->NextText = next;
+}
+
+static int requester(struct Window *w, const char *message, const char *yes,
+                     const char *no)
 {
   static char lines[3][80];
   struct IntuiText body[3];
-  struct IntuiText ok;
+  struct IntuiText pos;
+  struct IntuiText neg;
   const char *p;
   int n;
   int i;
 
-  if (!IntuitionBase) {
-    puts(message);
-    return;
-  }
   p = message;
   for (n = 0; *p && n < 3; n++) {
     i = 0;
@@ -54,27 +245,925 @@ void amiga_gui_fatal(const char *message)
     if (*p == '\n')
       p++;
   }
-  for (i = 0; i < n; i++) {
-    body[i].FrontPen = 0;
-    body[i].BackPen = 1;
-    body[i].DrawMode = JAM1;
-    body[i].LeftEdge = 8;
-    body[i].TopEdge = (WORD) (4 + i * 10);
-    body[i].ITextFont = &topaz8;
-    body[i].IText = (UBYTE *) lines[i];
-    body[i].NextText = i + 1 < n ? &body[i + 1] : NULL;
-  }
-  ok.FrontPen = 0;
-  ok.BackPen = 1;
-  ok.DrawMode = JAM1;
-  ok.LeftEdge = 6;
-  ok.TopEdge = 3;
-  ok.ITextFont = &topaz8;
-  ok.IText = (UBYTE *) "OK";
-  ok.NextText = NULL;
-  (void) AutoRequest(NULL, n ? &body[0] : NULL, NULL, &ok, 0, 0, 320,
-                     (WORD) (50 + 10 * n));
+  for (i = 0; i < n; i++)
+    make_itext(&body[i], 8, (WORD) (4 + i * 10), lines[i],
+               i + 1 < n ? &body[i + 1] : NULL);
+  make_itext(&pos, 6, 3, yes ? yes : "", NULL);
+  make_itext(&neg, 6, 3, no, NULL);
+  return (int) AutoRequest(w, n ? &body[0] : NULL, yes ? &pos : NULL, &neg,
+                           0, 0, 320, (WORD) (50 + 10 * n));
 }
+
+void amiga_gui_fatal(const char *message)
+{
+  if (!IntuitionBase) {
+    puts(message);
+    return;
+  }
+  (void) requester(win, message, NULL, "OK");
+}
+
+static int confirm(const char *message)
+{
+  return requester(win, message, "Yes", "No");
+}
+
+static void about(void)
+{
+  (void) requester(win, "FujiNet Config\nHosts, catalogue and drives\n"
+                   "for FujiNet NIO on the Amiga", NULL, "OK");
+}
+
+/* ---- Busy state ---------------------------------------------------------- */
+
+static void busy_begin(void)
+{
+  if (busy_depth++ != 0)
+    return;
+  InitRequester(&block_req);
+  (void) Request(&block_req, win);
+  if (busy_sprite)
+    SetPointer(win, busy_sprite, 16, 16, -6, 0);
+}
+
+static void busy_end(void)
+{
+  if (busy_depth == 0 || --busy_depth != 0)
+    return;
+  ClearPointer(win);
+  EndRequest(&block_req, win);
+}
+
+/* ---- Gadgets ------------------------------------------------------------ */
+
+static void make_gadget(uint8_t id, amiga_rect_t r, UWORD flags,
+                        UWORD activation, UWORD type)
+{
+  struct Gadget *g = &gad[id];
+
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left;
+  g->TopEdge = r.top;
+  g->Width = r.width;
+  g->Height = r.height;
+  g->Flags = flags;
+  g->Activation = activation;
+  g->GadgetType = type;
+  g->GadgetID = id;
+}
+
+static void gui_make_gadgets(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_TAB_COUNT; i++)
+    make_gadget((uint8_t) (GID_TAB0 + i), layout.tab[i], GADGHCOMP,
+                RELVERIFY, BOOLGADGET);
+  for (i = 0; i < AMIGA_BUTTON_COUNT; i++)
+    make_gadget((uint8_t) (GID_BTN0 + i), layout.button[i], GADGHCOMP,
+                RELVERIFY, BOOLGADGET);
+  make_gadget(GID_LIST, amiga_rect_inset(layout.list, 2, 2), GADGHNONE,
+              GADGIMMEDIATE, BOOLGADGET);
+
+  memset(&prop_pi, 0, sizeof(prop_pi));
+  prop_pi.Flags = (UWORD) (AUTOKNOB | FREEVERT | (new_look ? PROPNEWLOOK : 0));
+  prop_pi.HorizBody = MAXBODY;
+  prop_pi.VertBody = MAXBODY;
+  make_gadget(GID_PROP, layout.scroller, GADGHNONE,
+              GADGIMMEDIATE | RELVERIFY | FOLLOWMOUSE, PROPGADGET);
+  gad[GID_PROP].GadgetRender = (APTR) &prop_knob;
+  gad[GID_PROP].SpecialInfo = (APTR) &prop_pi;
+
+  memset(&edit_si, 0, sizeof(edit_si));
+  edit_si.Buffer = edit_buf;
+  edit_si.UndoBuffer = edit_undo;
+  edit_si.MaxChars = sizeof(edit_buf);
+  make_gadget(GID_EDIT, amiga_rect_inset(layout.edit, 4, 3), GADGHCOMP,
+              RELVERIFY, STRGADGET);
+  gad[GID_EDIT].SpecialInfo = (APTR) &edit_si;
+
+  memset(&slot_si, 0, sizeof(slot_si));
+  slot_si.Buffer = slot_buf;
+  slot_si.UndoBuffer = slot_undo;
+  slot_si.MaxChars = sizeof(slot_buf);
+  strcpy((char *) slot_buf, "0");
+  make_gadget(GID_SLOT, amiga_rect_inset(layout.slot, 4, 3), GADGHCOMP,
+              RELVERIFY | LONGINT, STRGADGET);
+  gad[GID_SLOT].SpecialInfo = (APTR) &slot_si;
+
+  make_gadget(GID_RO, layout.ro, GADGHNONE, TOGGLESELECT | RELVERIFY,
+              BOOLGADGET);
+}
+
+static void attach(uint8_t id)
+{
+  if (attached[id])
+    return;
+  (void) AddGadget(win, &gad[id], (UWORD) ~0);
+  attached[id] = 1;
+}
+
+static void detach(uint8_t id)
+{
+  if (!attached[id])
+    return;
+  (void) RemoveGadget(win, &gad[id]);
+  attached[id] = 0;
+}
+
+static int page_has(uint8_t id)
+{
+  switch (id) {
+  case GID_EDIT:
+    return gctl->page != AMIGA_PAGE_BROWSE;
+  case GID_SLOT:
+  case GID_RO:
+    return gctl->page != AMIGA_PAGE_HOSTS;
+  default:
+    return 1;
+  }
+}
+
+/* Attaches exactly the gadgets the current page shows. */
+static void gui_sync_gadgets(void)
+{
+  uint8_t id;
+
+  for (id = 0; id < GID_COUNT; id++) {
+    if (page_has(id))
+      attach(id);
+    else
+      detach(id);
+  }
+}
+
+static void set_string(uint8_t id, const char *text)
+{
+  struct StringInfo *si = (struct StringInfo *) gad[id].SpecialInfo;
+  UWORD pos = 0;
+  int was_attached = attached[id];
+
+  if (was_attached)
+    pos = RemoveGadget(win, &gad[id]);
+  strncpy((char *) si->Buffer, text, (size_t) si->MaxChars - 1);
+  si->Buffer[si->MaxChars - 1] = 0;
+  si->BufferPos = 0;
+  si->DispPos = 0;
+  if (id == GID_SLOT)
+    si->LongInt = atol(text);
+  if (was_attached) {
+    (void) AddGadget(win, &gad[id], pos);
+    RefreshGList(&gad[id], win, NULL, 1);
+  }
+}
+
+static void set_ro(int readonly)
+{
+  UWORD pos = 0;
+  int was_attached = attached[GID_RO];
+
+  if (was_attached)
+    pos = RemoveGadget(win, &gad[GID_RO]);
+  if (readonly)
+    gad[GID_RO].Flags |= SELECTED;
+  else
+    gad[GID_RO].Flags &= (UWORD) ~SELECTED;
+  if (was_attached)
+    (void) AddGadget(win, &gad[GID_RO], pos);
+}
+
+static int read_slot(uint8_t *slot)
+{
+  char *end;
+  long v = strtol((const char *) slot_buf, &end, 10);
+
+  if (!slot_buf[0] || *end || v < 0 || v > 255) {
+    config_nio_set_status(gctl->state, "Slot must be 0-255");
+    return 0;
+  }
+  *slot = (uint8_t) v;
+  return 1;
+}
+
+static int read_ro(void)
+{
+  return (gad[GID_RO].Flags & SELECTED) != 0;
+}
+
+/* ---- Painting ---------------------------------------------------------- */
+
+static amiga_list_t *page_list(void)
+{
+  switch (gctl->page) {
+  case AMIGA_PAGE_BROWSE:
+    return &gctl->entries;
+  case AMIGA_PAGE_CATALOGUE:
+    return &gctl->catalogue;
+  case AMIGA_PAGE_DRIVES:
+    return &gctl->drives;
+  default:
+    return &gctl->hosts;
+  }
+}
+
+static amiga_rect_t list_interior(void)
+{
+  return amiga_rect_inset(layout.list, 2, 2);
+}
+
+static uint8_t list_cols(void)
+{
+  amiga_rect_t in = list_interior();
+  int cols = (in.width - 4) / FONT_W;
+
+  return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
+}
+
+static const char *slot_uri(uint8_t slot, const char **mode)
+{
+  const config_nio_slot_t *s = amiga_ctl_slot(gctl, slot);
+
+  if (!s) {
+    *mode = "  ";
+    return "?";
+  }
+  if (!s->enabled || !s->uri[0]) {
+    *mode = "  ";
+    return "";
+  }
+  *mode = strcmp(s->mode, "r") == 0 ? "RO" : "RW";
+  return s->uri;
+}
+
+static void row_string(uint16_t idx, uint8_t cols)
+{
+  config_nio_state_t *s = gctl->state;
+  char size_buf[AMIGA_SIZE_TEXT_MAX];
+  char date_buf[AMIGA_DATE_TEXT_MAX];
+  const char *mode;
+  const char *uri;
+
+  switch (gctl->page) {
+  case AMIGA_PAGE_HOSTS:
+    amiga_clip_head(uri_text, sizeof(uri_text), s->hosts[idx],
+                    (uint8_t) (cols - 3));
+    sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
+    break;
+  case AMIGA_PAGE_BROWSE: {
+    config_nio_entry_t *e = &s->entries[idx];
+    uint8_t name_w = (uint8_t) (cols > 24 ? cols - 24 : 1);
+
+    amiga_clip_head(uri_text, sizeof(uri_text), e->name, name_w);
+    if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)
+      strcpy(size_buf, "Drawer");
+    else
+      amiga_format_size(size_buf, e->size, s->prefs.size_format);
+    (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
+    strcpy(tmp_text, padded(uri_text, name_w));
+    sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
+    break;
+  }
+  case AMIGA_PAGE_CATALOGUE:
+    uri = slot_uri((uint8_t) idx, &mode);
+    amiga_clip_head(uri_text, sizeof(uri_text), uri, (uint8_t) (cols - 8));
+    sprintf(tmp_text, "%3u %s  %s", (unsigned) idx, mode, uri_text);
+    break;
+  default: {
+    config_nio_mapping_t m;
+    const char *label = amiga_drive_label((uint8_t) idx, gctl->kick13);
+
+    if (config_nio_mapping_get(s, (uint8_t) idx, &m) && m.valid) {
+      uri = slot_uri(m.slot, &mode);
+      amiga_clip_head(uri_text, sizeof(uri_text), uri, (uint8_t) (cols - 18));
+      sprintf(tmp_text, "%-5s %3u %s  %s", label, (unsigned) m.slot,
+              m.readonly ? "RO" : "RW", uri_text);
+    } else {
+      sprintf(tmp_text, "%-5s (empty)", label);
+    }
+    break;
+  }
+  }
+}
+
+static void update_prop(void)
+{
+  uint16_t pot;
+  uint16_t body;
+
+  amiga_list_prop(page_list(), &pot, &body);
+  NewModifyProp(&gad[GID_PROP], win, NULL, prop_pi.Flags, 0, pot, MAXBODY,
+                body, 1);
+}
+
+static void gui_paint_rows(void)
+{
+  amiga_list_t *l = page_list();
+  amiga_rect_t in = list_interior();
+  uint8_t cols = list_cols();
+  uint8_t r;
+
+  for (r = 0; r < layout.list_rows; r++) {
+    amiga_rect_t row;
+    uint16_t idx = (uint16_t) (l->top + r);
+    int selected = idx == l->selected;
+
+    row.left = in.left;
+    row.top = (int16_t) (in.top + r * layout.row_h);
+    row.width = in.width;
+    row.height = layout.row_h;
+    if (gctl->page == AMIGA_PAGE_BROWSE && !gctl->browse_open)
+      idx = l->count;
+    if (idx >= l->count) {
+      fill(&row, theme.background);
+      continue;
+    }
+    fill(&row, selected ? theme.fill : theme.background);
+    row_string(idx, cols);
+    text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
+            cols, selected ? theme.filltext : theme.text);
+  }
+}
+
+static void gui_paint_info(void)
+{
+  config_nio_state_t *s = gctl->state;
+  uint8_t cols = (uint8_t) (layout.info.width / FONT_W);
+
+  fill(&layout.info, theme.background);
+  switch (gctl->page) {
+  case AMIGA_PAGE_HOSTS:
+    sprintf(tmp_text, "FujiNet hosts (%u of %u)", (unsigned) s->host_count,
+            (unsigned) CONFIG_NIO_MAX_HOSTS);
+    break;
+  case AMIGA_PAGE_BROWSE:
+    if (!gctl->browse_open || gctl->browse_host >= s->host_count) {
+      strcpy(tmp_text, "Choose a host and press Browse");
+    } else {
+      /* host (<=255) + '/' + path (<=127) fits tmp_text, not uri_text. */
+      sprintf(tmp_text, "%s/%s", s->hosts[gctl->browse_host], s->browse_path);
+      amiga_clip_tail(uri_text, sizeof(uri_text), tmp_text, cols);
+      strcpy(tmp_text, uri_text);
+    }
+    break;
+  case AMIGA_PAGE_CATALOGUE:
+    strcpy(tmp_text, "Slot Mode Image");
+    break;
+  default:
+    strcpy(tmp_text, "Drive Slot Mode Image");
+    break;
+  }
+  text_at(layout.info.left, (WORD) (layout.info.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.highlight);
+}
+
+static void gui_paint_status(void)
+{
+  amiga_rect_t in = amiga_rect_inset(layout.status, 2, 1);
+  uint8_t cols = (uint8_t) ((in.width - 8) / FONT_W);
+
+  fill(&in, theme.background);
+  bevel(&layout.status, 1);
+  amiga_clip_head(tmp_text, sizeof(tmp_text), gctl->state->status, cols);
+  text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.text);
+}
+
+static void paint_checkbox(void)
+{
+  struct RastPort *rp = win->RPort;
+  amiga_rect_t in = amiga_rect_inset(layout.ro, 2, 1);
+  WORD cx;
+  WORD cy;
+
+  fill(&in, theme.background);
+  bevel(&layout.ro, 1);
+  if (!read_ro())
+    return;
+  cx = (WORD) (layout.ro.left + 4);
+  cy = (WORD) (layout.ro.top + layout.ro.height / 2);
+  SetAPen(rp, theme.text);
+  Move(rp, cx, cy);
+  Draw(rp, (WORD) (cx + 3), (WORD) (cy + 3));
+  Draw(rp, (WORD) (cx + 9), (WORD) (cy - 4));
+  Move(rp, (WORD) (cx + 1), cy);
+  Draw(rp, (WORD) (cx + 4), (WORD) (cy + 3));
+  Draw(rp, (WORD) (cx + 10), (WORD) (cy - 4));
+}
+
+static void gui_paint_buttons(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_BUTTON_COUNT; i++) {
+    const gui_button_t *b = &page_buttons[gctl->page][i];
+    amiga_rect_t in = amiga_rect_inset(layout.button[i], 2, 1);
+
+    fill(&layout.button[i], theme.background);
+    if (!b->label)
+      continue;
+    fill(&in, theme.background);
+    bevel(&layout.button[i], 0);
+    text_centred(&layout.button[i], b->label, theme.text);
+  }
+}
+
+static void gui_paint_tabs(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_TAB_COUNT; i++) {
+    int selected = i == gctl->page;
+    amiga_rect_t in = amiga_rect_inset(layout.tab[i], 2, 1);
+
+    fill(&in, selected ? theme.fill : theme.background);
+    bevel(&layout.tab[i], selected);
+    text_centred(&layout.tab[i], tab_labels[i],
+                 selected ? theme.filltext : theme.text);
+  }
+}
+
+static void gui_paint_editors(void)
+{
+  WORD label_top = (WORD) (layout.edit.top + (layout.edit.height - FONT_H) / 2);
+
+  if (attached[GID_EDIT]) {
+    bevel(&layout.edit, 1);
+    text_at((WORD) (layout.edit.left - 4 * FONT_W - 4), label_top, "URI", 3,
+            theme.text);
+  }
+  if (attached[GID_SLOT]) {
+    bevel(&layout.slot, 1);
+    text_at((WORD) (layout.slot.left - 4 * FONT_W - 4), label_top, "Slot", 4,
+            theme.text);
+  }
+  if (attached[GID_RO]) {
+    paint_checkbox();
+    text_at((WORD) (layout.ro.left + layout.ro.width + 4), label_top, "RO", 2,
+            theme.text);
+  }
+}
+
+/* Full repaint: clears the window interior, then redraws everything. */
+static void gui_paint(void)
+{
+  amiga_rect_t inner;
+
+  inner.left = (int16_t) win->BorderLeft;
+  inner.top = (int16_t) win->BorderTop;
+  inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
+  inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
+  fill(&inner, theme.background);
+  gui_paint_tabs();
+  gui_paint_info();
+  bevel(&layout.list, 1);
+  gui_paint_rows();
+  gui_paint_editors();
+  gui_paint_buttons();
+  gui_paint_status();
+  RefreshGadgets(win->FirstGadget, win, NULL);
+  update_prop();
+}
+
+/* Copies the selected row's values into the editing gadgets. */
+static void gui_sync_editors(void)
+{
+  config_nio_state_t *s = gctl->state;
+  amiga_list_t *l = page_list();
+  char num[8];
+
+  if (l->selected == AMIGA_LIST_NONE)
+    return;
+  switch (gctl->page) {
+  case AMIGA_PAGE_HOSTS:
+    set_string(GID_EDIT, s->hosts[l->selected]);
+    break;
+  case AMIGA_PAGE_CATALOGUE: {
+    const config_nio_slot_t *slot = amiga_ctl_slot(gctl, (uint8_t) l->selected);
+
+    sprintf(num, "%u", (unsigned) l->selected);
+    set_string(GID_SLOT, num);
+    set_string(GID_EDIT, slot && slot->enabled ? slot->uri : "");
+    set_ro(slot && slot->enabled && strcmp(slot->mode, "r") == 0);
+    break;
+  }
+  case AMIGA_PAGE_DRIVES: {
+    config_nio_mapping_t m;
+
+    if (config_nio_mapping_get(s, (uint8_t) l->selected, &m) && m.valid) {
+      sprintf(num, "%u", (unsigned) m.slot);
+      set_string(GID_SLOT, num);
+      set_ro(m.readonly);
+    }
+    break;
+  }
+  default:
+    break;
+  }
+  if (attached[GID_RO])
+    paint_checkbox();
+}
+
+static void gui_set_page(uint8_t page)
+{
+  amiga_ctl_set_page(gctl, page);
+  gui_sync_gadgets();
+  gui_sync_editors();
+  gui_paint();
+}
+
+/* Repaints after an action; a page change needs the full treatment. */
+static void gui_after_action(uint8_t old_page)
+{
+  if (gctl->page != old_page) {
+    gui_set_page(gctl->page);
+    return;
+  }
+  gui_sync_editors();
+  gui_paint_info();
+  gui_paint_rows();
+  gui_paint_status();
+  update_prop();
+}
+
+/* ---- Actions ------------------------------------------------------------- */
+
+/* Destructive actions ask first, before the window is marked busy. */
+static int gui_confirm_action(uint8_t action)
+{
+  switch (action) {
+  case ACT_HOST_REMOVE:
+    return confirm("Remove this host?");
+  case ACT_SLOT_CLEAR:
+    return confirm("Clear this catalogue slot?");
+  case ACT_DRIVE_EJECT:
+    if (gctl->drives.selected == AMIGA_LIST_NONE)
+      return 1;
+    sprintf(tmp_text, "Eject %s?",
+            amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13));
+    return confirm(tmp_text);
+  default:
+    return 1;
+  }
+}
+
+static void gui_do_action(uint8_t action)
+{
+  uint8_t old_page = gctl->page;
+  uint8_t slot;
+
+  if (!gui_confirm_action(action))
+    return;
+  busy_begin();
+  switch (action) {
+  case ACT_HOST_BROWSE:
+    (void) amiga_ctl_browse_open(gctl);
+    break;
+  case ACT_HOST_ADD:
+    (void) amiga_ctl_host_add(gctl, (const char *) edit_buf);
+    break;
+  case ACT_HOST_REPLACE:
+    (void) amiga_ctl_host_replace(gctl, (const char *) edit_buf);
+    break;
+  case ACT_HOST_REMOVE:
+    (void) amiga_ctl_host_remove(gctl);
+    break;
+  case ACT_HOST_UP:
+    (void) amiga_ctl_host_move(gctl, -1);
+    break;
+  case ACT_HOST_DOWN:
+    (void) amiga_ctl_host_move(gctl, 1);
+    break;
+  case ACT_BROWSE_OPEN:
+    (void) amiga_ctl_browse_activate(gctl);
+    break;
+  case ACT_BROWSE_PARENT:
+    (void) amiga_ctl_browse_parent(gctl);
+    break;
+  case ACT_BROWSE_REFRESH:
+    if (gctl->browse_open)
+      (void) amiga_ctl_browse_refresh(gctl);
+    else
+      (void) amiga_ctl_browse_open(gctl);
+    break;
+  case ACT_BROWSE_ASSIGN:
+    if (read_slot(&slot))
+      (void) amiga_ctl_browse_assign(gctl, slot, (uint8_t) read_ro());
+    break;
+  case ACT_SLOT_SET:
+    if (read_slot(&slot))
+      (void) amiga_ctl_slot_set(gctl, slot, (const char *) edit_buf,
+                                (uint8_t) read_ro());
+    break;
+  case ACT_SLOT_CLEAR:
+    if (read_slot(&slot))
+      (void) amiga_ctl_slot_clear(gctl, slot);
+    break;
+  case ACT_DRIVE_INSERT:
+    if (gctl->drives.selected != AMIGA_LIST_NONE && read_slot(&slot))
+      (void) amiga_ctl_drive_insert(gctl, (uint8_t) gctl->drives.selected,
+                                    slot, (uint8_t) read_ro());
+    break;
+  case ACT_DRIVE_EJECT:
+    if (gctl->drives.selected != AMIGA_LIST_NONE)
+      (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
+    break;
+  default:
+    break;
+  }
+  busy_end();
+  gui_after_action(old_page);
+}
+
+/* Return / double-click: the page's primary action. */
+static void gui_activate(void)
+{
+  switch (gctl->page) {
+  case AMIGA_PAGE_HOSTS:
+    gui_do_action(ACT_HOST_BROWSE);
+    break;
+  case AMIGA_PAGE_BROWSE:
+    gui_do_action(ACT_BROWSE_OPEN);
+    break;
+  case AMIGA_PAGE_CATALOGUE:
+    (void) ActivateGadget(&gad[GID_EDIT], win, NULL);
+    break;
+  default:
+    gui_do_action(ACT_DRIVE_INSERT);
+    break;
+  }
+}
+
+static void gui_select(uint16_t index)
+{
+  amiga_list_select(page_list(), index);
+  gui_sync_editors();
+  gui_paint_rows();
+  update_prop();
+}
+
+static void gui_list_click(struct IntuiMessage *msg)
+{
+  amiga_rect_t in = list_interior();
+  uint16_t index;
+
+  if (!amiga_list_hit(page_list(), (int16_t) (msg->MouseY - in.top),
+                      layout.row_h, &index))
+    return;
+  if (index == last_index &&
+      DoubleClick(last_secs, last_micros, msg->Seconds, msg->Micros)) {
+    last_index = AMIGA_LIST_NONE;
+    gui_select(index);
+    gui_activate();
+    return;
+  }
+  last_index = index;
+  last_secs = msg->Seconds;
+  last_micros = msg->Micros;
+  gui_select(index);
+}
+
+/* Returns 1 when the user asked to quit. */
+static int gui_handle_key(UWORD code, UWORD qualifier)
+{
+  amiga_list_t *l = page_list();
+
+  switch (amiga_key_from_raw(code, qualifier)) {
+  case AMIGA_KEY_UP:
+    amiga_list_move(l, -1);
+    break;
+  case AMIGA_KEY_DOWN:
+    amiga_list_move(l, 1);
+    break;
+  case AMIGA_KEY_PAGE_UP:
+    amiga_list_move(l, (int16_t) -layout.list_rows);
+    break;
+  case AMIGA_KEY_PAGE_DOWN:
+    amiga_list_move(l, (int16_t) layout.list_rows);
+    break;
+  case AMIGA_KEY_TOP:
+    amiga_list_move(l, (int16_t) -l->count);
+    break;
+  case AMIGA_KEY_BOTTOM:
+    amiga_list_move(l, (int16_t) l->count);
+    break;
+  case AMIGA_KEY_ACTIVATE:
+    gui_activate();
+    return 0;
+  case AMIGA_KEY_PARENT:
+    if (gctl->page == AMIGA_PAGE_BROWSE)
+      gui_do_action(ACT_BROWSE_PARENT);
+    return 0;
+  case AMIGA_KEY_CANCEL:
+    return 1;
+  case AMIGA_KEY_HELP:
+    about();
+    return 0;
+  case AMIGA_KEY_NEXT_PAGE:
+    gui_set_page((uint8_t) ((gctl->page + 1) % AMIGA_PAGE_COUNT));
+    return 0;
+  case AMIGA_KEY_PREV_PAGE:
+    gui_set_page((uint8_t) ((gctl->page + AMIGA_PAGE_COUNT - 1) %
+                            AMIGA_PAGE_COUNT));
+    return 0;
+  default:
+    return 0;
+  }
+  gui_sync_editors();
+  gui_paint_rows();
+  update_prop();
+  return 0;
+}
+
+/* Returns 1 when the user asked to quit. */
+static int gui_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
+                             int down)
+{
+  UWORD id = g->GadgetID;
+
+  if (id == GID_PROP) {
+    prop_active = (uint8_t) down;
+    amiga_list_set_top_from_pot(page_list(), prop_pi.VertPot);
+    gui_paint_rows();
+    return 0;
+  }
+  if (id == GID_LIST) {
+    if (down)
+      gui_list_click(msg);
+    return 0;
+  }
+  if (down)
+    return 0;
+  if (id < GID_TAB0 + AMIGA_TAB_COUNT) {
+    gui_set_page((uint8_t) (id - GID_TAB0));
+  } else if (id >= GID_BTN0 && id < GID_COUNT) {
+    uint8_t action = page_buttons[gctl->page][id - GID_BTN0].action;
+
+    if (action != ACT_NONE)
+      gui_do_action(action);
+  } else if (id == GID_RO) {
+    paint_checkbox();
+  } else if (id == GID_SLOT && gctl->page == AMIGA_PAGE_CATALOGUE) {
+    uint8_t slot;
+
+    if (read_slot(&slot))
+      gui_select(slot);
+    else
+      gui_paint_status();
+  }
+  return 0;
+}
+
+/* ---- Menus ------------------------------------------------------------- */
+
+static void make_item(struct MenuItem *item, struct IntuiText *text,
+                      const char *label, WORD top, WORD width, UWORD flags,
+                      LONG exclude, BYTE key)
+{
+  make_itext(text, (WORD) ((flags & CHECKIT) ? CHECKWIDTH : 2), 1, label,
+             NULL);
+  text->FrontPen = 0;
+  memset(item, 0, sizeof(*item));
+  item->TopEdge = top;
+  item->Width = width;
+  item->Height = 10;
+  item->Flags = (UWORD) (ITEMTEXT | ITEMENABLED | HIGHCOMP | flags);
+  item->MutualExclude = exclude;
+  item->ItemFill = (APTR) text;
+  item->Command = key;
+}
+
+static void gui_make_menus(void)
+{
+  WORD w;
+  uint8_t i;
+  const config_nio_prefs_t *p = &gctl->state->prefs;
+
+  w = (WORD) (8 * FONT_W + COMMWIDTH + 8);
+  for (i = 0; i < 2; i++) {
+    make_item(&project_items[i], &menu_text[i], project_labels[i],
+              (WORD) (i * 10), w, COMMSEQ, 0, project_keys[i]);
+    project_items[i].NextItem = i + 1 < 2 ? &project_items[i + 1] : NULL;
+  }
+  w = (WORD) (14 * FONT_W + CHECKWIDTH + 8);
+  for (i = 0; i < 4; i++) {
+    UWORD checked = 0;
+
+    if ((i == 0 && p->date_format != CONFIG_NIO_PREF_DATE_YDM) ||
+        (i == 1 && p->date_format == CONFIG_NIO_PREF_DATE_YDM) ||
+        (i == 2 && p->size_format != CONFIG_NIO_PREF_SIZE_COMPACT) ||
+        (i == 3 && p->size_format == CONFIG_NIO_PREF_SIZE_COMPACT))
+      checked = CHECKED;
+    make_item(&settings_items[i], &menu_text[2 + i], settings_labels[i],
+              (WORD) (i * 10), w, (UWORD) (CHECKIT | checked),
+              (LONG) (1L << (i ^ 1)), 0);
+    settings_items[i].NextItem = i + 1 < 4 ? &settings_items[i + 1] : NULL;
+  }
+  memset(menus, 0, sizeof(menus));
+  menus[0].NextMenu = &menus[1];
+  menus[0].LeftEdge = 0;
+  menus[0].Width = 8 * FONT_W;
+  menus[0].Height = 10;
+  menus[0].Flags = MENUENABLED;
+  menus[0].MenuName = (APTR) "Project";
+  menus[0].FirstItem = &project_items[0];
+  menus[1].LeftEdge = 9 * FONT_W;
+  menus[1].Width = 9 * FONT_W;
+  menus[1].Height = 10;
+  menus[1].Flags = MENUENABLED;
+  menus[1].MenuName = (APTR) "Settings";
+  menus[1].FirstItem = &settings_items[0];
+  menus_attached = SetMenuStrip(win, &menus[0]) ? 1 : 0;
+}
+
+/* Returns 1 when the user asked to quit. */
+static int gui_handle_menu(UWORD code)
+{
+  int quit = 0;
+  int settings = 0;
+
+  while (code != MENUNULL) {
+    struct MenuItem *item = ItemAddress(&menus[0], code);
+
+    if (!item)
+      break;
+    if (MENUNUM(code) == 0) {
+      if (ITEMNUM(code) == 0)
+        about();
+      else
+        quit = 1;
+    } else if (MENUNUM(code) == 1) {
+      settings = 1;
+    }
+    code = item->NextSelect;
+  }
+  if (settings) {
+    uint8_t date = (settings_items[1].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
+    uint8_t size = (settings_items[3].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
+
+    busy_begin();
+    (void) amiga_ctl_set_prefs(gctl, date, size);
+    busy_end();
+    gui_paint_rows();
+    gui_paint_status();
+  }
+  return quit;
+}
+
+/* ---- Script mode ----------------------------------------------------------- */
+
+static void script_out(const char *line, void *ctx)
+{
+  fprintf((FILE *) ctx, "%s\n", line);
+}
+
+static int gui_run_script(const amiga_options_t *opts)
+{
+  static char line[CONFIG_NIO_URI_MAX + 64];
+  FILE *in;
+  FILE *out;
+  unsigned ok = 0;
+  unsigned err = 0;
+
+  in = fopen(opts->script, "r");
+  out = fopen(opts->result, "w");
+  if (!in || !out) {
+    if (in)
+      fclose(in);
+    if (out)
+      fclose(out);
+    amiga_gui_fatal("Unable to open the SCRIPT or RESULT file.");
+    return 20;
+  }
+  while (fgets(line, sizeof(line), in)) {
+    uint16_t ticks = 0;
+    char *nl = strchr(line, '\n');
+    int rc;
+
+    if (nl)
+      *nl = 0;
+    fprintf(out, "> %s\n", line);
+    busy_begin();
+    rc = amiga_script_line(gctl, line, script_out, out, &ticks);
+    busy_end();
+    gui_set_page(gctl->page);
+    if (rc == AMIGA_SCRIPT_QUIT)
+      break;
+    if (rc == AMIGA_SCRIPT_WAIT)
+      Delay(ticks);
+    else if (rc == AMIGA_SCRIPT_ERR)
+      err++;
+    else if (line[0] && line[0] != ';')
+      ok++;
+  }
+  fprintf(out, "SCRIPT DONE ok=%u err=%u\n", ok, err);
+  fclose(out);
+  fclose(in);
+  return err ? 5 : 0;
+}
+
+/* ---- Window lifecycle ------------------------------------------------------ */
 
 static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
                            uint8_t br, uint8_t bb, int *ok)
@@ -96,10 +1185,12 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
 static void load_theme(void)
 {
   amiga_theme_classic(&theme);
+  new_look = 0;
 #ifndef __KICK13__
   if (IntuitionBase->LibNode.lib_Version >= 36) {
     struct DrawInfo *dri = GetScreenDrawInfo(win->WScreen);
 
+    new_look = 1;
     if (dri) {
       amiga_theme_from_pens(&theme, dri->dri_Pens, dri->dri_NumPens);
       FreeScreenDrawInfo(win->WScreen, dri);
@@ -183,15 +1274,32 @@ static int gui_open(void)
   if (font)
     SetFont(win->RPort, font);
   load_theme();
+  busy_sprite = (UWORD *) AllocMem(sizeof(busy_image), MEMF_CHIP);
+  if (busy_sprite)
+    CopyMem((APTR) busy_image, busy_sprite, sizeof(busy_image));
   amiga_ctl_set_rows(gctl, layout.list_rows);
+  gui_make_gadgets();
+  gui_make_menus();
+  gui_sync_gadgets();
   return 1;
 }
 
 static void gui_close(void)
 {
+  uint8_t id;
+
   if (win) {
+    if (menus_attached)
+      ClearMenuStrip(win);
+    menus_attached = 0;
+    for (id = 0; id < GID_COUNT; id++)
+      detach(id);
     CloseWindow(win);
     win = NULL;
+  }
+  if (busy_sprite) {
+    FreeMem(busy_sprite, sizeof(busy_image));
+    busy_sprite = NULL;
   }
   if (font) {
     CloseFont(font);
@@ -199,97 +1307,51 @@ static void gui_close(void)
   }
 }
 
-static void bevel(const amiga_rect_t *r, int recessed)
-{
-  struct RastPort *rp = win->RPort;
-  WORD x0 = r->left;
-  WORD y0 = r->top;
-  WORD x1 = (WORD) (r->left + r->width - 1);
-  WORD y1 = (WORD) (r->top + r->height - 1);
-
-  SetAPen(rp, recessed ? theme.shadow : theme.shine);
-  Move(rp, x0, y1);
-  Draw(rp, x0, y0);
-  Draw(rp, (WORD) (x1 - 1), y0);
-  Move(rp, (WORD) (x0 + 1), (WORD) (y1 - 1));
-  Draw(rp, (WORD) (x0 + 1), (WORD) (y0 + 1));
-  SetAPen(rp, recessed ? theme.shine : theme.shadow);
-  Move(rp, x1, y0);
-  Draw(rp, x1, y1);
-  Draw(rp, (WORD) (x0 + 1), y1);
-  Move(rp, (WORD) (x1 - 1), (WORD) (y0 + 1));
-  Draw(rp, (WORD) (x1 - 1), (WORD) (y1 - 1));
-}
-
-static void fill(const amiga_rect_t *r, uint8_t pen)
-{
-  SetAPen(win->RPort, pen);
-  RectFill(win->RPort, r->left, r->top, (WORD) (r->left + r->width - 1),
-           (WORD) (r->top + r->height - 1));
-}
-
-static void text_centred(const amiga_rect_t *r, const char *s, uint8_t pen)
-{
-  struct RastPort *rp = win->RPort;
-  WORD len = (WORD) strlen(s);
-  WORD w = TextLength(rp, (CONST_STRPTR) s, len);
-
-  SetAPen(rp, pen);
-  SetDrMd(rp, JAM1);
-  Move(rp, (WORD) (r->left + (r->width - w) / 2),
-       (WORD) (r->top + (r->height - FONT_H) / 2 + rp->TxBaseline));
-  Text(rp, (CONST_STRPTR) s, len);
-}
-
-static void paint_tabs(void)
-{
-  uint8_t i;
-
-  for (i = 0; i < AMIGA_TAB_COUNT; i++) {
-    int selected = i == gctl->page;
-    amiga_rect_t inner = amiga_rect_inset(layout.tab[i], 2, 1);
-
-    fill(&inner, selected ? theme.fill : theme.background);
-    bevel(&layout.tab[i], selected);
-    text_centred(&layout.tab[i], tab_labels[i],
-                 selected ? theme.filltext : theme.text);
-  }
-}
-
-static void paint_status(void)
-{
-  amiga_rect_t inner = amiga_rect_inset(layout.status, 2, 1);
-
-  fill(&inner, theme.background);
-  bevel(&layout.status, 1);
-  SetAPen(win->RPort, theme.text);
-  Move(win->RPort, (WORD) (inner.left + 4),
-       (WORD) (inner.top + 1 + win->RPort->TxBaseline));
-  Text(win->RPort, (CONST_STRPTR) gctl->state->status,
-       (WORD) strlen(gctl->state->status));
-}
-
 int amiga_gui_run(amiga_ctl_t *ctl, const amiga_options_t *opts)
 {
   struct IntuiMessage *msg;
   int done = 0;
+  int rc = 0;
 
-  (void) opts;
   gctl = ctl;
   if (!gui_open()) {
     gui_close();
     return 20;
   }
-  paint_tabs();
-  paint_status();
+  gui_sync_editors();
+  gui_paint();
+
+  if (opts->script[0]) {
+    rc = gui_run_script(opts);
+    gui_close();
+    return rc;
+  }
+
   while (!done) {
     WaitPort(win->UserPort);
     while ((msg = (struct IntuiMessage *) GetMsg(win->UserPort)) != NULL) {
-      if (msg->Class == CLOSEWINDOW)
-        done = 1;
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      struct Gadget *g = (struct Gadget *) msg->IAddress;
+      struct IntuiMessage copy = *msg;
+
       ReplyMsg((struct Message *) msg);
+      if (cls == CLOSEWINDOW)
+        done = 1;
+      else if (cls == GADGETDOWN)
+        done |= gui_handle_gadget(g, &copy, 1);
+      else if (cls == GADGETUP)
+        done |= gui_handle_gadget(g, &copy, 0);
+      else if (cls == MOUSEMOVE && prop_active) {
+        amiga_list_set_top_from_pot(page_list(), prop_pi.VertPot);
+        gui_paint_rows();
+      } else if (cls == RAWKEY)
+        done |= gui_handle_key(code, qual);
+      else if (cls == MENUPICK)
+        done |= gui_handle_menu(code);
     }
   }
   gui_close();
-  return 0;
+  return rc;
 }
