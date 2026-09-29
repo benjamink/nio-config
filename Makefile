@@ -2,7 +2,7 @@ TARGETS := msdos bbc master linux
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
 .PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk \
-	splash-bbc splash-bbc-disk $(TARGETS)
+	splash-bbc splash-bbc-disk test-amiga-host $(TARGETS)
 
 all: $(DEFAULT_TARGET)
 
@@ -31,3 +31,6 @@ splash-bbc-disk:
 
 clean:
 	rm -rf build
+
+test-amiga-host:
+	$(MAKE) -f makefiles/test-amiga-host.mk FUJINET_NIO_LIB=$(or $(FUJINET_NIO_LIB),../fujinet-nio-lib) ONLY=$(ONLY)
