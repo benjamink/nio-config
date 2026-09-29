@@ -1,0 +1,116 @@
+FujiNet Config (config-nio) for the Amiga
+=========================================
+
+FujiNet Config is a Workbench program for FujiNet NIO. You choose disk
+images on your FujiNet hosts and mount them as Amiga drives (DN0: to
+DN7:). It runs on Workbench 1.3 and later. The Help menu in the program
+explains every page and message.
+
+
+What you need
+-------------
+
+- A FujiNet connected to the Amiga, with the FujiNet NIO drivers.
+- The NIO package: the drawer or disk that contains this ReadMe, usually
+  shown as NIO:.
+
+
+Installing on Workbench 2.0 and later
+-------------------------------------
+
+Open a Shell and type:
+
+    Execute NIO:Install-config-nio
+
+The installer:
+
+1. Copies FujiNet Config to SYS:Tools (config-nio and its icon). An
+   existing icon is kept so your ToolTypes are not lost.
+2. Installs FMOUNT, FUMOUNT and fujinet-load-resident in SYS:C, and
+   fujinet-nio.device and fujinet-disk.device in DEVS:, if they are not
+   there already.
+3. Adds two lines to S:User-Startup, if they are missing, so both devices
+   load at every boot:
+
+       C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
+       C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+
+4. Asks whether FujiNet Config should start automatically with
+   Workbench.
+
+Reboot afterwards if the installer asks you to.
+
+To answer the question in advance:
+
+    Execute NIO:Install-config-nio AUTO      install and start automatically
+    Execute NIO:Install-config-nio NOAUTO    install only
+
+If the package is somewhere other than NIO:, add FROM= with a name ending
+in a colon or slash:
+
+    Execute Work:FujiNet/Install-config-nio FROM=Work:FujiNet/
+
+
+Starting automatically with Workbench
+-------------------------------------
+
+Workbench starts every program in SYS:WBStartup once the desktop is
+open. With autostart on, the installer puts a FujiNet-Config icon there.
+The icon runs SYS:Tools/config-nio and has the DONOTWAIT ToolType, so
+Workbench carries on while FujiNet Config is open.
+
+To stop it starting automatically:
+
+    Execute NIO:Install-config-nio REMOVE
+
+or drag the FujiNet-Config icon out of SYS:WBStartup.
+
+
+Installing on Workbench 1.3
+---------------------------
+
+Workbench 1.3 has no SYS:WBStartup drawer, and its FujiNet drivers are
+installed differently.
+
+1. Install the FujiNet NIO drivers and commands with the WB1.3 package's
+   own installer:
+
+       Execute NIO:Install-FujiNet-WB13
+
+2. Copy FujiNet Config somewhere on your system disk, for example:
+
+       Copy NIO:config-nio SYS:System/
+       Copy NIO:config-nio.info SYS:System/
+
+3. To start it automatically, edit S:Startup-Sequence (for example with
+   Ed) and add this line directly after the line that says LoadWB:
+
+       Run >NIL: SYS:System/config-nio
+
+   Save the file and reboot.
+
+On Workbench 1.3 the drives are DN0: and DN1: (double density, FFS),
+HN0: and HN1: (high density, FFS), DO0: and DO1: (double density, OFS)
+and HO0: and HO1: (high density, OFS).
+
+
+Options
+-------
+
+Set these as ToolTypes (select the icon, then Information in the Icons
+menu) or give them in a Shell:
+
+    FMOUNT=path    mount command (default SYS:C/fmount)
+    FUMOUNT=path   eject command (default SYS:C/fumount)
+    SCRIPT=file    run commands from a file instead of the window
+    RESULT=file    where SCRIPT writes its results
+
+Unknown ToolTypes, and any in brackets, are ignored.
+
+
+If something goes wrong
+-----------------------
+
+The status line at the bottom of the window shows each command's own
+message. Help > Troubleshooting in the program lists the common ones and
+what to do about each.

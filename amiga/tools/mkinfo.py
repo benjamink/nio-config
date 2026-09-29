@@ -50,11 +50,18 @@ WB2_RGB = [(0xAA, 0xAA, 0xAA), (0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF), (0x66, 0x
 APP_TOOLTYPES = [
     "FMOUNT=SYS:C/fmount",
     "FUMOUNT=SYS:C/fumount",
+    "DONOTWAIT",
 ]
 
 ICONS = [
     # art file, output, type, default tool, stack, tool types
     ("gfx/config-nio.icon.txt", "icons/config-nio.info", WBTOOL, None, 16384, APP_TOOLTYPES),
+    # SYS:WBStartup entry made by Install-config-nio: runs the installed tool
+    # and lets Workbench carry on (DONOTWAIT) while it is open.
+    ("gfx/config-nio.icon.txt", "icons/FujiNet-Config.info", WBPROJECT,
+     "SYS:Tools/config-nio", 16384, ["DONOTWAIT"]),
+    ("gfx/readme.icon.txt", "icons/ReadMe-config-nio.info", WBPROJECT,
+     "SYS:Utilities/MultiView", 8192, []),
 ]
 
 
