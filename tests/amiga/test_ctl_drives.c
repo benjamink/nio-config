@@ -96,6 +96,26 @@ void test_ctl_drives(void)
   CHECK(!amiga_ctl_drive_insert(&ctl, 8, 12, 0));
   CHECK_STR(state.status, "No such drive");
 
+  /* Drive rows show their mapped slot's URI: one read per drive, cached. */
+  {
+    static const uint8_t map[17] = { 1, 1, 0, 1, 16, 3, 32, 1, 48 };
+    const config_nio_slot_t *ds;
+    unsigned calls;
+    uint8_t unit, pass;
+
+    fake_slot_put(16, "tnfs://x/sixteen.adf", 0);
+    fake_appstore_put("config-nio", "mappings", map, sizeof(map));
+    CHECK(amiga_ctl_reload(&ctl));
+    calls = fake_slot_get_calls();
+    for (pass = 0; pass < 2; pass++)
+      for (unit = 0; unit < 4; unit++)
+        (void) amiga_ctl_drive_slot(&ctl, unit);
+    CHECK(fake_slot_get_calls() == calls + 4);
+    ds = amiga_ctl_drive_slot(&ctl, 1);
+    CHECK(ds && !strcmp(ds->uri, "tnfs://x/sixteen.adf"));
+    CHECK(amiga_ctl_drive_slot(&ctl, 5) == NULL);   /* unmapped */
+  }
+
   amiga_ctl_set_tools(&ctl, "Work:My Tools/fmount", "SYS:C/fumount");
   CHECK(!amiga_ctl_drive_insert(&ctl, 1, 12, 0));
   CHECK_STR(state.status, "FMOUNT path is invalid");

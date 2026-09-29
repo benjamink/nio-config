@@ -533,7 +533,9 @@ static void row_string(uint16_t idx, uint8_t cols)
     const char *label = amiga_drive_label((uint8_t) idx, gctl->kick13);
 
     if (config_nio_mapping_get(s, (uint8_t) idx, &m) && m.valid) {
-      uri = slot_uri(m.slot, &mode);
+      const config_nio_slot_t *ds = amiga_ctl_drive_slot(gctl, (uint8_t) idx);
+
+      uri = !ds ? "?" : (ds->enabled ? ds->uri : "");
       amiga_clip_head(uri_text, sizeof(uri_text), uri, (uint8_t) (cols - 18));
       sprintf(tmp_text, "%-5s %3u %s  %s", label, (unsigned) m.slot,
               m.readonly ? "RO" : "RW", uri_text);

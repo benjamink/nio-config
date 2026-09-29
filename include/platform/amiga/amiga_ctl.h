@@ -36,8 +36,13 @@ typedef struct {
   const char *fumount;
   amiga_exec_fn exec;
   void *exec_ctx;
-  uint16_t cat_base;
-  config_nio_slot_t cat[AMIGA_CAT_WINDOW];
+  /* Two catalogue windows (a visible list spans at most two) and one
+   * record per drive; AMIGA_CAT_SLOTS / a clear bit mean "not cached". */
+  uint16_t cat_base[2];
+  uint8_t cat_victim;
+  config_nio_slot_t cat[2][AMIGA_CAT_WINDOW];
+  uint8_t drive_cached;
+  config_nio_slot_t drive_cat[8];
   char msg[CONFIG_NIO_STATUS_MAX + 1];
   char cmd[AMIGA_CMD_MAX];
 } amiga_ctl_t;
@@ -80,5 +85,8 @@ int amiga_ctl_reload(amiga_ctl_t *ctl);
 int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
                            uint8_t readonly);
 int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit);
+/* Catalogue record for a mapped drive (one read per drive until the next
+ * reload or write); NULL when the drive is unmapped or the read failed. */
+const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit);
 
 #endif

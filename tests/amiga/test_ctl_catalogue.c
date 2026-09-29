@@ -34,6 +34,15 @@ void test_ctl_catalogue(void)
   CHECK(fake_slot_get_calls() == calls + 2 * AMIGA_CAT_WINDOW);
   CHECK(amiga_ctl_slot(&ctl, 255) != NULL);
 
+  /* A visible list spanning two windows must not re-read on every paint. */
+  calls = fake_slot_get_calls();
+  CHECK(amiga_ctl_slot(&ctl, 14) != NULL);
+  CHECK(amiga_ctl_slot(&ctl, 17) != NULL);
+  CHECK(fake_slot_get_calls() == calls + 2 * AMIGA_CAT_WINDOW);
+  CHECK(amiga_ctl_slot(&ctl, 14) != NULL);
+  CHECK(amiga_ctl_slot(&ctl, 17) != NULL);
+  CHECK(fake_slot_get_calls() == calls + 2 * AMIGA_CAT_WINDOW);
+
   CHECK(amiga_ctl_slot_set(&ctl, 20, "tnfs://x/b.adf", 0));
   CHECK_STR(fake_slot_uri(20), "tnfs://x/b.adf");
   CHECK(fake_slot_readonly(20) == 0);

@@ -9,6 +9,13 @@ static void status(amiga_ctl_t *ctl, const char *msg)
   config_nio_set_status(ctl->state, msg);
 }
 
+static void cat_invalidate(amiga_ctl_t *ctl)
+{
+  ctl->cat_base[0] = AMIGA_CAT_SLOTS;
+  ctl->cat_base[1] = AMIGA_CAT_SLOTS;
+  ctl->drive_cached = 0;
+}
+
 void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
                     uint8_t kick13, uint8_t rows, amiga_exec_fn exec,
                     void *exec_ctx)
@@ -20,7 +27,7 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   ctl->exec_ctx = exec_ctx;
   ctl->fmount = AMIGA_DEFAULT_FMOUNT;
   ctl->fumount = AMIGA_DEFAULT_FUMOUNT;
-  ctl->cat_base = AMIGA_CAT_SLOTS;
+  cat_invalidate(ctl);
   amiga_list_init(&ctl->hosts, rows);
   amiga_list_init(&ctl->entries, rows);
   amiga_list_init(&ctl->catalogue, rows);
@@ -327,7 +334,7 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
     status(ctl, "Unable to save slot");
     return 0;
   }
-  ctl->cat_base = AMIGA_CAT_SLOTS;
+  cat_invalidate(ctl);
   sprintf(ctl->msg, "Assigned to slot %u", (unsigned) slot);
   status(ctl, ctl->msg);
   return 1;
@@ -336,22 +343,27 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
 const config_nio_slot_t *amiga_ctl_slot(amiga_ctl_t *ctl, uint8_t slot)
 {
   uint16_t base;
+  uint8_t w;
   uint8_t i;
 
   base = (uint16_t) (slot & ~(AMIGA_CAT_WINDOW - 1));
-  if (ctl->cat_base != base) {
-    for (i = 0; i < AMIGA_CAT_WINDOW; i++) {
-      /* config_nio_read_slot: 1 = entry present, or missing (zeroed);
-       * 0 = transport/format error. */
-      if (!config_nio_read_slot((uint8_t) (base + i), &ctl->cat[i])) {
-        ctl->cat_base = AMIGA_CAT_SLOTS;
-        status(ctl, "Unable to read catalogue");
-        return NULL;
-      }
-    }
-    ctl->cat_base = base;
+  for (w = 0; w < 2; w++) {
+    if (ctl->cat_base[w] == base)
+      return &ctl->cat[w][slot - base];
   }
-  return &ctl->cat[slot - base];
+  w = ctl->cat_victim;
+  ctl->cat_victim = (uint8_t) (w ^ 1);
+  for (i = 0; i < AMIGA_CAT_WINDOW; i++) {
+    /* config_nio_read_slot: 1 = entry present, or missing (zeroed);
+     * 0 = transport/format error. */
+    if (!config_nio_read_slot((uint8_t) (base + i), &ctl->cat[w][i])) {
+      ctl->cat_base[w] = AMIGA_CAT_SLOTS;
+      status(ctl, "Unable to read catalogue");
+      return NULL;
+    }
+  }
+  ctl->cat_base[w] = base;
+  return &ctl->cat[w][slot - base];
 }
 
 int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
@@ -361,7 +373,7 @@ int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
     status(ctl, "URI is empty");
     return 0;
   }
-  ctl->cat_base = AMIGA_CAT_SLOTS;
+  cat_invalidate(ctl);
   if (!config_nio_write_slot(ctl->state, slot, uri, readonly ? "r" : "rw")) {
     status(ctl, "Unable to save slot");
     return 0;
@@ -373,7 +385,7 @@ int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
 
 int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot)
 {
-  ctl->cat_base = AMIGA_CAT_SLOTS;
+  cat_invalidate(ctl);
   if (!config_nio_delete_slot(ctl->state, slot)) {
     status(ctl, "Unable to clear slot");
     return 0;
@@ -398,7 +410,7 @@ int amiga_ctl_reload(amiga_ctl_t *ctl)
   ctl->browse_open = 0;
   amiga_list_set_count(&ctl->entries, 0);
   amiga_list_set_count(&ctl->hosts, s->host_count);
-  ctl->cat_base = AMIGA_CAT_SLOTS;
+  cat_invalidate(ctl);
   return 1;
 }
 
@@ -474,4 +486,21 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit)
   sprintf(ctl->msg, "%s ejected", label);
   status(ctl, ctl->msg);
   return 1;
+}
+
+const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit)
+{
+  config_nio_mapping_t m;
+
+  if (unit >= AMIGA_DRIVE_COUNT ||
+      !config_nio_mapping_get(ctl->state, unit, &m) || !m.valid)
+    return NULL;
+  if (!(ctl->drive_cached & (1u << unit))) {
+    if (!config_nio_read_slot(m.slot, &ctl->drive_cat[unit])) {
+      status(ctl, "Unable to read catalogue");
+      return NULL;
+    }
+    ctl->drive_cached = (uint8_t) (ctl->drive_cached | (1u << unit));
+  }
+  return &ctl->drive_cat[unit];
 }
