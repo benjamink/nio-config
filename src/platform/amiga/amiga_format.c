@@ -144,3 +144,38 @@ void amiga_clip_tail(char *out, uint16_t cap, const char *s, uint8_t max_chars)
   copy_bounded(out + 3, (uint16_t) (cap - 3), s + len - (max_chars - 3),
                (uint16_t) (max_chars - 3));
 }
+
+void amiga_last_line(char *out, uint16_t cap, const char *text)
+{
+  const char *start = NULL;
+  const char *end = NULL;
+  const char *p;
+
+  if (!out || cap == 0)
+    return;
+  out[0] = 0;
+  if (!text)
+    return;
+  for (p = text; *p;) {
+    const char *line = p;
+    const char *stop;
+    const char *q;
+
+    while (*p && *p != '\n')
+      p++;
+    stop = p;
+    while (stop > line && (stop[-1] == '\r' || stop[-1] == ' ' ||
+                           stop[-1] == '\t'))
+      stop--;
+    for (q = line; q < stop && (*q == ' ' || *q == '\t'); q++)
+      ;
+    if (q < stop) {
+      start = line;
+      end = stop;
+    }
+    if (*p == '\n')
+      p++;
+  }
+  if (start)
+    copy_bounded(out, cap, start, (uint16_t) (end - start));
+}

@@ -38,6 +38,19 @@ brackets, such as `(FMOUNT=...)`.
 
 Paths must not contain spaces.
 
+Insert and Eject need `FMOUNT`/`FUMOUNT` at those paths and the resident
+`fujinet-disk.device`. On a fresh system, run these commands from the
+package (the `NIO:` share on the Amiberry profiles):
+
+```text
+Copy NIO:fmount NIO:fumount SYS:C/
+Copy NIO:fujinet-disk.device DEVS:
+NIO:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+```
+
+If a command fails, its last output line is shown in the status bar, for
+example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
+
 ## Using the window
 
 - Click a page button, or press Tab / Shift-Tab, to change page.
@@ -47,6 +60,10 @@ Paths must not contain spaces.
 - The cursor keys move the selection. With Shift they move a page at a time;
   with Alt they jump to the top or bottom. Backspace goes to the parent
   drawer. Help shows About. Esc quits.
+- The `RO` box is ticked when the program starts. It is also ticked when
+  you select an empty catalogue slot or an empty drive, so mounting is
+  read-only by default. A mapped drive or a catalogue entry shows its
+  stored mode.
 - Remove, Clear and Eject ask for confirmation first.
 - **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
 

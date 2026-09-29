@@ -53,4 +53,14 @@ void test_format(void)
   CHECK_STR(buf, "abc");
   amiga_clip_head(buf, sizeof(buf), NULL, 10);
   CHECK_STR(buf, "");
+
+  amiga_last_line(buf, sizeof(buf),
+                  "FMOUNT INSPECT=ok\nCannot open fujinet-disk.device\n\n");
+  CHECK_STR(buf, "Cannot open fujinet-disk.device");
+  amiga_last_line(buf, sizeof(buf), "one line, no newline");
+  CHECK_STR(buf, "one line, no newline");
+  amiga_last_line(buf, sizeof(buf), "\r\n  \n");
+  CHECK_STR(buf, "");
+  amiga_last_line(buf, 6, "abcdefghij\n");
+  CHECK_STR(buf, "abcde");
 }

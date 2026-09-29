@@ -7,9 +7,12 @@ static amiga_ctl_t ctl;
 static char many_names[250][8];
 static fake_dir_entry_t many[250];
 
-static int no_exec(const char *command, void *ctx)
+static int no_exec(const char *command, char *output, uint16_t cap,
+                   void *ctx)
 {
   (void) command;
+  (void) output;
+  (void) cap;
   (void) ctx;
   return 20;
 }

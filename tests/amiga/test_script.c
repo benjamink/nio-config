@@ -15,8 +15,10 @@ static void out(const char *line, void *ctx)
   strcat(transcript, "\n");
 }
 
-static int ok_exec(const char *cmd, void *ctx)
+static int ok_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
 {
+  (void) output;
+  (void) cap;
   uint8_t map[17];
   unsigned slot;
   char label[8];

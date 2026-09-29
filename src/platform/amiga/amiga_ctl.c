@@ -414,6 +414,18 @@ int amiga_ctl_reload(amiga_ctl_t *ctl)
   return 1;
 }
 
+/* Reports a failed FMOUNT/FUMOUNT with the command's own last message. */
+static void command_failed(amiga_ctl_t *ctl, const char *tool,
+                           const char *label, int rc)
+{
+  if (ctl->cmd_out[0])
+    sprintf(ctl->msg, "%s failed for %s %.50s (rc %d)", tool, label,
+            ctl->cmd_out, rc);
+  else
+    sprintf(ctl->msg, "%s failed for %s (rc %d)", tool, label, rc);
+  status(ctl, ctl->msg);
+}
+
 int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
                            uint8_t readonly)
 {
@@ -440,13 +452,13 @@ int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
     status(ctl, "FMOUNT path is invalid");
     return 0;
   }
-  rc = ctl->exec(ctl->cmd, ctl->exec_ctx);
+  ctl->cmd_out[0] = 0;
+  rc = ctl->exec(ctl->cmd, ctl->cmd_out, sizeof(ctl->cmd_out), ctl->exec_ctx);
   if (!amiga_ctl_reload(ctl))
     return 0;
   if (rc != 0 || !config_nio_mapping_get(ctl->state, unit, &m) ||
       !m.valid || m.slot != slot) {
-    sprintf(ctl->msg, "FMOUNT failed for %s (rc %d)", label, rc);
-    status(ctl, ctl->msg);
+    command_failed(ctl, "FMOUNT", label, rc);
     return 0;
   }
   sprintf(ctl->msg, "Slot %u inserted in %s", (unsigned) slot, label);
@@ -475,12 +487,12 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit)
     status(ctl, "FUMOUNT path is invalid");
     return 0;
   }
-  rc = ctl->exec(ctl->cmd, ctl->exec_ctx);
+  ctl->cmd_out[0] = 0;
+  rc = ctl->exec(ctl->cmd, ctl->cmd_out, sizeof(ctl->cmd_out), ctl->exec_ctx);
   if (!amiga_ctl_reload(ctl))
     return 0;
   if (rc != 0 || !config_nio_mapping_get(ctl->state, unit, &m) || m.valid) {
-    sprintf(ctl->msg, "FUMOUNT failed for %s (rc %d)", label, rc);
-    status(ctl, ctl->msg);
+    command_failed(ctl, "FUMOUNT", label, rc);
     return 0;
   }
   sprintf(ctl->msg, "%s ejected", label);
@@ -503,4 +515,27 @@ const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit)
     ctl->drive_cached = (uint8_t) (ctl->drive_cached | (1u << unit));
   }
   return &ctl->drive_cat[unit];
+}
+
+void amiga_ctl_drive_editor(amiga_ctl_t *ctl, uint8_t unit, uint8_t *slot,
+                            uint8_t *readonly)
+{
+  config_nio_mapping_t m;
+
+  if (unit < AMIGA_DRIVE_COUNT &&
+      config_nio_mapping_get(ctl->state, unit, &m) && m.valid) {
+    *slot = m.slot;
+    *readonly = m.readonly;
+    return;
+  }
+  *readonly = 1;
+}
+
+uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot)
+{
+  const config_nio_slot_t *s = amiga_ctl_slot(ctl, slot);
+
+  if (!s || !s->enabled || !s->uri[0])
+    return 1;
+  return (uint8_t) (strcmp(s->mode, "r") == 0);
 }

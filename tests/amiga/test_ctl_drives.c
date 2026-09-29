@@ -9,10 +9,11 @@ static char last_cmd[AMIGA_CMD_MAX];
 static int exec_calls;
 static int exec_rc;
 static int exec_records;
+static const char *exec_output = "";
 
 /* Behaves like FMOUNT/FUMOUNT + fujinet-disk.device: a successful command
  * rewrites config-nio/mappings (version byte + 8 x {flags, slot}). */
-static int fake_exec(const char *cmd, void *ctx)
+static int fake_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
 {
   uint8_t map[17];
   const uint8_t *cur;
@@ -23,6 +24,8 @@ static int fake_exec(const char *cmd, void *ctx)
   int unit;
 
   (void) ctx;
+  strncpy(output, exec_output, cap - 1);
+  output[cap - 1] = 0;
   exec_calls++;
   strcpy(last_cmd, cmd);
   memset(map, 0, sizeof(map));
@@ -76,6 +79,13 @@ void test_ctl_drives(void)
   CHECK(!amiga_ctl_drive_insert(&ctl, 2, 12, 0));
   CHECK_STR(state.status, "FMOUNT failed for DN2: (rc 10)");
 
+  /* The command's last output line explains the failure, e.g. FMOUNT not
+   * installed where the FMOUNT option points. */
+  exec_output = "fmount: Unknown command";
+  CHECK(!amiga_ctl_drive_insert(&ctl, 2, 12, 0));
+  CHECK_STR(state.status, "FMOUNT failed for DN2: fmount: Unknown command (rc 10)");
+  exec_output = "";
+
   /* KS1.3 Execute() reports rc 0 even when FMOUNT failed: the missing
    * mapping must still be reported as a failure. */
   ctl.kick13 = 1;
@@ -114,6 +124,21 @@ void test_ctl_drives(void)
     ds = amiga_ctl_drive_slot(&ctl, 1);
     CHECK(ds && !strcmp(ds->uri, "tnfs://x/sixteen.adf"));
     CHECK(amiga_ctl_drive_slot(&ctl, 5) == NULL);   /* unmapped */
+  }
+
+  /* Editor defaults: mapped drives show their mapping, anything else
+   * defaults to read-only. */
+  {
+    uint8_t slot = 99, ro = 0;
+
+    amiga_ctl_drive_editor(&ctl, 1, &slot, &ro);   /* mapped: slot 16 RW */
+    CHECK(slot == 16 && ro == 0);
+    slot = 99;
+    ro = 0;
+    amiga_ctl_drive_editor(&ctl, 6, &slot, &ro);   /* unmapped */
+    CHECK(slot == 99 && ro == 1);
+    CHECK(amiga_ctl_catalogue_readonly(&ctl, 16) == 0);  /* RW entry */
+    CHECK(amiga_ctl_catalogue_readonly(&ctl, 200) == 1); /* empty slot */
   }
 
   amiga_ctl_set_tools(&ctl, "Work:My Tools/fmount", "SYS:C/fumount");

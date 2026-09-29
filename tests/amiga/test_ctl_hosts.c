@@ -5,9 +5,12 @@
 static config_nio_state_t state;
 static amiga_ctl_t ctl;
 
-static int no_exec(const char *command, void *ctx)
+static int no_exec(const char *command, char *output, uint16_t cap,
+                   void *ctx)
 {
   (void) command;
+  (void) output;
+  (void) cap;
   (void) ctx;
   return 20;
 }

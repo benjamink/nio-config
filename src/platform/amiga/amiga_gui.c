@@ -353,6 +353,7 @@ static void gui_make_gadgets(void)
 
   make_gadget(GID_RO, layout.ro, GADGHNONE, TOGGLESELECT | RELVERIFY,
               BOOLGADGET);
+  gad[GID_RO].Flags |= SELECTED;   /* mounting defaults to read-only */
 }
 
 static void attach(uint8_t id)
@@ -745,17 +746,27 @@ static void gui_sync_editors(void)
     sprintf(num, "%u", (unsigned) l->selected);
     set_string(GID_SLOT, num);
     set_string(GID_EDIT, slot && slot->enabled ? slot->uri : "");
-    set_ro(slot && slot->enabled && strcmp(slot->mode, "r") == 0);
+    set_ro(amiga_ctl_catalogue_readonly(gctl, (uint8_t) l->selected));
     break;
   }
   case AMIGA_PAGE_DRIVES: {
-    config_nio_mapping_t m;
+    uint8_t slot = 0;
+    uint8_t current = 0;
+    uint8_t ro = 1;
+    char *end;
+    long v = strtol((const char *) slot_buf, &end, 10);
+    int have_slot = slot_buf[0] && !*end && v >= 0 && v <= 255;
 
-    if (config_nio_mapping_get(s, (uint8_t) l->selected, &m) && m.valid) {
-      sprintf(num, "%u", (unsigned) m.slot);
+    if (have_slot)
+      current = (uint8_t) v;
+
+    slot = current;
+    amiga_ctl_drive_editor(gctl, (uint8_t) l->selected, &slot, &ro);
+    if (!have_slot || slot != current) {
+      sprintf(num, "%u", (unsigned) slot);
       set_string(GID_SLOT, num);
-      set_ro(m.readonly);
     }
+    set_ro(ro);
     break;
   }
   default:

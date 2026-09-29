@@ -16,8 +16,12 @@ typedef enum {
 #define AMIGA_CAT_SLOTS 256
 #define AMIGA_CMD_MAX 128
 
-/* Runs a Shell command (FMOUNT/FUMOUNT) and returns its return code. */
-typedef int (*amiga_exec_fn)(const char *command, void *ctx);
+#define AMIGA_CMD_OUT_MAX 80
+
+/* Runs a Shell command (FMOUNT/FUMOUNT) and returns its return code; the
+ * command's last non-empty output line is copied to `output`. */
+typedef int (*amiga_exec_fn)(const char *command, char *output, uint16_t cap,
+                             void *ctx);
 
 /* Controller shared by the Intuition front end and the SCRIPT= driver.
  * Every operation commits to the FujiNet at once and reports through
@@ -45,6 +49,7 @@ typedef struct {
   config_nio_slot_t drive_cat[8];
   char msg[CONFIG_NIO_STATUS_MAX + 1];
   char cmd[AMIGA_CMD_MAX];
+  char cmd_out[AMIGA_CMD_OUT_MAX];
 } amiga_ctl_t;
 
 void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
@@ -88,5 +93,12 @@ int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit);
 /* Catalogue record for a mapped drive (one read per drive until the next
  * reload or write); NULL when the drive is unmapped or the read failed. */
 const config_nio_slot_t *amiga_ctl_drive_slot(amiga_ctl_t *ctl, uint8_t unit);
+
+/* Editor defaults.  A mapped drive loads its slot and mode; otherwise the
+ * slot is left alone and mounting defaults to read-only. */
+void amiga_ctl_drive_editor(amiga_ctl_t *ctl, uint8_t unit, uint8_t *slot,
+                            uint8_t *readonly);
+/* RO flag to show for a catalogue slot: its stored mode, or 1 when empty. */
+uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot);
 
 #endif
