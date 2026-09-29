@@ -54,6 +54,8 @@ void test_script(void)
 
   CHECK(run("page drives") == AMIGA_SCRIPT_OK && ctl.page == AMIGA_PAGE_DRIVES);
   CHECK(run("page nope") == AMIGA_SCRIPT_ERR);
+  CHECK(run("page favorites") == AMIGA_SCRIPT_OK &&
+        ctl.page == AMIGA_PAGE_FAVORITES);
   CHECK(run("host add tnfs://example") == AMIGA_SCRIPT_OK);
   CHECK(run("dump hosts") == AMIGA_SCRIPT_OK);
   CHECK(run("slot set 12 tnfs://x/boot.adf RO") == AMIGA_SCRIPT_OK);
@@ -72,6 +74,7 @@ void test_script(void)
   CHECK_STR(transcript,
     "OK\n"
     "ERR Unknown page\n"
+    "OK\n"
     "OK\n"
     "HOST 0 sd0:/\n"
     "HOST 1 fujinet.diller.org\n"

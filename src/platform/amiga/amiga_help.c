@@ -8,6 +8,7 @@ static const char *const titles[AMIGA_HELP_TOPICS] = {
   "Hosts",
   "Browsing and mounting",
   "Drives and ejecting",
+  "Favorites",
   "Catalogue",
   "Settings",
   "Keyboard",
@@ -54,6 +55,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Double-click a drawer, or press Open, to enter it.\n"
   "- Parent, or Backspace, goes up one level.\n"
   "- Refresh reads the listing again.\n"
+  "- Favorite stars or un-stars the selected image.\n"
   "- Double-click a disk image, or select it and press Mount..., to mount "
   "it.\n"
   "\n"
@@ -71,6 +73,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "window on Workbench, as double-clicking its disk icon does (Workbench "
   "3.5 or later).\n"
   "- Eject unmounts the selected drive after asking.\n"
+  "- Favorite stars or un-stars the image in the selected drive.\n"
   "\n"
   "On Workbench 2.0 and later the drives are DN0: to DN7:. On Workbench 1.3 "
   "they are DN0: and DN1: (double density, FFS), HN0: and HN1: (high "
@@ -82,16 +85,32 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "or press Remount. The installer mounts them all again at every boot "
   "with FMOUNTRESTORE.",
 
+  "Favorites are the disk images you have starred, so you can mount them "
+  "again without browsing for them. They are kept on the FujiNet.\n"
+  "\n"
+  "- On the Browse page, select an image and press Favorite.\n"
+  "- On the Drives page, select a drive and press Favorite to star the "
+  "image in it.\n"
+  "- Press Favorite again to remove the star. Starred images show a * "
+  "before their name.\n"
+  "\n"
+  "On the Favorites page, double-click a favorite (or press Mount...) to "
+  "choose a drive for it, or press Remove to un-star it. Up to 24 "
+  "favorites are kept.",
+
   "Project > Catalogue... shows the FujiNet slot catalogue: numbered slots "
-  "0 to 255 that remember disk images. Mount fills these slots for you, "
-  "so you normally never need this page.\n"
+  "0 to 255 that FMOUNT mounts from. Mount fills these slots for you, so "
+  "you normally never need this page; it is there for FMOUNT slot numbers "
+  "in the Shell.\n"
   "\n"
   "- Selecting a slot copies it into the URI, Slot and RO fields.\n"
   "- Set stores the URI field in the slot number given.\n"
   "- Clear empties the selected slot after asking.\n"
   "- Mount... mounts the slot on a drive you choose.\n"
   "\n"
-  "Typing a number in Slot and pressing Return jumps to that slot.",
+  "Typing a number in Slot and pressing Return jumps to that slot. When "
+  "all 256 slots are used, Mount reports that the catalogue is full; "
+  "clear some slots here.",
 
   "The Settings menu changes how the Browse page shows files. Settings "
   "are saved on the FujiNet at once.\n"

@@ -72,6 +72,10 @@ enum {
   ACT_SLOT_MOUNT,
   ACT_DRIVE_EJECT,
   ACT_DRIVE_REMOUNT,
+  ACT_DRIVE_FAV,
+  ACT_BROWSE_FAV,
+  ACT_FAV_MOUNT,
+  ACT_FAV_REMOVE,
   ACT_MOUNT_COMMIT,
   ACT_MOUNT_CANCEL,
   ACT_HELP_CONTENTS,
@@ -85,13 +89,13 @@ typedef struct {
   uint8_t action;
 } gui_button_t;
 
-/* Catalogue is reached from the Project menu; the mount picker from
- * Browse/Catalogue.  Neither has a page button. */
+/* Catalogue is reached from the Project menu; the mount picker and help
+ * have no page button. */
 static const char *const tab_labels[AMIGA_TAB_COUNT] = {
-  "Hosts", "Browse", "Drives"
+  "Hosts", "Browse", "Favorites", "Drives"
 };
 static const uint8_t tab_pages[AMIGA_TAB_COUNT] = {
-  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_DRIVES
+  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_FAVORITES, AMIGA_PAGE_DRIVES
 };
 
 static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
@@ -100,11 +104,15 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { "Move Up", ACT_HOST_UP }, { "Move Down", ACT_HOST_DOWN } },
   { { "Open", ACT_BROWSE_OPEN }, { "Parent", ACT_BROWSE_PARENT },
     { "Refresh", ACT_BROWSE_REFRESH }, { "Mount...", ACT_BROWSE_MOUNT },
-    { NULL, ACT_NONE }, { NULL, ACT_NONE } },
+    { "Favorite", ACT_BROWSE_FAV }, { NULL, ACT_NONE } },
   { { "Set", ACT_SLOT_SET }, { "Clear", ACT_SLOT_CLEAR },
     { "Mount...", ACT_SLOT_MOUNT }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
+    { "Favorite", ACT_DRIVE_FAV }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE } },
+  /* AMIGA_PAGE_FAVORITES */
+  { { "Mount...", ACT_FAV_MOUNT }, { "Remove", ACT_FAV_REMOVE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
@@ -164,6 +172,7 @@ static amiga_help_line_t help_lines[HELP_LINES_MAX];
 static char row_text[ROW_TEXT_MAX + 1];
 static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
+static char row_uri[FNSVC_MAX_URI + 1];
 
 /* ---- Menus ------------------------------------------------------------ */
 
@@ -307,7 +316,7 @@ static int confirm(const char *message)
 
 static void about(void)
 {
-  (void) requester(win, "FujiNet Config\nHosts, catalogue and drives\n"
+  (void) requester(win, "FujiNet Config\nHosts, favorites and drives\n"
                    "for FujiNet NIO on the Amiga", NULL, "OK");
 }
 
@@ -509,6 +518,8 @@ static amiga_list_t *page_list(void)
     return &gctl->drives;
   case AMIGA_PAGE_HELP:
     return &gctl->help;
+  case AMIGA_PAGE_FAVORITES:
+    return &gctl->favorites;
   default:
     return &gctl->hosts;
   }
@@ -571,16 +582,38 @@ static void row_string(uint16_t idx, uint8_t cols)
     break;
   case AMIGA_PAGE_BROWSE: {
     config_nio_entry_t *e = &s->entries[idx];
-    uint8_t name_w = (uint8_t) (cols > 24 ? cols - 24 : 1);
+    uint8_t name_w = (uint8_t) (cols > 26 ? cols - 26 : 1);
+    int dir = (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
+    char star = ' ';
 
+    /* Starred images show a '*' before their name. */
+    if (!dir && config_nio_compose_uri(s->hosts[gctl->browse_host],
+                                       s->browse_path, e->name, row_uri,
+                                       sizeof(row_uri)) &&
+        amiga_ctl_fav_is(gctl, row_uri))
+      star = '*';
     amiga_clip_head(uri_text, sizeof(uri_text), e->name, name_w);
-    if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)
+    if (dir)
       strcpy(size_buf, "Drawer");
     else
       amiga_format_size(size_buf, e->size, s->prefs.size_format);
     (void) amiga_format_date(date_buf, e->mtime, s->prefs.date_format);
-    strcpy(tmp_text, padded(uri_text, name_w));
+    tmp_text[0] = star;
+    tmp_text[1] = ' ';
+    strcpy(tmp_text + 2, padded(uri_text, name_w));
     amiga_sprintf(tmp_text + strlen(tmp_text), " %13s %8s", size_buf, date_buf);
+    break;
+  }
+  case AMIGA_PAGE_FAVORITES: {
+    const char *fav = gctl->fav[idx];
+    const char *name = strrchr(fav, '/');
+
+    name = name && name[1] ? name + 1 : fav;
+    amiga_clip_head(uri_text, sizeof(uri_text), name, 24);
+    strcpy(tmp_text, padded(uri_text, 24));
+    amiga_clip_tail(uri_text, sizeof(uri_text), fav, (uint8_t) (cols - 26));
+    strcat(tmp_text, "  ");
+    strcat(tmp_text, uri_text);
     break;
   }
   case AMIGA_PAGE_CATALOGUE:
@@ -594,19 +627,18 @@ static void row_string(uint16_t idx, uint8_t cols)
 
     if (config_nio_mapping_get(s, (uint8_t) idx, &m) && m.valid) {
       const config_nio_slot_t *ds = amiga_ctl_drive_slot(gctl, (uint8_t) idx);
-
+      int saved = amiga_ctl_drive_state(gctl, (uint8_t) idx) ==
+                  AMIGA_DRIVE_SAVED;
       const char *name;
 
       uri = !ds ? "?" : (ds->enabled ? ds->uri : "");
       name = strrchr(uri, '/');
       name = name && name[1] ? name + 1 : uri;
-      int saved = amiga_ctl_drive_state(gctl, (uint8_t) idx) ==
-                  AMIGA_DRIVE_SAVED;
-
       amiga_clip_head(uri_text, sizeof(uri_text), name,
-                      (uint8_t) (cols - (saved ? 27 : 12)));
-      amiga_sprintf(tmp_text, "%-5s %s  %s%s", label, m.readonly ? "RO" : "RW",
-              uri_text, saved ? "  (not mounted)" : "");
+                      (uint8_t) (cols - (saved ? 28 : 13)));
+      amiga_sprintf(tmp_text, "%-5s %s %c%s%s", label, m.readonly ? "RO" : "RW",
+                    amiga_ctl_fav_is(gctl, uri) ? '*' : ' ', uri_text,
+                    saved ? "  (not mounted)" : "");
     } else {
       amiga_sprintf(tmp_text, "%-5s (empty)", label);
     }
@@ -672,16 +704,25 @@ static void gui_paint_info(void)
       strcpy(tmp_text, "Choose a host and press Browse");
     } else {
       /* host (<=255) + '/' + path (<=127) fits tmp_text, not uri_text. */
-      amiga_sprintf(tmp_text, "%s/%s", s->hosts[gctl->browse_host], s->browse_path);
+      const char *host = s->hosts[gctl->browse_host];
+      size_t hl = strlen(host);
+
+      /* "sd0:/" + "GAMES/" -> "sd0:/GAMES/", not "sd0://GAMES/". */
+      amiga_sprintf(tmp_text, "%s%s%s", host,
+                    hl && host[hl - 1] == '/' ? "" : "/", s->browse_path);
       amiga_clip_tail(uri_text, sizeof(uri_text), tmp_text, cols);
       strcpy(tmp_text, uri_text);
     }
     break;
   case AMIGA_PAGE_CATALOGUE:
-    strcpy(tmp_text, "Catalogue: Slot Mode Image");
+    strcpy(tmp_text, "Slot Mode Image");
     break;
   case AMIGA_PAGE_HELP:
     amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
+    break;
+  case AMIGA_PAGE_FAVORITES:
+    amiga_sprintf(tmp_text, "Favorites (%u of %u)", (unsigned) gctl->fav_count,
+                  (unsigned) AMIGA_FAV_MAX);
     break;
   case AMIGA_PAGE_MOUNT:
     amiga_clip_head(uri_text, sizeof(uri_text), gctl->mount_name,
@@ -942,6 +983,8 @@ static int gui_confirm_action(uint8_t action)
     amiga_sprintf(tmp_text, "Eject %s?",
             amiga_drive_label((uint8_t) gctl->drives.selected, gctl->kick13));
     return confirm(tmp_text);
+  case ACT_FAV_REMOVE:
+    return confirm("Remove this favorite?");
   case ACT_MOUNT_COMMIT:
     if (gctl->drives.selected == AMIGA_LIST_NONE ||
         !amiga_ctl_drive_mounted(gctl, (uint8_t) gctl->drives.selected))
@@ -1040,6 +1083,20 @@ static void gui_do_action(uint8_t action)
   case ACT_DRIVE_EJECT:
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
+    break;
+  case ACT_BROWSE_FAV:
+    (void) amiga_ctl_fav_toggle_browse(gctl);
+    break;
+  case ACT_DRIVE_FAV:
+    if (gctl->drives.selected != AMIGA_LIST_NONE)
+      (void) amiga_ctl_fav_toggle_drive(gctl, (uint8_t) gctl->drives.selected);
+    break;
+  case ACT_FAV_MOUNT:
+    if (amiga_ctl_mount_begin_favorite(gctl))
+      set_ro(1);
+    break;
+  case ACT_FAV_REMOVE:
+    (void) amiga_ctl_fav_remove(gctl);
     break;
   case ACT_DRIVE_REMOUNT:
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
@@ -1148,6 +1205,9 @@ static void gui_activate(void)
     break;
   case AMIGA_PAGE_MOUNT:
     gui_do_action(ACT_MOUNT_COMMIT);
+    break;
+  case AMIGA_PAGE_FAVORITES:
+    gui_do_action(ACT_FAV_MOUNT);
     break;
   case AMIGA_PAGE_DRIVES:
     /* A saved drive that is not mounted yet is mounted again first. */

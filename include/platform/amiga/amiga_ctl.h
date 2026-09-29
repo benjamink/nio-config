@@ -9,6 +9,7 @@ typedef enum {
   AMIGA_PAGE_BROWSE,
   AMIGA_PAGE_CATALOGUE,
   AMIGA_PAGE_DRIVES,
+  AMIGA_PAGE_FAVORITES,
   AMIGA_PAGE_MOUNT,   /* drive picker; entered only via mount_begin_* */
   AMIGA_PAGE_HELP,    /* built-in help; entered only via help_open */
   AMIGA_PAGE_COUNT
@@ -17,6 +18,7 @@ typedef enum {
 #define AMIGA_CAT_WINDOW 16
 #define AMIGA_CAT_SLOTS 256
 #define AMIGA_CMD_MAX 128
+#define AMIGA_FAV_MAX 24
 
 #define AMIGA_CMD_OUT_MAX 80
 
@@ -70,6 +72,11 @@ typedef struct {
   char mount_name[40];
   int16_t mount_slot;
   uint8_t mount_return;
+  /* Starred images (URIs), saved as config-nio/favorites.  Separate from
+   * the slot catalogue, which Mount fills as plumbing. */
+  char fav[AMIGA_FAV_MAX][CONFIG_NIO_URI_MAX + 1];
+  uint8_t fav_count;
+  amiga_list_t favorites;
   uint8_t help_topic;
   uint8_t help_return;
   amiga_list_t help;   /* help lines (topic text) or titles (Contents) */
@@ -137,6 +144,15 @@ int amiga_ctl_mount_begin_browse(amiga_ctl_t *ctl);
 int amiga_ctl_mount_begin_slot(amiga_ctl_t *ctl, uint8_t slot);
 int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly);
 void amiga_ctl_mount_cancel(amiga_ctl_t *ctl);
+
+/* Favorites: toggle the selected Browse file or a drive's image, remove the
+ * selected favorite, or mount it through the drive picker. */
+int amiga_ctl_fav_is(amiga_ctl_t *ctl, const char *uri);
+int amiga_ctl_fav_add(amiga_ctl_t *ctl, const char *uri);
+int amiga_ctl_fav_toggle_browse(amiga_ctl_t *ctl);
+int amiga_ctl_fav_toggle_drive(amiga_ctl_t *ctl, uint8_t unit);
+int amiga_ctl_fav_remove(amiga_ctl_t *ctl);
+int amiga_ctl_mount_begin_favorite(amiga_ctl_t *ctl);
 
 /* Help page: open a topic (remembering the page to return to), step to the
  * previous/next topic, and close. */

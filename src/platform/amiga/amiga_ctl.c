@@ -2,6 +2,7 @@
 #include "amiga_fmt.h"
 #include "amiga_drives.h"
 #include "amiga_help.h"
+#include "fujinet-nio.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +11,8 @@ static void status(amiga_ctl_t *ctl, const char *msg)
 {
   config_nio_set_status(ctl->state, msg);
 }
+
+static void fav_load(amiga_ctl_t *ctl);
 
 static void cat_invalidate(amiga_ctl_t *ctl)
 {
@@ -35,9 +38,11 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   amiga_list_init(&ctl->catalogue, rows);
   amiga_list_init(&ctl->drives, rows);
   amiga_list_init(&ctl->help, rows);
+  amiga_list_init(&ctl->favorites, rows);
   amiga_list_set_count(&ctl->hosts, state->host_count);
   amiga_list_set_count(&ctl->catalogue, AMIGA_CAT_SLOTS);
   amiga_list_set_count(&ctl->drives, AMIGA_DRIVE_COUNT);
+  fav_load(ctl);
 }
 
 void amiga_ctl_set_tools(amiga_ctl_t *ctl, const char *fmount,
@@ -54,6 +59,7 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
   amiga_list_set_rows(&ctl->catalogue, rows);
   amiga_list_set_rows(&ctl->drives, rows);
   amiga_list_set_rows(&ctl->help, rows);
+  amiga_list_set_rows(&ctl->favorites, rows);
 }
 
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
@@ -754,5 +760,207 @@ int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
     return 0;
   }
   strcpy(out, label);
+  return 1;
+}
+
+/* ---- Favorites ------------------------------------------------------------- */
+
+#define FAV_KEY "favorites"
+#define FAV_TEXT_MAX (AMIGA_FAV_MAX * (CONFIG_NIO_URI_MAX + 1) + 1)
+#define FAV_CHUNK 900
+
+static uint8_t fav_io_buf[1024];
+static fn_appstore_io_t fav_io = { fav_io_buf, sizeof(fav_io_buf) };
+static char fav_text[FAV_TEXT_MAX];
+
+static const char *uri_name(const char *uri)
+{
+  const char *name = strrchr(uri, '/');
+
+  return name && name[1] ? name + 1 : uri;
+}
+
+static void fav_load(amiga_ctl_t *ctl)
+{
+  fn_appstore_read_t rr;
+  uint16_t total = 0;
+  const char *p;
+
+  ctl->fav_count = 0;
+  do {
+    uint16_t want = (uint16_t) (sizeof(fav_text) - 1 - total);
+
+    if (want > FAV_CHUNK)
+      want = FAV_CHUNK;
+    if (want == 0 ||
+        fn_appstore_read(&fav_io, CONFIG_NIO_NS, FAV_KEY, total,
+                         (uint8_t *) fav_text + total, want, &rr) != FN_OK ||
+        !(rr.flags & FN_APPSTORE_READ_EXISTS))
+      break;
+    total = (uint16_t) (total + rr.bytes_read);
+  } while (!(rr.flags & FN_APPSTORE_READ_EOF) && rr.bytes_read);
+  fav_text[total] = 0;
+
+  for (p = fav_text; *p && ctl->fav_count < AMIGA_FAV_MAX;) {
+    const char *end = p;
+    uint16_t len;
+
+    while (*end && *end != '\n' && *end != '\r')
+      end++;
+    len = (uint16_t) (end - p);
+    if (len > 0 && len <= CONFIG_NIO_URI_MAX) {
+      memcpy(ctl->fav[ctl->fav_count], p, len);
+      ctl->fav[ctl->fav_count][len] = 0;
+      ctl->fav_count++;
+    }
+    while (*end == '\n' || *end == '\r')
+      end++;
+    p = end;
+  }
+  amiga_list_set_count(&ctl->favorites, ctl->fav_count);
+}
+
+static int fav_save(amiga_ctl_t *ctl)
+{
+  fn_appstore_write_t wr;
+  uint16_t len = 0;
+  uint16_t off = 0;
+  uint8_t i;
+
+  for (i = 0; i < ctl->fav_count; i++) {
+    uint16_t n = (uint16_t) strlen(ctl->fav[i]);
+
+    memcpy(fav_text + len, ctl->fav[i], n);
+    len = (uint16_t) (len + n);
+    fav_text[len++] = '\n';
+  }
+  fav_text[len] = 0;
+  amiga_list_set_count(&ctl->favorites, ctl->fav_count);
+  if (len == 0)
+    return fn_appstore_write(&fav_io, CONFIG_NIO_NS, FAV_KEY, 0,
+                             (const uint8_t *) "", 0, &wr) == FN_OK;
+  while (off < len) {
+    uint16_t chunk = (uint16_t) (len - off);
+
+    if (chunk > FAV_CHUNK)
+      chunk = FAV_CHUNK;
+    if (fn_appstore_write(&fav_io, CONFIG_NIO_NS, FAV_KEY, off,
+                          (const uint8_t *) fav_text + off, chunk,
+                          &wr) != FN_OK || wr.bytes_written != chunk) {
+      status(ctl, "Unable to save favorites");
+      return 0;
+    }
+    off = (uint16_t) (off + chunk);
+  }
+  return 1;
+}
+
+static int fav_index(amiga_ctl_t *ctl, const char *uri)
+{
+  uint8_t i;
+
+  for (i = 0; i < ctl->fav_count; i++) {
+    if (strcmp(ctl->fav[i], uri) == 0)
+      return i;
+  }
+  return -1;
+}
+
+int amiga_ctl_fav_is(amiga_ctl_t *ctl, const char *uri)
+{
+  return uri && fav_index(ctl, uri) >= 0;
+}
+
+int amiga_ctl_fav_add(amiga_ctl_t *ctl, const char *uri)
+{
+  if (!uri || !uri[0] || strlen(uri) > CONFIG_NIO_URI_MAX)
+    return 0;
+  if (fav_index(ctl, uri) < 0) {
+    if (ctl->fav_count >= AMIGA_FAV_MAX) {
+      status(ctl, "Favorites are full");
+      return 0;
+    }
+    strcpy(ctl->fav[ctl->fav_count++], uri);
+    if (!fav_save(ctl))
+      return 0;
+  }
+  amiga_sprintf(ctl->msg, "Added %.40s to Favorites", uri_name(uri));
+  status(ctl, ctl->msg);
+  return 1;
+}
+
+static int fav_remove_at(amiga_ctl_t *ctl, uint8_t index)
+{
+  static char name[CONFIG_NIO_URI_MAX + 1];
+  uint8_t i;
+
+  strcpy(name, uri_name(ctl->fav[index]));
+  for (i = index; (uint8_t) (i + 1) < ctl->fav_count; i++)
+    strcpy(ctl->fav[i], ctl->fav[i + 1]);
+  ctl->fav_count--;
+  if (!fav_save(ctl))
+    return 0;
+  amiga_sprintf(ctl->msg, "Removed %.40s from Favorites", name);
+  status(ctl, ctl->msg);
+  return 1;
+}
+
+static int fav_toggle(amiga_ctl_t *ctl, const char *uri)
+{
+  int index = fav_index(ctl, uri);
+
+  if (index >= 0)
+    return fav_remove_at(ctl, (uint8_t) index);
+  return amiga_ctl_fav_add(ctl, uri);
+}
+
+int amiga_ctl_fav_toggle_browse(amiga_ctl_t *ctl)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+
+  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)))
+    return 0;
+  return fav_toggle(ctl, uri);
+}
+
+int amiga_ctl_fav_toggle_drive(amiga_ctl_t *ctl, uint8_t unit)
+{
+  const config_nio_slot_t *slot;
+  const char *label = amiga_drive_label(unit, ctl->kick13);
+
+  if (amiga_ctl_drive_state(ctl, unit) == AMIGA_DRIVE_EMPTY) {
+    amiga_sprintf(ctl->msg, "%s is empty", label ? label : "Drive");
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  slot = amiga_ctl_drive_slot(ctl, unit);
+  if (!slot || !slot->enabled || !slot->uri[0]) {
+    status(ctl, "Unable to read the drive's image");
+    return 0;
+  }
+  return fav_toggle(ctl, slot->uri);
+}
+
+int amiga_ctl_fav_remove(amiga_ctl_t *ctl)
+{
+  if (ctl->favorites.selected == AMIGA_LIST_NONE ||
+      ctl->favorites.selected >= ctl->fav_count) {
+    status(ctl, "No favorite selected");
+    return 0;
+  }
+  return fav_remove_at(ctl, (uint8_t) ctl->favorites.selected);
+}
+
+int amiga_ctl_mount_begin_favorite(amiga_ctl_t *ctl)
+{
+  if (ctl->favorites.selected == AMIGA_LIST_NONE ||
+      ctl->favorites.selected >= ctl->fav_count) {
+    status(ctl, "No favorite selected");
+    return 0;
+  }
+  strcpy(ctl->mount_uri, ctl->fav[ctl->favorites.selected]);
+  ctl->mount_slot = -1;
+  set_mount_name(ctl, ctl->mount_uri);
+  enter_mount(ctl);
   return 1;
 }

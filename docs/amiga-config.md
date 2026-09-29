@@ -1,7 +1,7 @@
 # config-nio for the Amiga Workbench
 
 `config-nio` for the Amiga is a Workbench program. It configures FujiNet NIO
-hosts, the disk-image catalogue and the `DN0:`–`DN7:` drives. It runs on
+hosts, the disk images you mount and the `DN0:`–`DN7:` drives. It runs on
 Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 
 ## Feature map
@@ -10,7 +10,8 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
 | Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
-| Slots: page through 0–255, edit, clear | **Catalogue** (Project menu): all 256 slots; Set / Clear / Mount… |
+| Slots: page through 0–255, edit, clear | **Catalogue** (Project menu): all 256 slots that FMOUNT mounts from; Set / Clear / Mount… |
+| — | **Favorites** page: images you starred with the **Favorite** button on Browse or Drives; Mount… / Remove |
 | Drive map and "Mount + Exit" | **Drives** page: what is mounted where; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
 
@@ -53,11 +54,12 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 
 ## Using the window
 
-- Click a page button (Hosts / Browse / Drives), or press Tab / Shift-Tab,
-  to change page. **Project ▸ Catalogue…** shows the catalogue.
+- Click a page button (Hosts / Browse / Favorites / Drives), or press Tab /
+  Shift-Tab, to change page. **Project ▸ Catalogue…** shows the raw slot
+  catalogue.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
-  or edit a catalogue slot.
+  mount a favorite, or edit a catalogue slot.
 
 To mount an image:
 
@@ -70,7 +72,15 @@ To mount an image:
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
 config-nio puts the image in a catalogue slot for you. It reuses the slot
-that already holds that image, otherwise the first empty one.
+that already holds that image, otherwise the first empty one. When all 256
+slots are used, Mount reports that the catalogue is full; clear some slots
+from **Project ▸ Catalogue…**.
+
+To keep an image handy, press **Favorite** on the Browse page (selected
+file) or the Drives page (selected drive's image). Starred images show a `*`
+and appear on the **Favorites** page, where double-click or **Mount…** opens
+the drive list and **Remove** un-stars them. Up to 24 favorites are kept on
+the FujiNet (`config-nio/favorites`).
 
 - The cursor keys move the selection. With Shift they move a page at a time;
   with Alt they jump to the top or bottom. Backspace goes to the parent
@@ -100,13 +110,13 @@ failed, and 5 otherwise.
 
 | Command | Action |
 | --- | --- |
-| `page hosts\|browse\|catalogue\|drives` | Show a page |
+| `page hosts\|browse\|favorites\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
 | `browse`, `select NAME`, `enter`, `parent`, `assign SLOT ro\|rw` | Browse the selected host |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `dump hosts\|entries\|drives\|status`, `dump slot N` | Write state to the transcript |
+| `dump hosts\|entries\|drives\|favorites\|status`, `dump slot N` | Write state to the transcript |
 | `wait TICKS` | Pause (1/50 s) so the window can be inspected |
 | `quit` | Stop |
 

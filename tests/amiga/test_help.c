@@ -62,5 +62,7 @@ void test_help(void)
   }
   CHECK(amiga_help_title(AMIGA_HELP_TOPICS) == amiga_help_title(0));
   CHECK(amiga_help_find("Starting automatically") != 0);
+  CHECK(amiga_help_find("Favorites") != 0);
+  CHECK(amiga_help_find("Catalogue") != 0);
   CHECK(amiga_help_find("No such topic") == AMIGA_HELP_CONTENTS);
 }
