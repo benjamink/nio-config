@@ -382,3 +382,96 @@ int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot)
   status(ctl, ctl->msg);
   return 1;
 }
+
+int amiga_ctl_reload(amiga_ctl_t *ctl)
+{
+  static char path[CONFIG_NIO_PATH_MAX + 1];
+  config_nio_state_t *s = ctl->state;
+
+  strcpy(path, s->browse_path);
+  if (!config_nio_load(s)) {
+    status(ctl, "Unable to reload FujiNet state");
+    return 0;
+  }
+  strcpy(s->browse_path, path);
+  /* config_nio_load() clears the directory listing; Browse re-reads it. */
+  ctl->browse_open = 0;
+  amiga_list_set_count(&ctl->entries, 0);
+  amiga_list_set_count(&ctl->hosts, s->host_count);
+  ctl->cat_base = AMIGA_CAT_SLOTS;
+  return 1;
+}
+
+int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
+                           uint8_t readonly)
+{
+  const config_nio_slot_t *entry;
+  const char *label;
+  config_nio_mapping_t m;
+  int rc;
+
+  label = amiga_drive_label(unit, ctl->kick13);
+  if (!label) {
+    status(ctl, "No such drive");
+    return 0;
+  }
+  entry = amiga_ctl_slot(ctl, slot);
+  if (!entry)
+    return 0;
+  if (!entry->enabled || !entry->uri[0]) {
+    sprintf(ctl->msg, "Catalogue slot %u is empty", (unsigned) slot);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  if (!amiga_fmount_command(ctl->cmd, sizeof(ctl->cmd), ctl->fmount, slot,
+                            unit, ctl->kick13, readonly)) {
+    status(ctl, "FMOUNT path is invalid");
+    return 0;
+  }
+  rc = ctl->exec(ctl->cmd, ctl->exec_ctx);
+  if (!amiga_ctl_reload(ctl))
+    return 0;
+  if (rc != 0 || !config_nio_mapping_get(ctl->state, unit, &m) ||
+      !m.valid || m.slot != slot) {
+    sprintf(ctl->msg, "FMOUNT failed for %s (rc %d)", label, rc);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  sprintf(ctl->msg, "Slot %u inserted in %s", (unsigned) slot, label);
+  status(ctl, ctl->msg);
+  return 1;
+}
+
+int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit)
+{
+  const char *label;
+  config_nio_mapping_t m;
+  int rc;
+
+  label = amiga_drive_label(unit, ctl->kick13);
+  if (!label) {
+    status(ctl, "No such drive");
+    return 0;
+  }
+  if (!config_nio_mapping_get(ctl->state, unit, &m) || !m.valid) {
+    sprintf(ctl->msg, "%s is empty", label);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  if (!amiga_fumount_command(ctl->cmd, sizeof(ctl->cmd), ctl->fumount, unit,
+                             ctl->kick13)) {
+    status(ctl, "FUMOUNT path is invalid");
+    return 0;
+  }
+  rc = ctl->exec(ctl->cmd, ctl->exec_ctx);
+  if (!amiga_ctl_reload(ctl))
+    return 0;
+  if (rc != 0 || !config_nio_mapping_get(ctl->state, unit, &m) || m.valid) {
+    sprintf(ctl->msg, "FUMOUNT failed for %s (rc %d)", label, rc);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  sprintf(ctl->msg, "%s ejected", label);
+  status(ctl, ctl->msg);
+  return 1;
+}

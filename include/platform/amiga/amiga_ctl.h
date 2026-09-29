@@ -73,4 +73,12 @@ int amiga_ctl_slot_set(amiga_ctl_t *ctl, uint8_t slot, const char *uri,
                        uint8_t readonly);
 int amiga_ctl_slot_clear(amiga_ctl_t *ctl, uint8_t slot);
 
+/* Drives are mounted by the FMOUNT/FUMOUNT commands, which own the DOS
+ * node lifecycle and persist config-nio/mappings.  Success is judged by the
+ * reloaded mapping, not only by the command's return code. */
+int amiga_ctl_reload(amiga_ctl_t *ctl);
+int amiga_ctl_drive_insert(amiga_ctl_t *ctl, uint8_t unit, uint8_t slot,
+                           uint8_t readonly);
+int amiga_ctl_drive_eject(amiga_ctl_t *ctl, uint8_t unit);
+
 #endif
