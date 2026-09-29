@@ -38,6 +38,8 @@ else ifeq ($(COMPILER_FAMILY),cc65)
 include makefiles/compiler-cc65.mk
 else ifeq ($(COMPILER_FAMILY),gcc)
 include makefiles/compiler-gcc.mk
+else ifeq ($(COMPILER_FAMILY),amigagcc)
+include makefiles/compiler-amigagcc.mk
 else
 $(error Unknown compiler family '$(COMPILER_FAMILY)' for TARGET=$(TARGET))
 endif
@@ -65,6 +67,19 @@ CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /s
 # Makefile; never link it into the main config-nio application.
 CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /splash/,$(src)),,$(src)))
 CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /splash/,$(src)),,$(src)))
+# Amiga has its own main() and Intuition front end.  It links only the
+# portable state/store/table/service layers, not the text UI loops, plus the
+# platform-neutral app-store fnctl used by Linux.
+CONFIG_NIO_EXTRA_SRCS_amiga := \
+	$(SRC_DIR)/platform/portable/config_nio_state.c \
+	$(SRC_DIR)/platform/portable/config_nio_store.c \
+	$(SRC_DIR)/platform/portable/config_nio_tables.c \
+	$(SRC_DIR)/platform/portable/fnsvc.c \
+	$(SRC_DIR)/platform/linux/fnctl.c
+CONFIG_NIO_SRCS += $(CONFIG_NIO_EXTRA_SRCS_$(TARGET))
+ifeq ($(TARGET),amiga)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
+endif
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
 # shares the same BBC state API; its XRAM table selection does not change this
 # wrapper's interface or storage requirements.
