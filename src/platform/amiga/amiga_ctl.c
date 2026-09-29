@@ -153,3 +153,182 @@ int amiga_ctl_set_prefs(amiga_ctl_t *ctl, uint8_t date_format,
   status(ctl, "Settings saved");
   return 1;
 }
+
+static void list_cb(uint8_t is_dir, const char *name, uint32_t size,
+                    uint32_t mtime, void *ctx)
+{
+  config_nio_state_t *s = (config_nio_state_t *) ctx;
+  config_nio_entry_t *entry;
+  uint16_t n;
+
+  s->entry_total++;
+  if (s->entry_count >= CONFIG_NIO_MAX_ENTRIES) {
+    s->entries_truncated = 1;
+    return;
+  }
+  entry = &s->entries[s->entry_count++];
+  entry->is_dir = is_dir;
+  entry->size = size;
+  entry->mtime = mtime;
+  n = (uint16_t) strlen(name);
+  if (n > CONFIG_NIO_NAME_MAX)
+    n = CONFIG_NIO_NAME_MAX;
+  memcpy(entry->name, name, n);
+  entry->name[n] = 0;
+}
+
+int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+  config_nio_state_t *s = ctl->state;
+
+  s->entry_count = 0;
+  s->entry_total = 0;
+  s->entries_truncated = 0;
+  ctl->browse_open = 1;
+  amiga_list_set_count(&ctl->entries, 0);
+  if (ctl->browse_host >= s->host_count ||
+      !config_nio_compose_uri(s->hosts[ctl->browse_host], s->browse_path, "",
+                              uri, sizeof(uri))) {
+    status(ctl, "Path is too long");
+    return 0;
+  }
+  if (!fnsvc_list_directory(uri, list_cb, s)) {
+    s->entry_count = 0;
+    sprintf(ctl->msg, "Browse failed: error %u status %u",
+            (unsigned) fnsvc_last_error(), (unsigned) fnsvc_last_status());
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  amiga_list_set_count(&ctl->entries, s->entry_count);
+  amiga_list_select(&ctl->entries, 0);
+  if (s->entries_truncated) {
+    sprintf(ctl->msg, "Showing %u of %u entries",
+            (unsigned) s->entry_count, (unsigned) s->entry_total);
+    status(ctl, ctl->msg);
+  } else {
+    status(ctl, "Entries loaded");
+  }
+  return 1;
+}
+
+int amiga_ctl_browse_open(amiga_ctl_t *ctl)
+{
+  uint8_t idx;
+
+  if (!selected_host(ctl, &idx))
+    return 0;
+  ctl->browse_host = idx;
+  ctl->state->browse_path[0] = 0;
+  ctl->page = AMIGA_PAGE_BROWSE;
+  return amiga_ctl_browse_refresh(ctl);
+}
+
+static config_nio_entry_t *selected_entry(amiga_ctl_t *ctl)
+{
+  if (ctl->entries.selected == AMIGA_LIST_NONE ||
+      ctl->entries.selected >= ctl->state->entry_count) {
+    status(ctl, "Nothing selected");
+    return NULL;
+  }
+  return &ctl->state->entries[ctl->entries.selected];
+}
+
+int amiga_ctl_browse_activate(amiga_ctl_t *ctl)
+{
+  config_nio_state_t *s = ctl->state;
+  config_nio_entry_t *e;
+  uint16_t len;
+  uint16_t nlen;
+
+  e = selected_entry(ctl);
+  if (!e)
+    return 0;
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
+    status(ctl, "Name too long for this client");
+    return 0;
+  }
+  if (!(e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)) {
+    status(ctl, "Choose a slot and press Assign");
+    return 0;
+  }
+  len = (uint16_t) strlen(s->browse_path);
+  nlen = (uint16_t) strlen(e->name);
+  if ((uint16_t) (len + nlen + 2) > CONFIG_NIO_PATH_MAX) {
+    status(ctl, "Path is too long");
+    return 0;
+  }
+  memcpy(&s->browse_path[len], e->name, nlen);
+  s->browse_path[len + nlen] = '/';
+  s->browse_path[len + nlen + 1] = 0;
+  return amiga_ctl_browse_refresh(ctl);
+}
+
+int amiga_ctl_browse_parent(amiga_ctl_t *ctl)
+{
+  char *path = ctl->state->browse_path;
+  uint16_t len;
+
+  len = (uint16_t) strlen(path);
+  if (len == 0) {
+    status(ctl, "Already at the top");
+    return 0;
+  }
+  while (len > 0 && path[len - 1] == '/')
+    path[--len] = 0;
+  while (len > 0 && path[len - 1] != '/')
+    path[--len] = 0;
+  return amiga_ctl_browse_refresh(ctl);
+}
+
+int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name)
+{
+  uint8_t i;
+
+  for (i = 0; i < ctl->state->entry_count; i++) {
+    if (!strcmp(ctl->state->entries[i].name, name)) {
+      amiga_list_select(&ctl->entries, i);
+      return 1;
+    }
+  }
+  status(ctl, "No such entry");
+  return 0;
+}
+
+int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap)
+{
+  config_nio_entry_t *e = selected_entry(ctl);
+
+  if (!e)
+    return 0;
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
+    status(ctl, "Name too long for this client");
+    return 0;
+  }
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) {
+    status(ctl, "Pick a file, not a drawer");
+    return 0;
+  }
+  if (!config_nio_compose_uri(ctl->state->hosts[ctl->browse_host],
+                              ctl->state->browse_path, e->name, out, cap)) {
+    status(ctl, "URI is too long");
+    return 0;
+  }
+  return 1;
+}
+
+int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+
+  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)))
+    return 0;
+  if (!config_nio_write_slot(ctl->state, slot, uri, readonly ? "r" : "rw")) {
+    status(ctl, "Unable to save slot");
+    return 0;
+  }
+  ctl->cat_base = AMIGA_CAT_SLOTS;
+  sprintf(ctl->msg, "Assigned to slot %u", (unsigned) slot);
+  status(ctl, ctl->msg);
+  return 1;
+}

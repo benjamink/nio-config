@@ -57,4 +57,13 @@ int amiga_ctl_host_move(amiga_ctl_t *ctl, int8_t delta);
 int amiga_ctl_set_prefs(amiga_ctl_t *ctl, uint8_t date_format,
                         uint8_t size_format);
 
+int amiga_ctl_browse_open(amiga_ctl_t *ctl);
+int amiga_ctl_browse_refresh(amiga_ctl_t *ctl);
+int amiga_ctl_browse_activate(amiga_ctl_t *ctl);
+int amiga_ctl_browse_parent(amiga_ctl_t *ctl);
+int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name);
+int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap);
+int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
+                            uint8_t readonly);
+
 #endif
