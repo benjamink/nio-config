@@ -111,6 +111,10 @@ uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot);
  * Commit finds the catalogue slot already holding the image, else the
  * first free one, writes the RO choice to it and runs FMOUNT. */
 int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit);
+/* The DOS name to open in a Workbench window (e.g. "DN0:"), or 0 with a
+ * status message when the drive is empty. */
+int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
+                                uint16_t cap);
 uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl);
 int amiga_ctl_mount_begin_browse(amiga_ctl_t *ctl);
 int amiga_ctl_mount_begin_slot(amiga_ctl_t *ctl, uint8_t slot);

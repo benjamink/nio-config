@@ -94,6 +94,20 @@ void test_ctl_mount(void)
   CHECK(amiga_ctl_drive_mounted(&ctl, 0));
   CHECK(amiga_ctl_first_empty_drive(&ctl) == 1);
 
+  /* Double-clicking a drive opens it like its Workbench icon: by name. */
+  {
+    char name[8];
+
+    CHECK(amiga_ctl_drive_window_name(&ctl, 0, name, sizeof(name)));
+    CHECK_STR(name, "DN0:");
+    CHECK(!amiga_ctl_drive_window_name(&ctl, 5, name, sizeof(name)));
+    CHECK_STR(state.status, "DN5: is empty");
+    ctl.kick13 = 1;
+    CHECK(amiga_ctl_drive_window_name(&ctl, 0, name, sizeof(name)));
+    CHECK_STR(name, "DN0:");
+    ctl.kick13 = 0;
+  }
+
   /* A new image takes the first free slot and may replace a mount. */
   open_root();
   CHECK(amiga_ctl_browse_select_name(&ctl, "new.adf"));

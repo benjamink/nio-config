@@ -685,3 +685,21 @@ void amiga_ctl_help_close(amiga_ctl_t *ctl)
     status(ctl, "Ready");
   }
 }
+
+int amiga_ctl_drive_window_name(amiga_ctl_t *ctl, uint8_t unit, char *out,
+                                uint16_t cap)
+{
+  const char *label = amiga_drive_label(unit, ctl->kick13);
+
+  if (!label || cap <= strlen(label)) {
+    status(ctl, "No such drive");
+    return 0;
+  }
+  if (!amiga_ctl_drive_mounted(ctl, unit)) {
+    sprintf(ctl->msg, "%s is empty", label);
+    status(ctl, ctl->msg);
+    return 0;
+  }
+  strcpy(out, label);
+  return 1;
+}

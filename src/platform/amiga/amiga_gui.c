@@ -26,12 +26,18 @@
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
+#ifndef __KICK13__
+#include <proto/wb.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern struct IntuitionBase *IntuitionBase;
+#ifndef __KICK13__
+struct Library *WorkbenchBase;
+#endif
 
 #define FONT_W 8
 #define FONT_H 8
@@ -1030,6 +1036,34 @@ static void gui_do_action(uint8_t action)
   gui_after_action(old_page);
 }
 
+/* Opens a mounted drive the way double-clicking its disk icon does.  Only
+ * workbench.library V44 (Workbench 3.5) and later can be asked to. */
+static void gui_open_drive_window(void)
+{
+  char name[8];
+
+  if (gctl->drives.selected == AMIGA_LIST_NONE ||
+      !amiga_ctl_drive_window_name(gctl, (uint8_t) gctl->drives.selected,
+                                   name, sizeof(name))) {
+    gui_paint_status();
+    return;
+  }
+  strcpy(tmp_text, "Opening drive windows needs Workbench 3.5 or later");
+#ifndef __KICK13__
+  WorkbenchBase = OpenLibrary((CONST_STRPTR) "workbench.library", 44);
+  if (WorkbenchBase) {
+    if (OpenWorkbenchObjectA((CONST_STRPTR) name, NULL))
+      sprintf(tmp_text, "Opened %s on Workbench", name);
+    else
+      sprintf(tmp_text, "Workbench could not open %s", name);
+    CloseLibrary(WorkbenchBase);
+    WorkbenchBase = NULL;
+  }
+#endif
+  config_nio_set_status(gctl->state, tmp_text);
+  gui_paint_status();
+}
+
 static void gui_open_help(uint8_t topic)
 {
   uint8_t old_page = gctl->page;
@@ -1067,6 +1101,9 @@ static void gui_activate(void)
     break;
   case AMIGA_PAGE_MOUNT:
     gui_do_action(ACT_MOUNT_COMMIT);
+    break;
+  case AMIGA_PAGE_DRIVES:
+    gui_open_drive_window();
     break;
   default:
     break;
