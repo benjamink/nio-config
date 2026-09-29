@@ -1,10 +1,12 @@
 # Running nio-config tests
 
-The repository currently has two practical test layers:
+The repository currently has three practical test layers:
 
 * target builds, which catch C/ASM, linker, and memory-limit regressions;
 * BBC Beebium integration tests, which exercise `CONFNIO` through the BBC UI,
-  fn-rom, and a real fujinet-nio PTY process.
+  fn-rom, and a real fujinet-nio PTY process;
+* Amiga host tests, which exercise the Amiga controller and helpers with gcc
+  against an in-memory fake of the fujinet-nio calls.
 
 The commands below assume the normal workspace layout:
 
@@ -142,3 +144,23 @@ to separate a nio-config failure from a fujinet-nio dependency/build failure:
 cd ../fujinet-nio
 cmake --build build/fujibus-pty-debug
 ```
+
+## Amiga tests
+
+Host tests (needs only gcc and the `fujinet-nio-lib` headers):
+
+```sh
+make test-amiga-host
+make test-amiga-host ONLY=ctl_drives
+```
+
+Target builds (needs `m68k-amigaos-gcc` and `make -C ../fujinet-nio-lib amiga`):
+
+```sh
+make amiga AMIGA_PROFILE=wb32
+make amiga AMIGA_PROFILE=wb13
+```
+
+The guest acceptance scripts in `tests/amiga/guest/` are run by the workspace
+Amiberry suite (`integration-tests/amiberry/test_config_nio.py`); see
+[docs/amiga-config.md](docs/amiga-config.md).

@@ -2,7 +2,7 @@ TARGETS := msdos bbc master linux
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
 .PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk \
-	splash-bbc splash-bbc-disk test-amiga-host amiga $(TARGETS)
+	splash-bbc splash-bbc-disk test-amiga-host amiga regen-amiga-icons $(TARGETS)
 
 all: $(DEFAULT_TARGET)
 
@@ -45,3 +45,8 @@ amiga:
 	$(MAKE) -f makefiles/build.mk TARGET=amiga \
 		TARGET_BUILD_DIR=build/amiga/$(AMIGA_PROFILE) \
 		AMIGA_CRT=$(AMIGA_CRT_$(AMIGA_PROFILE))
+
+# Regenerate the checked-in Workbench icon (needs Python; Pillow for preview).
+regen-amiga-icons:
+	mkdir -p build
+	cd amiga && python3 tools/mkinfo.py --preview ../build/amiga-icon-preview.png
