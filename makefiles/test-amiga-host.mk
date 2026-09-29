@@ -20,7 +20,8 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_theme.c \
 	src/platform/amiga/amiga_input.c \
 	src/platform/amiga/amiga_layout.c \
-	src/platform/amiga/amiga_ctl.c
+	src/platform/amiga/amiga_ctl.c \
+	src/platform/amiga/amiga_script.c
 PORTABLE_HOST_SRCS := \
 	src/platform/portable/config_nio_state.c \
 	src/platform/portable/config_nio_store.c \
