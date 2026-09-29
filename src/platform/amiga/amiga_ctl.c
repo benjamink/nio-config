@@ -680,6 +680,8 @@ void amiga_ctl_help_step(amiga_ctl_t *ctl, int8_t delta)
 
 void amiga_ctl_help_close(amiga_ctl_t *ctl)
 {
-  if (ctl->page == AMIGA_PAGE_HELP)
+  if (ctl->page == AMIGA_PAGE_HELP) {
     ctl->page = ctl->help_return;
+    status(ctl, "Ready");
+  }
 }

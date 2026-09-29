@@ -40,8 +40,10 @@ void test_ctl_help(void)
   amiga_ctl_help_open(&ctl, 200);
   CHECK(ctl.help_topic == AMIGA_HELP_CONTENTS);
 
+  config_nio_set_status(&state, "Topic 3 of 11");
   amiga_ctl_help_close(&ctl);
   CHECK(ctl.page == AMIGA_PAGE_DRIVES);
+  CHECK_STR(state.status, "Ready");   /* help's own status is cleared */
 
   /* Help is only entered through help_open. */
   amiga_ctl_set_page(&ctl, AMIGA_PAGE_HELP);

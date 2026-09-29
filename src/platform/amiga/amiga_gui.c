@@ -403,6 +403,10 @@ static void detach(uint8_t id)
 
 static int page_has(uint8_t id)
 {
+  /* Help replaces the page buttons with a heading, so no page looks
+   * selected while it is showing. */
+  if (id < GID_TAB0 + AMIGA_TAB_COUNT)
+    return gctl->page != AMIGA_PAGE_HELP;
   switch (id) {
   case GID_EDIT:
     return gctl->page == AMIGA_PAGE_HOSTS ||
@@ -742,6 +746,16 @@ static void gui_paint_tabs(void)
 {
   uint8_t tab = current_tab();
   uint8_t i;
+
+  if (gctl->page == AMIGA_PAGE_HELP) {
+    amiga_rect_t row = layout.tab[0];
+
+    row.width = (int16_t) (layout.tab[AMIGA_TAB_COUNT - 1].left +
+                           layout.tab[AMIGA_TAB_COUNT - 1].width - row.left);
+    fill(&row, theme.background);
+    text_centred(&row, "FujiNet Config Help", theme.highlight);
+    return;
+  }
 
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
     int selected = i == tab;
