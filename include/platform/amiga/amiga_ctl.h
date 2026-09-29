@@ -11,6 +11,7 @@ typedef enum {
   AMIGA_PAGE_DRIVES,
   AMIGA_PAGE_MOUNT,   /* drive picker; entered only via mount_begin_* */
   AMIGA_PAGE_HELP,    /* built-in help; entered only via help_open */
+  AMIGA_PAGE_ADD,     /* Browse > Add to Slot prompt; via add_begin */
   AMIGA_PAGE_COUNT
 } amiga_page_t;
 
@@ -70,6 +71,7 @@ typedef struct {
   char mount_uri[CONFIG_NIO_URI_MAX + 1];
   char mount_name[40];
   int16_t mount_slot;
+  int16_t add_slot;      /* suggested slot for the Add prompt, or -1 */
   uint8_t mount_return;
   /* Occupied catalogue slots, as FIN/FOUT/FMOUNT number them (the
    * Catalogue tab's rows). */
@@ -108,6 +110,14 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
 /* Browse > Add to Slot (FIN image): reuses the image's slot, else the
  * first empty one. */
 int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly);
+
+/* The Add to Slot prompt: begin suggests add_slot (the image's slot, else
+ * the first empty one, -1 when full); replaces says the slot holds a
+ * different image; commit writes and returns to Browse. */
+int amiga_ctl_add_begin(amiga_ctl_t *ctl);
+int amiga_ctl_add_replaces(amiga_ctl_t *ctl, uint8_t slot);
+int amiga_ctl_add_commit(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly);
+void amiga_ctl_add_cancel(amiga_ctl_t *ctl);
 
 /* Catalogue rows are read in aligned windows of AMIGA_CAT_WINDOW slots and
  * cached until the next write.  NULL means the read failed (see status). */

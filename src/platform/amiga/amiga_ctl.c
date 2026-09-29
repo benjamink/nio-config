@@ -62,7 +62,8 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
 {
   if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT &&
-      page != AMIGA_PAGE_HELP)
+      page != AMIGA_PAGE_HELP && page != AMIGA_PAGE_ADD &&
+      ctl->page != AMIGA_PAGE_ADD)
     ctl->page = page;
 }
 
@@ -350,22 +351,15 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
 
 static int find_slot(amiga_ctl_t *ctl, const char *uri, uint8_t *slot);
 
-/* FIN without a slot number: the slot already holding the image, else the
- * first empty one. */
-int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly)
+/* Writes `uri` to `slot` for Add to Slot, or reports it is already there. */
+static int add_write(amiga_ctl_t *ctl, const char *uri, uint8_t slot,
+                     uint8_t readonly)
 {
-  static char uri[FNSVC_MAX_URI + 1];
-  const config_nio_slot_t *s;
-  const char *name;
+  const config_nio_slot_t *s = amiga_ctl_slot(ctl, slot);
+  const char *name = strrchr(uri, '/');
   const char *mode = readonly ? "RO" : "RW";
-  uint8_t slot;
 
-  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)) ||
-      !find_slot(ctl, uri, &slot))
-    return 0;
-  name = strrchr(uri, '/');
   name = name && name[1] ? name + 1 : uri;
-  s = amiga_ctl_slot(ctl, slot);
   if (s && s->enabled && strcmp(s->uri, uri) == 0 &&
       (strcmp(s->mode, "r") == 0) == (readonly != 0)) {
     amiga_sprintf(ctl->msg, "%.40s is already in slot %u (%s)", name,
@@ -382,6 +376,63 @@ int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly)
                 mode);
   status(ctl, ctl->msg);
   return 1;
+}
+
+/* FIN without a slot number: the slot already holding the image, else the
+ * first empty one. */
+int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+  uint8_t slot;
+
+  if (!amiga_ctl_browse_uri(ctl, uri, sizeof(uri)) ||
+      !find_slot(ctl, uri, &slot))
+    return 0;
+  return add_write(ctl, uri, slot, readonly);
+}
+
+static void set_mount_name(amiga_ctl_t *ctl, const char *uri);
+
+int amiga_ctl_add_begin(amiga_ctl_t *ctl)
+{
+  uint8_t slot;
+
+  if (!amiga_ctl_browse_uri(ctl, ctl->mount_uri, sizeof(ctl->mount_uri)))
+    return 0;
+  set_mount_name(ctl, ctl->mount_uri);
+  ctl->mount_return = ctl->page;
+  ctl->page = AMIGA_PAGE_ADD;
+  if (find_slot(ctl, ctl->mount_uri, &slot)) {
+    ctl->add_slot = slot;
+    amiga_sprintf(ctl->msg, "Choose a slot for %s", ctl->mount_name);
+    status(ctl, ctl->msg);
+  } else {
+    ctl->add_slot = -1;
+    status(ctl, "Catalogue is full: type a slot to replace");
+  }
+  return 1;
+}
+
+int amiga_ctl_add_replaces(amiga_ctl_t *ctl, uint8_t slot)
+{
+  const config_nio_slot_t *s = amiga_ctl_slot(ctl, slot);
+
+  return s && s->enabled && s->uri[0] && strcmp(s->uri, ctl->mount_uri) != 0;
+}
+
+int amiga_ctl_add_commit(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
+{
+  if (!add_write(ctl, ctl->mount_uri, slot, readonly))
+    return 0;
+  ctl->page = ctl->mount_return;
+  return 1;
+}
+
+void amiga_ctl_add_cancel(amiga_ctl_t *ctl)
+{
+  if (ctl->page == AMIGA_PAGE_ADD)
+    ctl->page = ctl->mount_return;
+  status(ctl, "Add cancelled");
 }
 
 const config_nio_slot_t *amiga_ctl_slot(amiga_ctl_t *ctl, uint8_t slot)
