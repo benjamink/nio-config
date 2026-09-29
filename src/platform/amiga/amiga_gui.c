@@ -949,6 +949,8 @@ static int gui_confirm_action(uint8_t action)
   }
 }
 
+static int gui_touch_drive(const char *name);
+
 static void gui_do_action(uint8_t action)
 {
   uint8_t old_page = gctl->page;
@@ -1006,9 +1008,13 @@ static void gui_do_action(uint8_t action)
       set_ro(1);
     break;
   case ACT_MOUNT_COMMIT:
-    if (gctl->drives.selected != AMIGA_LIST_NONE)
-      (void) amiga_ctl_mount_commit(gctl, (uint8_t) gctl->drives.selected,
-                                    (uint8_t) read_ro());
+    if (gctl->drives.selected != AMIGA_LIST_NONE) {
+      uint8_t unit = (uint8_t) gctl->drives.selected;
+
+      /* Touch the drive so its disk icon appears, like a floppy. */
+      if (amiga_ctl_mount_commit(gctl, unit, (uint8_t) read_ro()))
+        (void) gui_touch_drive(amiga_drive_label(unit, gctl->kick13));
+    }
     break;
   case ACT_MOUNT_CANCEL:
     amiga_ctl_mount_cancel(gctl);
@@ -1036,6 +1042,19 @@ static void gui_do_action(uint8_t action)
   gui_after_action(old_page);
 }
 
+/* A freshly mounted drive's filesystem only starts when something uses
+ * the drive; until then Workbench has no volume or disk icon for it.
+ * Locking the root starts it, as inserting a floppy would. */
+static int gui_touch_drive(const char *name)
+{
+  BPTR lock = Lock((CONST_STRPTR) name, SHARED_LOCK);
+
+  if (!lock)
+    return 0;
+  UnLock(lock);
+  return 1;
+}
+
 /* Opens a mounted drive the way double-clicking its disk icon does.  Only
  * workbench.library V44 (Workbench 3.5) and later can be asked to. */
 static void gui_open_drive_window(void)
@@ -1052,7 +1071,21 @@ static void gui_open_drive_window(void)
 #ifndef __KICK13__
   WorkbenchBase = OpenLibrary((CONST_STRPTR) "workbench.library", 44);
   if (WorkbenchBase) {
-    if (OpenWorkbenchObjectA((CONST_STRPTR) name, NULL))
+    int tries;
+    int opened = 0;
+
+    busy_begin();
+    if (gui_touch_drive(name)) {
+      /* Workbench notices a newly started volume on its own schedule
+       * (measured at over 2 seconds on WB3.2); wait up to 10 seconds. */
+      for (tries = 0; tries < 50 && !opened; tries++) {
+        opened = OpenWorkbenchObjectA((CONST_STRPTR) name, NULL) != 0;
+        if (!opened)
+          Delay(10);
+      }
+    }
+    busy_end();
+    if (opened)
       sprintf(tmp_text, "Opened %s on Workbench", name);
     else
       sprintf(tmp_text, "Workbench could not open %s", name);
