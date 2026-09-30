@@ -1,6 +1,20 @@
 #include "config_nio.h"
+#include "fujinet-nio.h"
 
 #include <string.h>
+
+/* A short, specific reason for the last failed mount. */
+static const char *mount_failure(void)
+{
+  switch (fnsvc_disk_last_error()) {
+  case FN_DISK_ERR_GEOMETRY_REQUIRED: return "Mount: sector size needed";
+  case FN_DISK_ERR_INVALID_GEOMETRY:  return "Mount: wrong sector size";
+  case FN_DISK_ERR_FILE_NOT_FOUND:    return "Mount: image not found";
+  case FN_DISK_ERR_BAD_IMAGE:         return "Mount: bad image";
+  case FN_DISK_ERR_UNSUPPORTED_TYPE:  return "Mount: unsupported type";
+  default:                            return "Mount failed";
+  }
+}
 
 /* Sector size NIO should use for a mapped image whose geometry it cannot
  * work out from content or an unambiguous extension. 512 suits the raw
@@ -122,7 +136,7 @@ int config_nio_mount_mappings(config_nio_state_t *state)
                           (uint8_t) (mapping.readonly ||
                                      strcmp(slot.mode, "r") == 0),
                           CONFIG_NIO_SECTOR_SIZE_HINT)) {
-      config_nio_set_status(state, "Mount failed");
+      config_nio_set_status(state, mount_failure());
       continue;
     }
     if (!fnctl_set_unit_slot(unit, unit)) {
