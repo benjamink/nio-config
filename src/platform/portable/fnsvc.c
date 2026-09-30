@@ -289,7 +289,8 @@ uint16_t fnsvc_last_response_len(void)
   return last_response_len;
 }
 
-int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly)
+int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly,
+                     uint16_t sector_size_hint)
 {
   uint8_t status;
   uint16_t resp_len;
@@ -304,7 +305,7 @@ int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly)
   req_buf[off++] = (uint8_t) (slot + 1);
   req_buf[off++] = (uint8_t) ((readonly ? 0x01 : 0x00) | 0x02);
   req_buf[off++] = 0x00;
-  put_u16le(&req_buf[off], 512);
+  put_u16le(&req_buf[off], sector_size_hint);
   off += 2;
   put_u16le(&req_buf[off], uri_len);
   off += 2;

@@ -33,7 +33,14 @@ int fnsvc_resolve_path(const char *base_uri, const char *arg,
                        char *resolved_uri, uint16_t resolved_cap,
                        char *display_path, uint16_t display_cap,
                        uint8_t *flags_out);
-int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly);
+/* Mount `uri` in active disk slot `slot`, with its image type detected by
+ * NIO. sector_size_hint is the sector size this machine uses for headerless
+ * raw media: NIO applies it only when the image's content does not identify
+ * its geometry and its extension is ambiguous (for example .dsk, which is
+ * 256-byte sectors on an Apple II and 512 on a Mac). Pass 0 for no hint. See
+ * "Detection policy" in fujinet-nio's docs/disk_device_protocol.md. */
+int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly,
+                     uint16_t sector_size_hint);
 int fnsvc_disk_unmount(uint8_t slot);
 int fnsvc_disk_restore_boot(uint8_t slot);
 uint8_t fnsvc_last_error(void);

@@ -2,6 +2,12 @@
 
 #include <string.h>
 
+/* Sector size NIO should use for a mapped image whose geometry it cannot
+ * work out from content or an unambiguous extension. 512 suits the raw
+ * media of CONFNIO's current machines; a platform whose raw media differs
+ * (Apple II 256, Atari 128/256) should pass its own. */
+#define CONFIG_NIO_SECTOR_SIZE_HINT 512
+
 static int has_scheme_or_prefix(const char *s)
 {
   const char *p;
@@ -114,7 +120,8 @@ int config_nio_mount_mappings(config_nio_state_t *state)
     }
     if (!fnsvc_disk_mount(unit, slot.uri,
                           (uint8_t) (mapping.readonly ||
-                                     strcmp(slot.mode, "r") == 0))) {
+                                     strcmp(slot.mode, "r") == 0),
+                          CONFIG_NIO_SECTOR_SIZE_HINT)) {
       config_nio_set_status(state, "Mount failed");
       continue;
     }
