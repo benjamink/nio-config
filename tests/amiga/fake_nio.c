@@ -284,12 +284,19 @@ uint8_t fnsvc_last_status(void)
   return last_status;
 }
 
-int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly)
+int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly,
+                     uint16_t sector_size_hint)
 {
   (void) slot;
   (void) uri;
   (void) readonly;
+  (void) sector_size_hint;
   return 1;
+}
+
+uint8_t fnsvc_disk_last_error(void)
+{
+  return FN_DISK_ERR_NONE;
 }
 
 int fnctl_set_unit_slot(uint8_t unit, uint8_t slot)

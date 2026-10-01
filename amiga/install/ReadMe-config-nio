@@ -103,8 +103,8 @@ Options
 Set these as ToolTypes (select the icon, then Information in the Icons
 menu) or give them in a Shell:
 
-    FMOUNT=path    mount command (default SYS:C/fmount)
-    FUMOUNT=path   eject command (default SYS:C/fumount)
+    FMOUNT=path    mount command (default fmount, from the command path)
+    FUMOUNT=path   eject command (default fumount, from the command path)
     SCRIPT=file    run commands from a file instead of the window
     RESULT=file    where SCRIPT writes its results
 

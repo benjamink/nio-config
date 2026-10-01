@@ -7,8 +7,8 @@ void test_options(void)
   char longval[120];
 
   amiga_options_defaults(&o);
-  CHECK_STR(o.fmount, "SYS:C/fmount");
-  CHECK_STR(o.fumount, "SYS:C/fumount");
+  CHECK_STR(o.fmount, "fmount");
+  CHECK_STR(o.fumount, "fumount");
   CHECK_STR(o.script, "");
   CHECK_STR(o.result, "");
 
@@ -18,7 +18,7 @@ void test_options(void)
   CHECK_STR(o.script, "NIO:accept.script");
   CHECK(amiga_options_parse(&o, "DONOTWAIT") == -1);
   CHECK(amiga_options_parse(&o, "(FUMOUNT=X:fumount)") == -1);
-  CHECK_STR(o.fumount, "SYS:C/fumount");
+  CHECK_STR(o.fumount, "fumount");
   CHECK(amiga_options_parse(&o, "BOGUS=1") == -1);
   CHECK(amiga_options_parse(&o, "FMOUNT=") == 0);
   CHECK_STR(o.fmount, "DH0:C/fmount");

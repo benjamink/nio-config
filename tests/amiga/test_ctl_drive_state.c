@@ -34,7 +34,7 @@ static int fake_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
   cur = fake_appstore_get("config-nio", "mappings", &len);
   if (cur && len == sizeof(map))
     memcpy(map, cur, sizeof(map));
-  if (sscanf(cmd, "SYS:C/fmount %u %7s %3s", &slot, label, mode) == 3 &&
+  if (sscanf(cmd, "%*s %u %7s %3s", &slot, label, mode) == 3 &&
       (unit = amiga_drive_unit(label, 0)) >= 0) {
     map[1 + unit * 2] = (uint8_t) (1 | (mode[1] == 'O' ? 2 : 0));
     map[2 + unit * 2] = (uint8_t) slot;
@@ -75,7 +75,7 @@ void test_ctl_drive_state(void)
   CHECK(!amiga_ctl_drive_remount(&ctl, 1));
   CHECK_STR(state.status, "DN1: has nothing to remount");
   CHECK(amiga_ctl_drive_remount(&ctl, 0));
-  CHECK_STR(last_cmd, "SYS:C/fmount 1 DN0: RO");     /* saved slot and mode */
+  CHECK_STR(last_cmd, "fmount 1 DN0: RO");           /* saved slot and mode */
   CHECK_STR(state.status, "Toolbox.adf mounted on DN0: (RO, slot 1)");
   CHECK(amiga_ctl_drive_state(&ctl, 0) == AMIGA_DRIVE_MOUNTED);
   CHECK(amiga_ctl_drive_window_name(&ctl, 0, name, sizeof(name)));

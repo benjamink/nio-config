@@ -28,7 +28,7 @@ static int ok_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
   (void) ctx;
   memset(map, 0, sizeof(map));
   map[0] = 1;
-  if (sscanf(cmd, "SYS:C/fmount %u %7s %3s", &slot, label, mode) == 3 &&
+  if (sscanf(cmd, "%*s %u %7s %3s", &slot, label, mode) == 3 &&
       (unit = amiga_drive_unit(label, 0)) >= 0) {
     map[1 + unit * 2] = (uint8_t) (1 | (mode[1] == 'O' ? 2 : 0));
     map[2 + unit * 2] = (uint8_t) slot;

@@ -48,8 +48,6 @@ WB2_RGB = [(0xAA, 0xAA, 0xAA), (0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF), (0x66, 0x
 # see docs/amiga-config.md).  Bracketed entries are ignored by Workbench
 # convention until the brackets are removed.
 APP_TOOLTYPES = [
-    "FMOUNT=SYS:C/fmount",
-    "FUMOUNT=SYS:C/fumount",
     "DONOTWAIT",
 ]
 

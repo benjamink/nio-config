@@ -43,19 +43,21 @@ brackets, such as `(FMOUNT=...)`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `FMOUNT` | `SYS:C/fmount` | Command used by Mount |
-| `FUMOUNT` | `SYS:C/fumount` | Command used by Eject |
+| `FMOUNT` | `fmount` | Command used by Mount, resolved through the inherited AmigaDOS command path |
+| `FUMOUNT` | `fumount` | Command used by Eject, resolved through the inherited AmigaDOS command path |
 | `SCRIPT` | none | Run commands from a file instead of waiting for input |
 | `RESULT` | `RAM:config-nio.result` | Transcript file for `SCRIPT` |
 
-Paths must not contain spaces.
+Explicit `FMOUNT=` and `FUMOUNT=` command paths must not contain spaces.
 
-Mount and Eject need `FMOUNT`/`FUMOUNT` at those paths and the resident
-`fujinet-disk.device`. On a fresh system, run these commands from the
-package (the `NIO:` share on the Amiberry profiles):
+Mount and Eject need `fmount`/`fumount` on the command path inherited by
+config-nio, plus the resident `fujinet-disk.device`. An installer may put the
+tools in `SYS:C`; a package-based setup can instead add its directory (such as
+`NIO:`) to the command path. Set the `FMOUNT=` or `FUMOUNT=` ToolType only to
+override that normal lookup with a specific command path. On a fresh system,
+install the resident device, for example from the `NIO:` package share:
 
 ```text
-Copy NIO:fmount NIO:fumount SYS:C/
 Copy NIO:fujinet-disk.device DEVS:
 NIO:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
 ```

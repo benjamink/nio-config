@@ -30,7 +30,7 @@ static int fake_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
   cur = fake_appstore_get("config-nio", "mappings", &len);
   if (cur && len == sizeof(map))
     memcpy(map, cur, sizeof(map));
-  if (sscanf(cmd, "SYS:C/fmount %u %7s %3s", &slot, label, mode) == 3) {
+  if (sscanf(cmd, "%*s %u %7s %3s", &slot, label, mode) == 3) {
     unit = amiga_drive_unit(label, 0);
     if (exec_records && unit >= 0) {
       map[1 + unit * 2] = (uint8_t) (1 | (mode[1] == 'O' ? 2 : 0));
@@ -87,7 +87,7 @@ void test_ctl_mount(void)
   /* Reuses the catalogue slot that already holds the image; the RO choice
    * is written to that entry and passed to FMOUNT. */
   CHECK(amiga_ctl_mount_commit(&ctl, 0, 1));
-  CHECK_STR(last_cmd, "SYS:C/fmount 1 DN0: RO");
+  CHECK_STR(last_cmd, "fmount 1 DN0: RO");
   CHECK(fake_slot_readonly(1) == 1);
   CHECK(ctl.page == AMIGA_PAGE_BROWSE);
   CHECK_STR(state.status, "boot.adf mounted on DN0: (RO, slot 1)");
@@ -116,7 +116,7 @@ void test_ctl_mount(void)
   CHECK(amiga_ctl_mount_commit(&ctl, 0, 0));
   CHECK_STR(fake_slot_uri(2), "tnfs://fujinet.online/new.adf");
   CHECK(fake_slot_readonly(2) == 0);
-  CHECK_STR(last_cmd, "SYS:C/fmount 2 DN0: RW");
+  CHECK_STR(last_cmd, "fmount 2 DN0: RW");
   CHECK_STR(state.status, "new.adf mounted on DN0: (RW, slot 2)");
 
   /* Drawers cannot be mounted; the page does not change. */
@@ -152,7 +152,7 @@ void test_ctl_mount(void)
   CHECK(ctl.mount_return == AMIGA_PAGE_CATALOGUE);
   CHECK_STR(ctl.mount_name, "a.adf");
   CHECK(amiga_ctl_mount_commit(&ctl, 1, 1));
-  CHECK_STR(last_cmd, "SYS:C/fmount 0 DN1: RO");
+  CHECK_STR(last_cmd, "fmount 0 DN1: RO");
   CHECK(fake_slot_readonly(0) == 1);
   CHECK(ctl.page == AMIGA_PAGE_CATALOGUE);
 
@@ -161,7 +161,7 @@ void test_ctl_mount(void)
   CHECK(amiga_ctl_browse_select_name(&ctl, "new.adf"));
   CHECK(amiga_script_line(&ctl, "mount DN2: ro", discard, NULL, &ticks) ==
         AMIGA_SCRIPT_OK);
-  CHECK_STR(last_cmd, "SYS:C/fmount 2 DN2: RO");
+  CHECK_STR(last_cmd, "fmount 2 DN2: RO");
 
   /* The mount page is entered only through mount_begin_*. */
   amiga_ctl_set_page(&ctl, AMIGA_PAGE_MOUNT);

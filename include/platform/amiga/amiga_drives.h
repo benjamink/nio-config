@@ -4,8 +4,9 @@
 #include <stdint.h>
 
 #define AMIGA_DRIVE_COUNT 8
-#define AMIGA_DEFAULT_FMOUNT "SYS:C/fmount"
-#define AMIGA_DEFAULT_FUMOUNT "SYS:C/fumount"
+/* Resolve these through the launching process's AmigaDOS command path. */
+#define AMIGA_DEFAULT_FMOUNT "fmount"
+#define AMIGA_DEFAULT_FUMOUNT "fumount"
 
 const char *amiga_drive_label(uint8_t unit, uint8_t kick13);
 int amiga_drive_unit(const char *label, uint8_t kick13);

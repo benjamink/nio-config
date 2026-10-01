@@ -33,13 +33,13 @@ static int fake_exec(const char *cmd, char *output, uint16_t cap, void *ctx)
   cur = fake_appstore_get("config-nio", "mappings", &len);
   if (cur && len == sizeof(map))
     memcpy(map, cur, sizeof(map));
-  if (sscanf(cmd, "SYS:C/fmount %u %7s %3s", &slot, label, mode) == 3) {
+  if (sscanf(cmd, "%*s %u %7s %3s", &slot, label, mode) == 3) {
     unit = amiga_drive_unit(label, 0);
     if (exec_records && unit >= 0) {
       map[1 + unit * 2] = (uint8_t) (1 | (mode[1] == 'O' ? 2 : 0));
       map[2 + unit * 2] = (uint8_t) slot;
     }
-  } else if (sscanf(cmd, "SYS:C/fumount %d", &unit) == 1) {
+  } else if (sscanf(cmd, "%*s %d", &unit) == 1) {
     if (exec_records && unit >= 0 && unit < 8) {
       map[1 + unit * 2] = 0;
       map[2 + unit * 2] = 0;
@@ -63,7 +63,7 @@ void test_ctl_drives(void)
   strcpy(state.browse_path, "GAMES/");
 
   CHECK(amiga_ctl_drive_insert(&ctl, 0, 12, 1));
-  CHECK_STR(last_cmd, "SYS:C/fmount 12 DN0: RO");
+  CHECK_STR(last_cmd, "fmount 12 DN0: RO");
   CHECK(config_nio_mapping_get(&state, 0, &m) && m.valid && m.slot == 12 &&
         m.readonly);
   CHECK_STR(state.status, "Slot 12 inserted in DN0:");
@@ -91,13 +91,13 @@ void test_ctl_drives(void)
   ctl.kick13 = 1;
   exec_rc = 0;
   CHECK(!amiga_ctl_drive_insert(&ctl, 2, 12, 0));
-  CHECK_STR(last_cmd, "SYS:C/fmount 12 HN0: RW");
+  CHECK_STR(last_cmd, "fmount 12 HN0: RW");
   CHECK_STR(state.status, "FMOUNT failed for HN0: (rc 0)");
   ctl.kick13 = 0;
 
   exec_records = 1;
   CHECK(amiga_ctl_drive_eject(&ctl, 0));
-  CHECK_STR(last_cmd, "SYS:C/fumount 0");
+  CHECK_STR(last_cmd, "fumount 0");
   CHECK(config_nio_mapping_get(&state, 0, &m) && !m.valid);
   CHECK_STR(state.status, "DN0: ejected");
   CHECK(!amiga_ctl_drive_eject(&ctl, 0));
