@@ -1,0 +1,13 @@
+; config-nio Workbench acceptance (WB1.3: DD/OFS endpoint DO0:)
+page hosts
+host add host:/
+dump hosts
+host select 3
+browse
+wait 25
+select standard.adf
+mount DO0: ro
+dump drives
+page drives
+wait 25
+quit

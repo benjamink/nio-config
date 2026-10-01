@@ -1,0 +1,13 @@
+; config-nio Workbench acceptance: browse, then mount (RO)
+page hosts
+host add host:/
+dump hosts
+host select 3
+browse
+wait 25
+select standard.adf
+mount DN0: ro
+dump drives
+page drives
+wait 25
+quit

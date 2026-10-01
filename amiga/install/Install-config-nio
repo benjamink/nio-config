@@ -1,0 +1,133 @@
+.KEY FROM/K,AUTO/S,NOAUTO/S,REMOVE/S
+.BRA {
+.KET }
+.DEF FROM "NIO:"
+; Install-config-nio - install FujiNet Config and, if you like, start it
+; automatically every time Workbench starts.  Needs Workbench 2.0 or later
+; (for Workbench 1.3 see ReadMe-config-nio).
+;
+;   Execute NIO:Install-config-nio          asks before enabling autostart
+;   Execute NIO:Install-config-nio AUTO     install and enable autostart
+;   Execute NIO:Install-config-nio NOAUTO   install, no autostart
+;   Execute NIO:Install-config-nio REMOVE   stop starting automatically
+;
+; FROM=<directory> names the NIO package (ending in : or /); default NIO:
+FailAt 21
+
+If NOT EXISTS SYS:WBStartup
+  Echo "This installer needs Workbench 2.0 or later (no SYS:WBStartup)."
+  Echo "For Workbench 1.3 follow the instructions in ReadMe-config-nio."
+  Quit 10
+EndIf
+
+If "{REMOVE}" EQ "REMOVE"
+  If EXISTS SYS:WBStartup/FujiNet-Config.info
+    Delete SYS:WBStartup/FujiNet-Config SYS:WBStartup/FujiNet-Config.info QUIET
+  EndIf
+  Echo "FujiNet Config will no longer start automatically."
+  Quit 0
+EndIf
+
+If NOT EXISTS "{FROM}config-nio"
+  Echo "Cannot find {FROM}config-nio."
+  Echo "Run this from the NIO package, or add FROM=<package directory>/"
+  Quit 10
+EndIf
+
+Echo "Installing FujiNet Config in SYS:Tools"
+If NOT EXISTS SYS:Tools
+  MakeDir SYS:Tools
+EndIf
+Copy "{FROM}config-nio" SYS:Tools/ CLONE QUIET
+If NOT EXISTS SYS:Tools/config-nio
+  Echo "Could not copy config-nio to SYS:Tools; nothing else was changed."
+  Quit 20
+EndIf
+; Keep an existing icon so its ToolTypes survive a reinstall.
+If NOT EXISTS SYS:Tools/config-nio.info
+  Copy "{FROM}config-nio.info" SYS:Tools/ CLONE QUIET
+EndIf
+
+; Mount and Eject need FMOUNT/FUMOUNT and the FujiNet devices.
+If NOT EXISTS SYS:C/fmount
+  Echo "Installing FMOUNT and FUMOUNT in SYS:C"
+  Copy "{FROM}fmount" SYS:C/ CLONE QUIET
+EndIf
+If NOT EXISTS SYS:C/fumount
+  Copy "{FROM}fumount" SYS:C/ CLONE QUIET
+EndIf
+If NOT EXISTS SYS:C/fujinet-load-resident
+  Copy "{FROM}fujinet-load-resident" SYS:C/ CLONE QUIET
+EndIf
+If NOT EXISTS SYS:C/fmountrestore
+  Copy "{FROM}fmountrestore" SYS:C/ CLONE QUIET
+EndIf
+If NOT EXISTS DEVS:fujinet-nio.device
+  Echo "Installing fujinet-nio.device in DEVS:"
+  Copy "{FROM}fujinet-nio.device" DEVS: CLONE QUIET
+EndIf
+If NOT EXISTS DEVS:fujinet-disk.device
+  Echo "Installing fujinet-disk.device in DEVS:"
+  Copy "{FROM}fujinet-disk.device" DEVS: CLONE QUIET
+EndIf
+
+; Load both devices at every boot (Startup-Sequence runs S:User-Startup).
+Set reboot "no"
+If NOT EXISTS S:User-Startup
+  Echo "; User-Startup" >S:User-Startup
+EndIf
+Search >NIL: S:User-Startup "DEVS:fujinet-nio.device"
+If WARN
+  Echo "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device" >>S:User-Startup
+  Set reboot "yes"
+EndIf
+Search >NIL: S:User-Startup "DEVS:fujinet-disk.device"
+If WARN
+  Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>S:User-Startup
+  Set reboot "yes"
+EndIf
+; Some minimal systems (e.g. the Workbench 3.2 install floppy) never run
+; S:User-Startup; then nothing above loads at boot.
+Search >NIL: S:Startup-Sequence "User-Startup"
+If WARN
+  Echo "WARNING: S:Startup-Sequence does not run S:User-Startup, so the"
+  Echo "FujiNet devices and saved drives will not load at boot.  Add these"
+  Echo "lines to S:Startup-Sequence before the LoadWB line:"
+  Echo "  If EXISTS S:User-Startup"
+  Echo "    Execute S:User-Startup"
+  Echo "  EndIf"
+EndIf
+; Mount the drives saved on the FujiNet again.  Run in the background so a
+; FujiNet that is off or unreachable cannot hold up or stop the boot.
+Search >NIL: S:User-Startup "fmountrestore"
+If WARN
+  Echo "Run >NIL: C:fmountrestore" >>S:User-Startup
+EndIf
+
+; Autostart: a project icon in SYS:WBStartup that runs SYS:Tools/config-nio.
+Set autostart "no"
+If "{AUTO}" EQ "AUTO"
+  Set autostart "yes"
+Else
+  If NOT "{NOAUTO}" EQ "NOAUTO"
+    Ask "Start FujiNet Config automatically when Workbench starts? (y/n)"
+    If WARN
+      Set autostart "yes"
+    EndIf
+  EndIf
+EndIf
+If "$autostart" EQ "yes"
+  Copy "{FROM}FujiNet-Config.info" SYS:WBStartup/ CLONE QUIET
+  Echo "; Starts SYS:Tools/config-nio (see FujiNet-Config.info)" >SYS:WBStartup/FujiNet-Config
+  Echo "FujiNet Config will start automatically with Workbench."
+Else
+  If EXISTS SYS:WBStartup/FujiNet-Config.info
+    Delete SYS:WBStartup/FujiNet-Config SYS:WBStartup/FujiNet-Config.info QUIET
+  EndIf
+EndIf
+
+Echo "FujiNet Config is installed as SYS:Tools/config-nio."
+If "$reboot" EQ "yes"
+  Echo "Reboot so the FujiNet devices are loaded."
+EndIf
+Quit 0
