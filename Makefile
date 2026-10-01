@@ -44,7 +44,8 @@ AMIGA_CRT_wb32 := clib2
 amiga:
 	$(MAKE) -f makefiles/build.mk TARGET=amiga \
 		TARGET_BUILD_DIR=build/amiga/$(AMIGA_PROFILE) \
-		AMIGA_CRT=$(AMIGA_CRT_$(AMIGA_PROFILE))
+		AMIGA_CRT=$(AMIGA_CRT_$(AMIGA_PROFILE)) \
+		AMIGA_WB13=$(if $(filter wb13,$(AMIGA_PROFILE)),1,0)
 
 # Regenerate the checked-in Workbench icon (needs Python; Pillow for preview).
 regen-amiga-icons:

@@ -1,5 +1,6 @@
 CC := m68k-amigaos-gcc
 AMIGA_CRT ?= clib2
+AMIGA_WB13 ?= 0
 
 CFLAGS += -Wall -Wextra -O2 -std=c99
 CFLAGS += -mcpu=68000 -msoft-float
@@ -12,6 +13,9 @@ CFLAGS += -I$(NIO_INCLUDE_DIR)
 CFLAGS += -DFNSVC_LIST_MAX_PAYLOAD=$(FNSVC_LIST_MAX_PAYLOAD)
 CFLAGS += -DCONFIG_NIO_MAX_ENTRIES=200
 CFLAGS += -D__AMIGA__
+ifeq ($(AMIGA_WB13),1)
+CFLAGS += -D__KICK13__
+endif
 
 LDFLAGS += -mcpu=68000 -msoft-float -mcrt=$(AMIGA_CRT)
 
