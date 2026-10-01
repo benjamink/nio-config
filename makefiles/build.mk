@@ -20,7 +20,15 @@ PLATFORM_INCLUDE_DIR := include/platform/$(PLATFORM)
 TARGET_INCLUDE_DIR := include/target/$(TARGET)
 NIO_INCLUDE_DIR := $(FUJINET_NIO_LIB)/include
 BUILD_DIR ?= build
-TARGET_BUILD_DIR := $(BUILD_DIR)/$(TARGET)
+TARGET_BUILD_DIR ?= $(BUILD_DIR)/$(TARGET)
+
+# Do not recreate the obsolete unprofiled Amiga output.  The repository
+# Makefile supplies a named Workbench profile for public Amiga builds.
+ifeq ($(TARGET),amiga)
+ifeq ($(TARGET_BUILD_DIR),$(BUILD_DIR)/amiga)
+$(error Amiga builds require TARGET_BUILD_DIR=build/amiga/wb13, wb31, or wb32; use `make amiga`)
+endif
+endif
 OBJ_DIR := $(TARGET_BUILD_DIR)/obj
 BIN_DIR := $(TARGET_BUILD_DIR)/bin
 DISK_DIR := $(TARGET_BUILD_DIR)/disk

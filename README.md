@@ -37,7 +37,8 @@ The Amiga Workbench (1.3 and later) version is built separately for each
 Workbench profile and is not part of `all-targets`:
 
 ```sh
-make amiga AMIGA_PROFILE=wb32     # or wb31, wb13
+make amiga                         # builds wb13, wb31, and wb32
+make amiga AMIGA_PROFILE=wb13      # one explicit profile
 make test-amiga-host              # host-side logic tests (gcc only)
 ```
 
