@@ -1,5 +1,7 @@
 #include "amiga_theme.h"
 
+#include <stddef.h>
+
 /* Workbench 1.x palette: 0 blue, 1 white, 2 black, 3 orange. */
 void amiga_theme_classic(amiga_theme_t *t)
 {
@@ -29,4 +31,12 @@ void amiga_theme_from_pens(amiga_theme_t *t, const uint16_t *pens,
   t->filltext = pen(pens, count, AMIGA_FILLTEXTPEN, 1);
   t->background = pen(pens, count, AMIGA_BACKGROUNDPEN, 0);
   t->highlight = pen(pens, count, AMIGA_HIGHLIGHTTEXTPEN, 2);
+}
+
+void amiga_theme_for_version(amiga_theme_t *t, uint16_t intuition_version)
+{
+  if (intuition_version >= 36)
+    amiga_theme_from_pens(t, NULL, 0);
+  else
+    amiga_theme_classic(t);
 }

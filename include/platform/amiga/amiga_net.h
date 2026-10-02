@@ -8,8 +8,6 @@
  * passphrase and saves the choice on the FujiNet, which then reconnects. */
 
 #define AMIGA_NET_LABEL_W 14
-#define AMIGA_NET_PASS_MIN 8
-#define AMIGA_NET_PASS_MAX FN_WIFI_MAX_PASSWORD
 
 /* Network page rows, in order. */
 enum {
@@ -26,7 +24,15 @@ enum {
   AMIGA_NET_ROW_CONTROL
 };
 
+#define AMIGA_NET_PASS_MIN 8
+#define AMIGA_NET_PASS_MAX FN_WIFI_MAX_PASSWORD
+
 /* Pure helpers (no FujiNet calls). */
+/* Why a passphrase of `len` characters cannot be used to join, or NULL.
+ * Empty is allowed for an open network and for the saved network whose
+ * passphrase is stored (it is kept). */
+const char *amiga_net_pass_problem(uint8_t secured, uint16_t len,
+                                   uint8_t saved_with_pass);
 const char *amiga_net_link_text(uint8_t link_state);
 const char *amiga_net_signal_text(int8_t rssi);
 const char *amiga_net_auth_text(uint8_t auth);
@@ -51,6 +57,9 @@ void amiga_ctl_wifi_cancel(amiga_ctl_t *ctl);
 /* Whether joining scan row `index` needs a passphrase typed: a secured
  * network that is not the saved one with a stored passphrase. */
 int amiga_ctl_wifi_needs_pass(amiga_ctl_t *ctl, uint16_t index);
+/* Whether scan row `index` is the saved network with a stored passphrase
+ * (Join may then keep it). */
+int amiga_ctl_wifi_is_saved(amiga_ctl_t *ctl, uint16_t index);
 /* Status line for the selected scan row: what Join will need. */
 void amiga_ctl_wifi_hint(amiga_ctl_t *ctl, uint16_t index);
 /* After a join and a wait: re-reads the status and reports whether the

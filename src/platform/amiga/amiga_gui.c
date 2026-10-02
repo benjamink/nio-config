@@ -86,6 +86,7 @@ enum {
   ACT_NET_JOIN,
   ACT_WIFI_JOIN,
   ACT_WIFI_RESCAN,
+  ACT_WIFI_OTHER,
   ACT_WIFI_CANCEL
 };
 
@@ -129,8 +130,8 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_ADD_CANCEL } },
   { { "Join", ACT_WIFI_JOIN }, { "Rescan", ACT_WIFI_RESCAN },
-    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
-    { "Cancel", ACT_WIFI_CANCEL } },
+    { "Join Other...", ACT_WIFI_OTHER }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE }, { "Cancel", ACT_WIFI_CANCEL } },
 };
 
 /* RKM wait pointer image; sprite data must live in chip RAM. */
@@ -433,8 +434,7 @@ static int page_has(uint8_t id)
   switch (id) {
   case GID_EDIT:
     return gctl->page == AMIGA_PAGE_HOSTS ||
-           gctl->page == AMIGA_PAGE_CATALOGUE ||
-           gctl->page == AMIGA_PAGE_WIFI;   /* the passphrase */
+           gctl->page == AMIGA_PAGE_CATALOGUE;
   case GID_SLOT:
     return gctl->page == AMIGA_PAGE_CATALOGUE;
   case GID_RO:
@@ -476,14 +476,6 @@ static void set_string(uint8_t id, const char *text)
     (void) AddGadget(win, &gad[id], pos);
     RefreshGList(&gad[id], win, NULL, 1);
   }
-}
-
-/* Empties the URI/Pass field and its undo copy, so a passphrase does not
- * outlive the Join picker. */
-static void clear_edit(void)
-{
-  set_string(GID_EDIT, "");
-  memset(edit_undo, 0, sizeof(edit_undo));
 }
 
 static void set_ro(int readonly)
@@ -884,18 +876,9 @@ static void gui_paint_editors(void)
   WORD label_top = (WORD) (layout.edit.top + (layout.edit.height - FONT_H) / 2);
 
   if (attached[GID_EDIT]) {
-    int pass = gctl->page == AMIGA_PAGE_WIFI;
-    amiga_rect_t label;
-
     bevel(&layout.edit, 1);
-    /* Clear the label column: the label changes with the page. */
-    label.left = (int16_t) (layout.edit.left - 4 * FONT_W - 4);
-    label.top = label_top;
-    label.width = 4 * FONT_W;
-    label.height = FONT_H;
-    fill(&label, theme.background);
-    text_at((WORD) (layout.edit.left - 4 * FONT_W - 4), label_top,
-            pass ? "Pass" : "URI", pass ? 4 : 3, theme.text);
+    text_at((WORD) (layout.edit.left - 4 * FONT_W - 4), label_top, "URI", 3,
+            theme.text);
   }
   if (attached[GID_SLOT]) {
     bevel(&layout.slot, 1);
@@ -1009,9 +992,6 @@ static void gui_set_page(uint8_t page)
     (void) amiga_ctl_net_refresh(gctl);
     busy_end();
   }
-  /* The passphrase field starts empty and is not left on other pages. */
-  if ((gctl->page == AMIGA_PAGE_WIFI) != (old_page == AMIGA_PAGE_WIFI))
-    clear_edit();
   gui_sync_gadgets();
   gui_sync_editors();
   gui_paint();
@@ -1021,10 +1001,6 @@ static void gui_set_page(uint8_t page)
 static void gui_after_action(uint8_t old_page)
 {
   gui_help_sync();
-  /* Join and Cancel switch the picker in the controller, so gui_set_page
-   * below no longer sees the page that held (or will hold) a passphrase. */
-  if ((gctl->page == AMIGA_PAGE_WIFI) != (old_page == AMIGA_PAGE_WIFI))
-    clear_edit();
   if (gctl->page != old_page) {
     gui_set_page(gctl->page);
     return;
@@ -1056,6 +1032,293 @@ static void catalogue_reselect(uint8_t slot)
 /* Digits typed on the slot list. */
 static amiga_typeahead_t slot_typing;
 
+/* ---- Join window -------------------------------------------------------- */
+
+enum { PW_SSID = 1, PW_PASS, PW_JOIN, PW_CANCEL };
+
+/* What the Join window returns; the passphrase is wiped once Join has
+ * used it. */
+static UBYTE join_ssid[FN_WIFI_MAX_SSID + 1];
+static UBYTE join_ssid_undo[FN_WIFI_MAX_SSID + 1];
+static UBYTE join_pass[AMIGA_NET_PASS_MAX + 1];
+static UBYTE join_pass_undo[AMIGA_NET_PASS_MAX + 1];
+
+/* Layout of the Join window's interior, from its real borders. */
+typedef struct {
+  amiga_rect_t ssid_label, ssid, pass_label, pass, note, join, cancel;
+  int16_t width, height;
+} join_layout_t;
+
+static void join_layout(join_layout_t *l, uint8_t bl, uint8_t bt, uint8_t br,
+                        uint8_t bb)
+{
+  int16_t cw = 46 * FONT_W;
+  int16_t x0 = (int16_t) (bl + AMIGA_LAYOUT_PAD);
+  int16_t y = (int16_t) (bt + AMIGA_LAYOUT_PAD);
+  int16_t label_w = 11 * FONT_W;
+  int16_t str_h = layout.edit.height;
+  int16_t btn_w = 12 * FONT_W;
+  int16_t btn_h = FONT_H + 6;
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    amiga_rect_t *field = i ? &l->pass : &l->ssid;
+    amiga_rect_t *label = i ? &l->pass_label : &l->ssid_label;
+
+    field->left = (int16_t) (x0 + label_w); field->top = y;
+    field->width = (int16_t) (cw - label_w); field->height = str_h;
+    label->left = x0; label->top = (int16_t) (y + (str_h - FONT_H) / 2);
+    label->width = label_w; label->height = FONT_H;
+    y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
+  }
+  l->note.left = x0; l->note.top = y; l->note.width = cw;
+  l->note.height = FONT_H + 2;
+  y = (int16_t) (y + l->note.height + AMIGA_LAYOUT_GAP);
+  l->join.left = x0; l->join.top = y; l->join.width = btn_w;
+  l->join.height = btn_h;
+  l->cancel = l->join;
+  l->cancel.left = (int16_t) (x0 + cw - btn_w);
+  y = (int16_t) (y + btn_h + AMIGA_LAYOUT_PAD);
+  l->width = (int16_t) (x0 + cw + AMIGA_LAYOUT_PAD + br);
+  l->height = (int16_t) (y + bb);
+}
+
+/* The drawing helpers paint into `win`; point it at the Join window. */
+static void join_paint_note(struct Window *jw, const join_layout_t *l,
+                            const char *note, uint8_t pen)
+{
+  struct Window *main_win = win;
+
+  win = jw;
+  fill(&l->note, theme.background);
+  text_at(l->note.left, (WORD) (l->note.top + 1), note, (WORD) strlen(note),
+          pen);
+  win = main_win;
+}
+
+static void join_paint(struct Window *jw, const join_layout_t *l,
+                       const char *ssid, const char *note)
+{
+  struct Window *main_win = win;
+  amiga_rect_t inner;
+  const amiga_rect_t *btn[2];
+  static const char *const labels[2] = { "Join", "Cancel" };
+  int i;
+
+  win = jw;
+  inner.left = (int16_t) jw->BorderLeft;
+  inner.top = (int16_t) jw->BorderTop;
+  inner.width = (int16_t) (jw->Width - jw->BorderLeft - jw->BorderRight);
+  inner.height = (int16_t) (jw->Height - jw->BorderTop - jw->BorderBottom);
+  fill(&inner, theme.background);
+  text_at(l->ssid_label.left, l->ssid_label.top, "Network", 7, theme.text);
+  if (ssid)   /* a listed network: its name, not a field */
+    text_at(l->ssid.left, l->ssid_label.top, ssid, (WORD) strlen(ssid),
+            theme.highlight);
+  else
+    bevel(&l->ssid, 1);
+  text_at(l->pass_label.left, l->pass_label.top, "Passphrase", 10,
+          theme.text);
+  bevel(&l->pass, 1);
+  btn[0] = &l->join;
+  btn[1] = &l->cancel;
+  for (i = 0; i < 2; i++) {
+    amiga_rect_t in = amiga_rect_inset(*btn[i], 2, 1);
+
+    fill(&in, theme.background);
+    bevel(btn[i], 0);
+    text_centred(btn[i], labels[i], theme.text);
+  }
+  win = main_win;
+  join_paint_note(jw, l, note, theme.text);
+  RefreshGadgets(jw->FirstGadget, jw, NULL);
+}
+
+static void join_gadget(struct Gadget *g, amiga_rect_t r, UWORD type,
+                        UWORD id, struct StringInfo *si)
+{
+  if (si)
+    r = amiga_rect_inset(r, 4, 3);
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left; g->TopEdge = r.top;
+  g->Width = r.width; g->Height = r.height;
+  g->Flags = GADGHCOMP;
+  g->Activation = RELVERIFY;
+  g->GadgetType = type;
+  g->GadgetID = id;
+  g->SpecialInfo = (APTR) si;
+}
+
+/* The saved network with a stored passphrase: Join may keep it. */
+static int join_saved(const char *ssid)
+{
+  const amiga_net_t *n = &gctl->net;
+
+  return n->have_config && n->config.password_present &&
+         strcmp(n->config.ssid, ssid) == 0;
+}
+
+/* Whether the Join window's network is secured: a listed network says so;
+ * one typed in (Join Other) is secured when it has a passphrase, typed now
+ * or stored. */
+static uint8_t join_secured(int listed_auth)
+{
+  if (listed_auth >= 0)
+    return (uint8_t) (listed_auth != 0);
+  return (uint8_t) (join_pass[0] || join_saved((const char *) join_ssid));
+}
+
+/* Asks for a network's passphrase (and, for Join Other, its name: ssid
+ * NULL) in its own window, with the main window blocked.  Returns 1 with
+ * join_ssid and join_pass filled when the user joins. */
+static int gui_ask_join(const char *ssid)
+{
+  const char *note = !ssid ? "Leave the passphrase empty for an open network."
+                     : join_saved(ssid)
+                       ? "Leave it empty to keep the saved passphrase."
+                       : "8 to 64 characters.";
+  struct Window *jw;
+  struct NewWindow nw;
+  struct Gadget g[4];
+  struct StringInfo ssid_si;
+  struct StringInfo pass_si;
+  struct Gadget *first;
+  join_layout_t l;
+  int result = -1;
+
+  memset(join_ssid, 0, sizeof(join_ssid));
+  memset(join_ssid_undo, 0, sizeof(join_ssid_undo));
+  memset(join_pass, 0, sizeof(join_pass));
+  memset(join_pass_undo, 0, sizeof(join_pass_undo));
+  if (ssid)
+    strncpy((char *) join_ssid, ssid, sizeof(join_ssid) - 1);
+  /* Same screen and window flags as the main window, so same borders. */
+  join_layout(&l, (uint8_t) win->BorderLeft, (uint8_t) win->BorderTop,
+              (uint8_t) win->BorderRight, (uint8_t) win->BorderBottom);
+
+  memset(&ssid_si, 0, sizeof(ssid_si));
+  ssid_si.Buffer = join_ssid;
+  ssid_si.UndoBuffer = join_ssid_undo;
+  ssid_si.MaxChars = sizeof(join_ssid);
+  memset(&pass_si, 0, sizeof(pass_si));
+  pass_si.Buffer = join_pass;
+  pass_si.UndoBuffer = join_pass_undo;
+  pass_si.MaxChars = sizeof(join_pass);
+  join_gadget(&g[0], l.ssid, STRGADGET, PW_SSID, &ssid_si);
+  join_gadget(&g[1], l.pass, STRGADGET, PW_PASS, &pass_si);
+  join_gadget(&g[2], l.join, BOOLGADGET, PW_JOIN, NULL);
+  join_gadget(&g[3], l.cancel, BOOLGADGET, PW_CANCEL, NULL);
+  g[0].NextGadget = &g[1];
+  g[1].NextGadget = &g[2];
+  g[2].NextGadget = &g[3];
+  /* A listed network's name is fixed: no Network field. */
+  first = ssid ? &g[1] : &g[0];
+
+  memset(&nw, 0, sizeof(nw));
+  nw.Width = l.width;
+  nw.Height = l.height;
+  nw.LeftEdge = (WORD) (win->LeftEdge + (win->Width - l.width) / 2);
+  nw.TopEdge = (WORD) (win->TopEdge + (win->Height - l.height) / 2);
+  if (nw.LeftEdge < 0)
+    nw.LeftEdge = 0;
+  if (nw.TopEdge < 0)
+    nw.TopEdge = 0;
+  nw.DetailPen = (UBYTE) -1;
+  nw.BlockPen = (UBYTE) -1;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | RAWKEY;
+  nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
+             SMART_REFRESH | NOCAREREFRESH;
+  nw.FirstGadget = first;
+  nw.Title = (UBYTE *) (ssid ? "Join Wi-Fi Network" : "Join Other Network");
+  nw.Type = WBENCHSCREEN;
+
+  busy_begin();
+  jw = OpenWindow(&nw);
+  if (!jw) {
+    busy_end();
+    config_nio_set_status(gctl->state, "Unable to open the Join window");
+    return 0;
+  }
+  if (font)
+    SetFont(jw->RPort, font);
+  join_paint(jw, &l, ssid, note);
+  (void) ActivateGadget(first, jw, NULL);
+
+  while (result < 0) {
+    struct IntuiMessage *msg;
+
+    WaitPort(jw->UserPort);
+    while ((msg = (struct IntuiMessage *) GetMsg(jw->UserPort)) != NULL) {
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      UWORD id = cls == GADGETUP ? ((struct Gadget *) msg->IAddress)->GadgetID
+                                 : 0;
+      int accept = 0;
+
+      ReplyMsg((struct Message *) msg);
+      if (result >= 0)
+        continue;
+      if (cls == CLOSEWINDOW || id == PW_CANCEL) {
+        result = 0;
+      } else if (id == PW_SSID) {
+        (void) ActivateGadget(&g[1], jw, NULL);   /* Return: to Passphrase */
+      } else if (id == PW_JOIN || id == PW_PASS) {
+        accept = 1;   /* Return in Passphrase, or the Join button */
+      } else if (cls == RAWKEY) {
+        amiga_key_t key = amiga_key_from_raw(code, qual);
+
+        if (key == AMIGA_KEY_CANCEL)
+          result = 0;
+        else if (key == AMIGA_KEY_ACTIVATE)
+          accept = 1;
+      }
+      if (accept) {
+        const char *problem = NULL;
+
+        if (!join_ssid[0])
+          problem = "Type the network's name.";
+        else
+          problem = amiga_net_pass_problem(
+            join_secured(ssid ? 1 : -1),
+            (uint16_t) strlen((const char *) join_pass),
+            (uint8_t) join_saved((const char *) join_ssid));
+        if (problem) {
+          join_paint_note(jw, &l, problem, theme.highlight);
+          (void) ActivateGadget(join_ssid[0] ? &g[1] : first, jw, NULL);
+        } else {
+          result = 1;
+        }
+      }
+    }
+  }
+  CloseWindow(jw);
+  busy_end();
+  memset(join_ssid_undo, 0, sizeof(join_ssid_undo));
+  memset(join_pass_undo, 0, sizeof(join_pass_undo));
+  if (!result)
+    memset(join_pass, 0, sizeof(join_pass));
+  return result;
+}
+
+/* After a join: wait up to 10 seconds for the FujiNet to connect or give
+ * up, then report which. */
+static void gui_wait_join(const char *ssid)
+{
+  int tries;
+
+  gui_paint_status();
+  for (tries = 0; tries < 20; tries++) {
+    uint8_t link;
+
+    Delay(25);
+    link = amiga_ctl_net_poll(gctl);
+    if (link == 2 || link == 3 || link == 0xFF)
+      break;
+  }
+  (void) amiga_ctl_net_join_result(gctl, ssid);
+}
+
 /* ---- Actions ------------------------------------------------------------- */
 
 /* Destructive actions ask first, before the window is marked busy. */
@@ -1084,10 +1347,17 @@ static int gui_confirm_action(uint8_t action)
                   (unsigned) slot, old ? old->uri : "?", gctl->mount_name);
     return confirm(tmp_text);
   }
+  case ACT_WIFI_OTHER:
+    return gui_ask_join(NULL);
   case ACT_WIFI_JOIN: {
     const amiga_net_t *n = &gctl->net;
     uint16_t sel = gctl->networks.selected;
 
+    memset(join_pass, 0, sizeof(join_pass));
+    /* A secured network asks for its passphrase; the window is also the
+     * confirmation.  A hidden one is refused by the controller. */
+    if (sel < n->scan_count && n->scan[sel].auth && n->scan[sel].ssid[0])
+      return gui_ask_join(n->scan[sel].ssid);
     /* Joining another network drops the current one while it connects. */
     if (sel >= n->scan_count || !n->have_config || !n->config.ssid[0] ||
         strcmp(n->scan[sel].ssid, n->config.ssid) == 0)
@@ -1227,29 +1497,32 @@ static void gui_do_action(uint8_t action)
   case ACT_WIFI_CANCEL:
     amiga_ctl_wifi_cancel(gctl);
     break;
+  case ACT_WIFI_OTHER: {
+    char ssid[FN_WIFI_MAX_SSID + 1];
+    int joined;
+
+    strcpy(ssid, (const char *) join_ssid);
+    joined = amiga_ctl_wifi_join(gctl, ssid, (const char *) join_pass,
+                                 join_secured(-1));
+    memset(join_pass, 0, sizeof(join_pass));
+    if (joined) {
+      amiga_ctl_wifi_cancel(gctl);   /* back to the Network page */
+      gui_wait_join(ssid);
+    }
+    break;
+  }
   case ACT_WIFI_JOIN: {
     uint16_t sel = gctl->networks.selected;
 
     if (sel < gctl->net.scan_count) {
       char ssid[FN_WIFI_MAX_SSID + 1];
+      int joined;
 
       strcpy(ssid, gctl->net.scan[sel].ssid);
-      if (amiga_ctl_wifi_commit(gctl, sel, (const char *) edit_buf)) {
-        int tries;
-
-        clear_edit();
-        gui_paint_status();
-        /* Wait up to 10 seconds for the FujiNet to connect or give up. */
-        for (tries = 0; tries < 20; tries++) {
-          uint8_t link;
-
-          Delay(25);
-          link = amiga_ctl_net_poll(gctl);
-          if (link == 2 || link == 3 || link == 0xFF)
-            break;
-        }
-        (void) amiga_ctl_net_join_result(gctl, ssid);
-      }
+      joined = amiga_ctl_wifi_commit(gctl, sel, (const char *) join_pass);
+      memset(join_pass, 0, sizeof(join_pass));
+      if (joined)
+        gui_wait_join(ssid);
     } else {
       config_nio_set_status(gctl->state, "Choose a network first");
     }
@@ -1785,7 +2058,10 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
 
 static void load_theme(void)
 {
-  amiga_theme_classic(&theme);
+  /* The WB1.3 build cannot read DrawInfo, but may run on Kickstart 2.0+,
+   * whose pens differ from 1.x; pick them by the running Intuition. */
+  amiga_theme_for_version(&theme,
+                          (uint16_t) IntuitionBase->LibNode.lib_Version);
   new_look = 0;
 #ifndef __KICK13__
   if (IntuitionBase->LibNode.lib_Version >= 36) {

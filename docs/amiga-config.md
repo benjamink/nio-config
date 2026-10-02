@@ -132,22 +132,27 @@ To change network:
 
 1. Press **Join…**. The FujiNet scans and lists the networks with signal and
    Open/Secured. The saved network, else the strongest, is selected.
-2. Select a network and type its passphrase in the **Pass** field (8–64
-   characters). An open network needs none. For the saved network, leave
-   Pass empty to keep the stored passphrase.
-3. Press **Join** (or double-click, or Return). Joining a different network
-   asks first. **Rescan** scans again; **Cancel** or Esc goes back.
+   Hidden networks (no name) are not listed.
+2. Select a network and press **Join** (or double-click, or Return). For a
+   secured network a **Join Wi-Fi Network** window asks for the passphrase
+   (8–64 characters); press **Join** or Return there, **Cancel** to go back.
+   For the saved network, leave it empty to keep the stored passphrase. An
+   open network needs no passphrase; joining one asks first when it replaces
+   the current network.
+3. For a hidden network press **Join Other…**: the window also has a
+   **Network** field for its name. Return moves from Network to Passphrase.
+   Leave the passphrase empty for an open network.
+4. **Rescan** scans again; **Cancel** or Esc goes back to the Network page.
 
 Join saves the SSID and passphrase on the FujiNet (persisted), clears any
 pinned BSSID, enables Wi-Fi and asks the FujiNet to reconnect. config-nio then
 waits up to 10 seconds and reports `Connected to … address …`,
-`Could not connect …` or `Still connecting …`. The passphrase is never read
-back from the FujiNet; the Pass field shows it while typing (Workbench 1.3
-string gadgets cannot mask input) and is cleared when you leave the picker.
+`Could not connect …` or `Still connecting …`. The passphrase is shown as you
+type it, is wiped from memory once Join has sent it, and is never read back
+from the FujiNet.
 
-Hidden networks have no name in the list; join them from a `SCRIPT` with
-`wifi join`. A FujiNet whose Wi-Fi is managed by its host computer (POSIX
-host mode) can be viewed but not switched.
+A FujiNet whose Wi-Fi is managed by its host computer (POSIX host mode) can
+be viewed but not switched.
 
 ## Drives, FMOUNT and FMOUNTRESTORE
 
@@ -177,7 +182,7 @@ failed, and 5 otherwise.
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
 | `wifi status` | Re-read the Network page and write `NET <label> <value>` per row |
-| `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per network |
+| `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per listed network (hidden ones are left out) |
 | `wifi connect N [PASSPHRASE]` | Join scanned network `N` (after `wifi scan`); the passphrase is the rest of the line, spaces included |
 | `wifi join SSID [PASSPHRASE]` | Join any network by name, hidden ones included. Without a passphrase, the saved network keeps its stored one; another network is joined as open |
 | `wifi cancel` | Leave the Join picker |

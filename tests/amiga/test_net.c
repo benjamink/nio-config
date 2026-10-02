@@ -22,6 +22,14 @@ void test_net(void)
   CHECK_STR(amiga_net_auth_text(0), "Open");
   CHECK_STR(amiga_net_auth_text(1), "Secured");
 
+  /* Join window validation, shared with the controller and SCRIPT. */
+  CHECK(amiga_net_pass_problem(0, 0, 0) == NULL);                 /* open */
+  CHECK(amiga_net_pass_problem(1, 12, 0) == NULL);
+  CHECK(amiga_net_pass_problem(1, 0, 1) == NULL);                 /* keep saved */
+  CHECK_STR(amiga_net_pass_problem(1, 0, 0), "Type the network's passphrase first");
+  CHECK_STR(amiga_net_pass_problem(1, 5, 1), "Passphrase must be 8 to 64 characters");
+  CHECK_STR(amiga_net_pass_problem(1, 65, 0), "Passphrase is longer than 64 characters");
+
   /* Nothing read yet: every row says so rather than showing zeroes. */
   memset(&net, 0, sizeof(net));
   amiga_net_row_text(&net, AMIGA_NET_ROW_LINK, text);
@@ -99,7 +107,4 @@ void test_net(void)
   r.auth = 0;
   amiga_net_scan_row_text(&r, 6, text);
   CHECK_STR(text, "a-very  -80 dBm  Weak      Open");
-  r.ssid[0] = 0;
-  amiga_net_scan_row_text(&r, 10, text);
-  CHECK(strncmp(text, "(hidden)  ", 10) == 0);
 }

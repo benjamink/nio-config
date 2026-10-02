@@ -162,8 +162,7 @@ void amiga_net_scan_row_text(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
   char name[FN_WIFI_MAX_SSID + 1];
   uint8_t n;
 
-  /* A hidden network has no name to show. */
-  strcpy(name, r->ssid[0] ? r->ssid : "(hidden)");
+  strcpy(name, r->ssid);
   n = (uint8_t) strlen(name);
   if (n > ssid_w)
     name[ssid_w] = 0;
@@ -172,6 +171,20 @@ void amiga_net_scan_row_text(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
   memcpy(out, name, strlen(name));
   amiga_sprintf(out + ssid_w, " %4d dBm  %-9s %s", (int) r->rssi,
                 amiga_net_signal_text(r->rssi), amiga_net_auth_text(r->auth));
+}
+
+const char *amiga_net_pass_problem(uint8_t secured, uint16_t len,
+                                   uint8_t saved_with_pass)
+{
+  if (len > AMIGA_NET_PASS_MAX)
+    return "Passphrase is longer than 64 characters";
+  if (!secured)
+    return NULL;
+  if (len == 0)
+    return saved_with_pass ? NULL : "Type the network's passphrase first";
+  if (len < AMIGA_NET_PASS_MIN)
+    return "Passphrase must be 8 to 64 characters";
+  return NULL;
 }
 
 /* ---- Controller --------------------------------------------------------- */
@@ -222,15 +235,18 @@ uint8_t amiga_ctl_net_poll(amiga_ctl_t *ctl)
 static int scan_all(amiga_ctl_t *ctl)
 {
   amiga_net_t *n = &ctl->net;
+  uint16_t offset = 0;   /* wire record index; hidden ones are not kept */
   uint8_t count;
   uint8_t more = 1;
   uint8_t err;
+  uint8_t base;
+  uint8_t i;
 
   n->scan_count = 0;
   amiga_list_set_count(&ctl->networks, 0);
   while (more && n->scan_count < AMIGA_NET_SCAN_MAX) {
     count = 0;
-    err = fn_wifi_scan(n->scan_count,
+    err = fn_wifi_scan(offset,
                        (uint8_t) (AMIGA_NET_SCAN_MAX - n->scan_count),
                        &n->scan[n->scan_count],
                        (uint8_t) (AMIGA_NET_SCAN_MAX - n->scan_count),
@@ -247,7 +263,14 @@ static int scan_all(amiga_ctl_t *ctl)
     }
     if (!count)
       break;
-    n->scan_count = (uint8_t) (n->scan_count + count);
+    offset = (uint16_t) (offset + count);
+    /* Hidden networks have no name to list; Join Other reaches them.
+     * Compact this page in place, behind the networks already kept. */
+    base = n->scan_count;
+    for (i = 0; i < count; i++) {
+      if (n->scan[base + i].ssid[0])
+        n->scan[n->scan_count++] = n->scan[base + i];
+    }
   }
   amiga_list_set_count(&ctl->networks, n->scan_count);
   if (!n->scan_count) {
@@ -332,6 +355,12 @@ static int is_saved_with_pass(amiga_ctl_t *ctl, const char *ssid)
          strcmp(c->ssid, ssid) == 0;
 }
 
+int amiga_ctl_wifi_is_saved(amiga_ctl_t *ctl, uint16_t index)
+{
+  return index < ctl->net.scan_count &&
+         is_saved_with_pass(ctl, ctl->net.scan[index].ssid);
+}
+
 int amiga_ctl_wifi_needs_pass(amiga_ctl_t *ctl, uint16_t index)
 {
   const fn_wifi_scan_record_t *r;
@@ -357,17 +386,14 @@ int amiga_ctl_wifi_join(amiga_ctl_t *ctl, const char *ssid, const char *pass,
     status(ctl, "Network name is too long");
     return 0;
   }
-  if (plen > AMIGA_NET_PASS_MAX) {
-    status(ctl, "Passphrase is longer than 64 characters");
-    return 0;
-  }
-  if (secured && plen == 0 && !is_saved_with_pass(ctl, ssid)) {
-    status(ctl, "Type the network's passphrase first");
-    return 0;
-  }
-  if (secured && plen && plen < AMIGA_NET_PASS_MIN) {
-    status(ctl, "Passphrase must be 8 to 64 characters");
-    return 0;
+  {
+    const char *problem = amiga_net_pass_problem(secured, (uint16_t) plen,
+                                             (uint8_t) is_saved_with_pass(ctl, ssid));
+
+    if (problem) {
+      status(ctl, problem);
+      return 0;
+    }
   }
   if (!can_join(ctl))
     return 0;
@@ -415,7 +441,7 @@ int amiga_ctl_wifi_commit(amiga_ctl_t *ctl, uint16_t index, const char *pass)
   }
   r = &ctl->net.scan[index];
   if (!r->ssid[0]) {
-    status(ctl, "Hidden networks need their name; use SCRIPT wifi join");
+    status(ctl, "Hidden networks need their name; use Join Other");
     return 0;
   }
   if (!amiga_ctl_wifi_join(ctl, r->ssid, pass, r->auth))
@@ -431,14 +457,12 @@ void amiga_ctl_wifi_hint(amiga_ctl_t *ctl, uint16_t index)
   if (index >= ctl->net.scan_count)
     return;
   r = &ctl->net.scan[index];
-  if (!r->ssid[0])
-    status(ctl, "Hidden network: join it with SCRIPT wifi join");
-  else if (!r->auth)
+  if (!r->auth)
     status(ctl, "Open network: press Join");
   else if (!amiga_ctl_wifi_needs_pass(ctl, index))
-    status(ctl, "Saved network: press Join, or type a new passphrase");
+    status(ctl, "Saved network: press Join to reconnect");
   else
-    status(ctl, "Type the passphrase in Pass, then press Join");
+    status(ctl, "Secured network: press Join to enter the passphrase");
 }
 
 uint8_t amiga_ctl_net_join_result(amiga_ctl_t *ctl, const char *ssid)

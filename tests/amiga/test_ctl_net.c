@@ -91,6 +91,20 @@ static void test_scan_and_pick(void)
   amiga_ctl_wifi_cancel(&ctl);
   CHECK(ctl.page == AMIGA_PAGE_NETWORK);
 
+  /* Hidden networks (no name) are left out; paging still reads past
+   * them, so names after a hidden one are kept. */
+  setup();
+  for (i = 0; i < 12; i++) {
+    sprintf(name, i % 4 == 1 ? "" : "n%02d", i);
+    fake_wifi_add_network(name, -60, 1);
+  }
+  CHECK(amiga_ctl_wifi_begin(&ctl));
+  CHECK(ctl.net.scan_count == 9 && ctl.networks.count == 9);
+  CHECK_STR(ctl.net.scan[0].ssid, "n00");
+  CHECK_STR(ctl.net.scan[1].ssid, "n02");
+  CHECK_STR(ctl.net.scan[8].ssid, "n11");
+  CHECK(fake_wifi_scan_calls() == 2);
+
   /* Without the saved network, the strongest is selected. */
   setup();
   fake_wifi_add_network("weak", -85, 1);
@@ -138,9 +152,11 @@ static void test_join(void)
   amiga_ctl_wifi_hint(&ctl, 0);
   CHECK_STR(state.status, "Open network: press Join");
   amiga_ctl_wifi_hint(&ctl, 1);
-  CHECK_STR(state.status, "Type the passphrase in Pass, then press Join");
+  CHECK_STR(state.status, "Secured network: press Join to enter the passphrase");
   amiga_ctl_wifi_hint(&ctl, 2);
-  CHECK(strstr(state.status, "Saved network") != NULL);
+  CHECK_STR(state.status, "Saved network: press Join to reconnect");
+  CHECK(!amiga_ctl_wifi_is_saved(&ctl, 1) && amiga_ctl_wifi_is_saved(&ctl, 2));
+  CHECK(!amiga_ctl_wifi_is_saved(&ctl, 99));
 
   /* A secured network needs a passphrase of 8-64 characters; nothing is
    * written until it has one. */

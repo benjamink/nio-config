@@ -30,5 +30,9 @@ typedef struct {
 void amiga_theme_classic(amiga_theme_t *t);
 void amiga_theme_from_pens(amiga_theme_t *t, const uint16_t *pens,
                            uint16_t count);
+/* Pens for the running Intuition when DrawInfo is not read (the WB1.3
+ * build): the 1.x palette before V36, the V36 default pens from V36 on,
+ * where pens 1 and 2 swap roles (black text and shadow, white shine). */
+void amiga_theme_for_version(amiga_theme_t *t, uint16_t intuition_version);
 
 #endif

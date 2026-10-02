@@ -26,4 +26,12 @@ void test_theme(void)
 
   amiga_theme_from_pens(&t, NULL, 0);
   CHECK(t.text == 1 && t.shine == 2);
+
+  /* The WB1.3 build on Kickstart 2.0+: bevels must not use the 1.x pens,
+   * whose white and black are pens 2 and 1 there (inverted 3D look). */
+  amiga_theme_for_version(&t, 34);
+  CHECK(t.shine == 1 && t.shadow == 2 && t.background == 0);
+  amiga_theme_for_version(&t, 37);
+  CHECK(t.shine == 2 && t.shadow == 1 && t.text == 1 && t.fill == 3);
+  CHECK(t.filltext == 1 && t.highlight == 2);
 }
