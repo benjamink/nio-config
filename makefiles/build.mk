@@ -142,8 +142,14 @@ $(PROGRAMS): %: $(BIN_DIR)/%$(PROGRAM_EXT)
 
 -include $(DEPENDS)
 
-$(NIO_LIB_FILE):
+# Always ask the library's own (incremental) make to bring the archive up to
+# date; an archive left from an older library checkout would otherwise be
+# linked as-is and miss newly added functions.
+$(NIO_LIB_FILE): FORCE
 	$(MAKE) -C $(FUJINET_NIO_LIB) $(NIO_LIB_TARGET)
+
+.PHONY: FORCE
+FORCE:
 
 $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
