@@ -71,8 +71,7 @@ void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
 {
   if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT &&
       page != AMIGA_PAGE_HELP && page != AMIGA_PAGE_ADD &&
-      page != AMIGA_PAGE_WIFI && ctl->page != AMIGA_PAGE_ADD &&
-      ctl->page != AMIGA_PAGE_WIFI)
+      ctl->page != AMIGA_PAGE_ADD)
     ctl->page = page;
 }
 

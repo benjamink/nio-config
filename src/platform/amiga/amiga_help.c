@@ -113,13 +113,16 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "There are 256 slots, 0 to 255. When all are used, Mount reports that "
   "the catalogue is full; clear some here.",
 
-  "The Network page shows how the FujiNet is connected: whether Wi-Fi is "
-  "connected, the network (SSID) it uses, the signal, the access point, "
-  "its IP address, subnet mask, gateway and DNS server, its MAC address "
-  "and its firmware version. The page is read each time you open it.\n"
+  "Settings > Configure opens the Configuration window. It is read from "
+  "the FujiNet each time it opens, and the main window waits until you "
+  "press Close (or Esc, or its close gadget).\n"
   "\n"
-  "- Refresh (or Return) reads it again.\n"
-  "- Join... scans for networks and lists them with their signal and "
+  "- The Device tab shows the FujiNet's firmware version.\n"
+  "- The Network tab shows whether Wi-Fi is connected, the network (SSID) "
+  "it uses, the signal, the access point, its IP address, subnet mask, "
+  "gateway and DNS server, its MAC address and who controls the Wi-Fi.\n"
+  "- Refresh (or Return) reads them again. Tab switches tabs.\n"
+  "- Join... on the Network tab scans for networks and lists them with their signal and "
   "whether they are Open or Secured. The network in use, else the "
   "strongest, is selected.\n"
   "\n"
@@ -127,7 +130,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "a secured network a window asks for the passphrase (8 to 64 "
   "characters); press Join or Return there. For the network already saved "
   "you can leave it empty to keep the stored passphrase. An open network "
-  "needs none. Rescan scans again; Cancel or Esc goes back.\n"
+  "needs none. Rescan scans again; Cancel or Esc goes back to the "
+  "Network tab.\n"
   "\n"
   "Join saves the network on the FujiNet, which then reconnects; the "
   "status line says whether it connected. Until it does, hosts cannot be "
@@ -146,6 +150,9 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Dates YY-MM-DD or YY-DD-MM chooses the date order.\n"
   "- Sizes Full shows exact byte counts; Sizes Compact shows Kb, Mb and "
   "Gb.\n"
+  "- Configure opens the Configuration window: the FujiNet's firmware "
+  "version, its network settings and Wi-Fi network (see Network and "
+  "Wi-Fi).\n"
   "\n"
   "Colours follow your Workbench palette.",
 
@@ -154,10 +161,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Return, or a double-click, runs the page's main action.\n"
   "- Backspace goes to the parent drawer on the Browse page.\n"
   "- On the Add to Slot list, typing a number jumps to that slot.\n"
-  "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives, "
-  "Network.\n"
-  "- Help opens this help. Esc closes help, cancels Mount or Join, or "
-  "quits.\n"
+  "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives.\n"
+  "- Help opens this help. Esc closes help, cancels Mount, or quits.\n"
   "- Right-Amiga-? shows About and Right-Amiga-Q quits.",
 
   "To start FujiNet Config every time Workbench starts, run the installer "
@@ -190,7 +195,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- \"Cannot open fujinet-disk.device\": the disk device is not loaded. "
   "The installer adds it to S:User-Startup; reboot afterwards.\n"
   "- \"Browse failed\": the host could not be reached. Check the URI and "
-  "the FujiNet's network on the Network page.\n"
+  "the FujiNet's network in Settings > Configure.\n"
   "- \"Could not connect\" after Join: the passphrase is wrong or the "
   "network is out of range. Join again with the right passphrase.\n"
   "- \"FUMOUNT failed ... handler (busy)\": a program still uses the "
@@ -202,8 +207,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "FujiNet Config for the Amiga, part of FujiNet NIO.\n"
   "\n"
   "It runs on Workbench 1.3 and later and uses the FMOUNT and FUMOUNT "
-  "commands to mount FujiNet disk images. The Network page shows and "
-  "changes the FujiNet's Wi-Fi network."
+  "commands to mount FujiNet disk images. Settings > Configure shows the "
+  "FujiNet's firmware and changes its Wi-Fi network."
 };
 
 const char *amiga_help_title(uint8_t topic)

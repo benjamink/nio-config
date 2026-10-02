@@ -78,8 +78,8 @@ void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out)
 {
   static const char *const labels[AMIGA_NET_ROWS] = {
     "Wi-Fi", "Network", "Signal", "Access point", "IP address",
-    "Subnet mask", "Gateway", "DNS server", "MAC address", "Firmware",
-    "Wi-Fi control"
+    "Subnet mask", "Gateway", "DNS server", "MAC address", "Wi-Fi control",
+    "Firmware"
   };
   const fn_wifi_status_t *s = &net->status;
   uint8_t hs = net->have_status;
@@ -322,9 +322,7 @@ int amiga_ctl_wifi_begin(amiga_ctl_t *ctl)
     return 0;
   if (!scan_all(ctl))
     return 0;
-  if (ctl->page != AMIGA_PAGE_WIFI)
-    ctl->net.net_return = ctl->page;
-  ctl->page = AMIGA_PAGE_WIFI;
+  ctl->net.view = AMIGA_NET_VIEW_JOIN;
   ctl->networks.top = 0;
   if (ctl->net.scan_count)
     amiga_list_select(&ctl->networks, preferred_row(ctl));
@@ -343,8 +341,8 @@ int amiga_ctl_wifi_rescan(amiga_ctl_t *ctl)
 
 void amiga_ctl_wifi_cancel(amiga_ctl_t *ctl)
 {
-  if (ctl->page == AMIGA_PAGE_WIFI)
-    ctl->page = ctl->net.net_return;
+  if (ctl->net.view == AMIGA_NET_VIEW_JOIN)
+    ctl->net.view = AMIGA_NET_VIEW_NETWORK;
 }
 
 static int is_saved_with_pass(amiga_ctl_t *ctl, const char *ssid)
@@ -446,7 +444,7 @@ int amiga_ctl_wifi_commit(amiga_ctl_t *ctl, uint16_t index, const char *pass)
   }
   if (!amiga_ctl_wifi_join(ctl, r->ssid, pass, r->auth))
     return 0;
-  ctl->page = ctl->net.net_return;
+  ctl->net.view = AMIGA_NET_VIEW_NETWORK;
   return 1;
 }
 

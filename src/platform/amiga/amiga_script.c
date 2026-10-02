@@ -139,7 +139,7 @@ static int wifi_command(amiga_ctl_t *ctl, const char *line, char **t, int n,
     return result(ctl, 1, out, ctx);
   }
   if (is(t[1], "connect") && n >= 3 && parse_u8(t[2], &i)) {
-    if (ctl->page != AMIGA_PAGE_WIFI)
+    if (ctl->net.view != AMIGA_NET_VIEW_JOIN)
       return fail(ctl, "Run wifi scan first", out, ctx);
     return result(ctl, amiga_ctl_wifi_commit(ctl, i, rest_after(line, 3)),
                   out, ctx);
@@ -260,7 +260,7 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
 {
   /* Pages a script may show; the mount picker is entered via "mount". */
   static const char *const pages[AMIGA_PAGE_MOUNT] = {
-    "hosts", "browse", "catalogue", "drives", "network"
+    "hosts", "browse", "catalogue", "drives"
   };
   char *t[MAX_TOKENS];
   int n;

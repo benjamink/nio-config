@@ -106,3 +106,48 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
   out->win_h = (uint16_t) (y + in->border_b);
   return 1;
 }
+
+int amiga_cfg_layout_compute(const amiga_layout_in_t *in,
+                             amiga_cfg_layout_t *out)
+{
+  int16_t cw, x0, y, btn_h, info_h, status_h, fixed_below, avail, rows;
+
+  cw = (int16_t) (AMIGA_CFG_COLS * in->font_w);
+  x0 = (int16_t) (in->border_l + AMIGA_LAYOUT_PAD);
+  out->win_w = (uint16_t) (in->border_l + AMIGA_LAYOUT_PAD + cw +
+                           AMIGA_LAYOUT_PAD + in->border_r);
+  if (out->win_w > in->screen_w)
+    return 0;
+  btn_h = (int16_t) (in->font_h + 6);
+  info_h = (int16_t) (in->font_h + 2);
+  status_h = (int16_t) (in->font_h + 4);
+  out->row_h = (uint8_t) (in->font_h + 1);
+
+  y = (int16_t) (in->border_t + AMIGA_LAYOUT_PAD);
+  spread(out->tab, AMIGA_CFG_TAB_COUNT, x0, y, cw, btn_h);
+  y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
+  out->info = rect(x0, y, cw, info_h);
+  y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
+
+  fixed_below = (int16_t) (AMIGA_LAYOUT_GAP + btn_h + AMIGA_LAYOUT_GAP +
+                           status_h + AMIGA_LAYOUT_PAD + in->border_b);
+  avail = (int16_t) (in->screen_h - y - fixed_below - 4);
+  rows = (int16_t) (avail / out->row_h);
+  if (rows > AMIGA_CFG_MAX_ROWS)
+    rows = AMIGA_CFG_MAX_ROWS;
+  if (rows < AMIGA_LAYOUT_MIN_ROWS)
+    return 0;
+  out->list_rows = (uint8_t) rows;
+  out->list = rect(x0, y, (int16_t) (cw - AMIGA_SCROLLER_W),
+                   (int16_t) (rows * out->row_h + 4));
+  out->scroller = rect((int16_t) (x0 + cw - AMIGA_SCROLLER_W), y,
+                       AMIGA_SCROLLER_W, out->list.height);
+  y = (int16_t) (y + out->list.height + AMIGA_LAYOUT_GAP);
+
+  spread(out->button, AMIGA_CFG_BUTTON_COUNT, x0, y, cw, btn_h);
+  y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
+  out->status = rect(x0, y, cw, status_h);
+  y = (int16_t) (y + status_h + AMIGA_LAYOUT_PAD);
+  out->win_h = (uint16_t) (y + in->border_b);
+  return 1;
+}

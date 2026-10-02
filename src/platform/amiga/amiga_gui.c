@@ -81,13 +81,7 @@ enum {
   ACT_HELP_CONTENTS,
   ACT_HELP_PREV,
   ACT_HELP_NEXT,
-  ACT_HELP_CLOSE,
-  ACT_NET_REFRESH,
-  ACT_NET_JOIN,
-  ACT_WIFI_JOIN,
-  ACT_WIFI_RESCAN,
-  ACT_WIFI_OTHER,
-  ACT_WIFI_CANCEL
+  ACT_HELP_CLOSE
 };
 
 typedef struct {
@@ -95,13 +89,12 @@ typedef struct {
   uint8_t action;
 } gui_button_t;
 
-/* The mount, add and join pickers and help have no page button. */
+/* The mount picker and help have no page button. */
 static const char *const tab_labels[AMIGA_TAB_COUNT] = {
-  "Hosts", "Browse", "Catalogue", "Drives", "Network"
+  "Hosts", "Browse", "Catalogue", "Drives"
 };
 static const uint8_t tab_pages[AMIGA_TAB_COUNT] = {
-  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_CATALOGUE, AMIGA_PAGE_DRIVES,
-  AMIGA_PAGE_NETWORK
+  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_CATALOGUE, AMIGA_PAGE_DRIVES
 };
 
 static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
@@ -117,9 +110,6 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
-  { { "Refresh", ACT_NET_REFRESH }, { "Join...", ACT_NET_JOIN },
-    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
-    { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_MOUNT_CANCEL } },
@@ -129,9 +119,6 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Add", ACT_ADD_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_ADD_CANCEL } },
-  { { "Join", ACT_WIFI_JOIN }, { "Rescan", ACT_WIFI_RESCAN },
-    { "Other...", ACT_WIFI_OTHER }, { NULL, ACT_NONE },
-    { NULL, ACT_NONE }, { "Cancel", ACT_WIFI_CANCEL } },
 };
 
 /* RKM wait pointer image; sprite data must live in chip RAM. */
@@ -185,16 +172,18 @@ static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
 /* ---- Menus ------------------------------------------------------------ */
 
-static struct IntuiText menu_text[6 + AMIGA_HELP_TOPICS];
+static struct IntuiText menu_text[7 + AMIGA_HELP_TOPICS];
 static struct MenuItem project_items[2];
-static struct MenuItem settings_items[4];
+static struct MenuItem settings_items[5];
 static struct MenuItem help_items[AMIGA_HELP_TOPICS];
 static struct Menu menus[3];
 static const char *const project_labels[2] = { "About...", "Quit" };
 static const char project_keys[2] = { '?', 'Q' };
-static const char *const settings_labels[4] = {
-  "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact"
+static const char *const settings_labels[5] = {
+  "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact",
+  "Configure"
 };
+#define SETTINGS_CONFIGURE 4   /* opens the Configuration window */
 static uint8_t menus_attached;
 
 /* ---- Small drawing helpers ------------------------------------------- */
@@ -323,8 +312,8 @@ static int confirm(const char *message)
 
 static void about(void)
 {
-  (void) requester(win, "FujiNet Config\nHosts, catalogue, drives and\n"
-                   "Wi-Fi for FujiNet NIO on the Amiga", NULL, "OK");
+  (void) requester(win, "FujiNet Config\nHosts, catalogue and drives\n"
+                   "for FujiNet NIO on the Amiga", NULL, "OK");
 }
 
 /* ---- Busy state ---------------------------------------------------------- */
@@ -527,10 +516,6 @@ static amiga_list_t *page_list(void)
     return &gctl->drives;
   case AMIGA_PAGE_HELP:
     return &gctl->help;
-  case AMIGA_PAGE_NETWORK:
-    return &gctl->netinfo;
-  case AMIGA_PAGE_WIFI:
-    return &gctl->networks;
   default:
     return &gctl->hosts;
   }
@@ -547,15 +532,6 @@ static uint8_t list_cols(void)
   int cols = (in.width - 4) / FONT_W;
 
   return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
-}
-
-/* Join picker: the network name takes what the signal and security
- * columns leave (" -61 dBm  Excellent Secured" is 27 columns). */
-static uint8_t wifi_ssid_cols(uint8_t cols)
-{
-  uint8_t w = (uint8_t) (cols > 28 ? cols - 28 : 1);
-
-  return w > FN_WIFI_MAX_SSID ? FN_WIFI_MAX_SSID : w;
 }
 
 static void row_string(uint16_t idx, uint8_t cols)
@@ -582,13 +558,6 @@ static void row_string(uint16_t idx, uint8_t cols)
     amiga_clip_head(uri_text, sizeof(uri_text), s->hosts[idx],
                     (uint8_t) (cols - 3));
     amiga_sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
-    break;
-  case AMIGA_PAGE_NETWORK:
-    amiga_net_row_text(&gctl->net, idx, tmp_text);
-    break;
-  case AMIGA_PAGE_WIFI:
-    amiga_net_scan_row_text(&gctl->net.scan[idx], wifi_ssid_cols(cols),
-                            tmp_text);
     break;
   case AMIGA_PAGE_ADD: {
     int c = amiga_ctl_catalogue_index(gctl, (uint8_t) idx);
@@ -739,18 +708,6 @@ static void gui_paint_info(void)
                     (uint8_t) (cols - 16));
     amiga_sprintf(tmp_text, "Mount %s on drive:", uri_text);
     break;
-  case AMIGA_PAGE_NETWORK:
-    strcpy(tmp_text, "FujiNet network and Wi-Fi");
-    break;
-  case AMIGA_PAGE_WIFI: {
-    /* Column heads over the rows' name, signal and security columns. */
-    uint8_t w = wifi_ssid_cols(list_cols());
-
-    strcpy(tmp_text, padded("Network", w));
-    strcat(tmp_text, padded(" Signal", 21));
-    strcat(tmp_text, "Security");
-    break;
-  }
   default:
     strcpy(tmp_text, "Drive Mode Slot  Image");
     break;
@@ -970,12 +927,8 @@ static void gui_help_sync(void)
 
 static void gui_set_page(uint8_t page)
 {
-  uint8_t old_page = gctl->page;
-
   if (gctl->page == AMIGA_PAGE_MOUNT && page != AMIGA_PAGE_MOUNT)
     amiga_ctl_mount_cancel(gctl);
-  if (gctl->page == AMIGA_PAGE_WIFI && page != AMIGA_PAGE_WIFI)
-    amiga_ctl_wifi_cancel(gctl);
   if (gctl->page == AMIGA_PAGE_ADD && page != AMIGA_PAGE_ADD)
     amiga_ctl_add_cancel(gctl);
   if (gctl->page == AMIGA_PAGE_HELP && page != AMIGA_PAGE_HELP)
@@ -983,15 +936,6 @@ static void gui_set_page(uint8_t page)
   amiga_ctl_set_page(gctl, page);
   if (gctl->page == AMIGA_PAGE_CATALOGUE)
     (void) amiga_ctl_catalogue_refresh(gctl);
-  /* Read on arrival, and on the first showing (a SCRIPT "page network"
-   * has already switched the page). */
-  if (gctl->page == AMIGA_PAGE_NETWORK &&
-      ((old_page != AMIGA_PAGE_NETWORK && old_page != AMIGA_PAGE_WIFI) ||
-       (!gctl->net.have_status && !gctl->net.have_config))) {
-    busy_begin();
-    (void) amiga_ctl_net_refresh(gctl);
-    busy_end();
-  }
   gui_sync_gadgets();
   gui_sync_editors();
   gui_paint();
@@ -1301,13 +1245,230 @@ static int gui_ask_join(const char *ssid)
   return result;
 }
 
+/* ---- Configuration window ------------------------------------------------ */
+
+/* Settings > Configure opens this window over the main one, which stays
+ * blocked until it closes.  While it is open `win` points at it, so the
+ * drawing helpers, busy state, requesters and the Join window use it. */
+
+enum {
+  CFG_TAB0 = 0,
+  CFG_LIST = CFG_TAB0 + AMIGA_CFG_TAB_COUNT,
+  CFG_PROP,
+  CFG_BTN0
+};
+#define CFG_GID_COUNT (CFG_BTN0 + AMIGA_CFG_BUTTON_COUNT)
+
+enum {
+  CA_NONE = 0,
+  CA_REFRESH,
+  CA_JOIN_BEGIN,
+  CA_JOIN,
+  CA_RESCAN,
+  CA_OTHER,
+  CA_CANCEL,
+  CA_CLOSE
+};
+
+static const char *const cfg_tab_labels[AMIGA_CFG_TAB_COUNT] = {
+  "Device", "Network"
+};
+
+/* Per view (AMIGA_NET_VIEW_*); Close is on every one. */
+static const gui_button_t cfg_buttons[3][AMIGA_CFG_BUTTON_COUNT] = {
+  { { "Refresh", CA_REFRESH }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { NULL, CA_NONE }, { "Close", CA_CLOSE } },
+  { { "Refresh", CA_REFRESH }, { "Join...", CA_JOIN_BEGIN },
+    { NULL, CA_NONE }, { NULL, CA_NONE }, { "Close", CA_CLOSE } },
+  { { "Join", CA_JOIN }, { "Rescan", CA_RESCAN }, { "Other...", CA_OTHER },
+    { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } }
+};
+
+static amiga_cfg_layout_t cfg;
+static struct Gadget cfg_gad[CFG_GID_COUNT];
+static struct PropInfo cfg_pi;
+static struct Image cfg_knob;
+static uint8_t cfg_prop_active;
+static amiga_list_t cfg_device;   /* the Device tab's one row */
+static ULONG cfg_last_secs;
+static ULONG cfg_last_micros;
+static uint16_t cfg_last_index = AMIGA_LIST_NONE;
+
+static amiga_list_t *cfg_list(void)
+{
+  switch (gctl->net.view) {
+  case AMIGA_NET_VIEW_DEVICE:
+    return &cfg_device;
+  case AMIGA_NET_VIEW_JOIN:
+    return &gctl->networks;
+  default:
+    /* The controller counts every row; this tab shows the network ones. */
+    amiga_list_set_count(&gctl->netinfo, AMIGA_NET_NETWORK_ROWS);
+    return &gctl->netinfo;
+  }
+}
+
+static amiga_rect_t cfg_list_interior(void)
+{
+  return amiga_rect_inset(cfg.list, 2, 2);
+}
+
+static uint8_t cfg_cols(void)
+{
+  int cols = (cfg_list_interior().width - 4) / FONT_W;
+
+  return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
+}
+
+/* Join picker: the network name takes what the signal and security
+ * columns leave (" -61 dBm  Excellent Secured" is 27 columns). */
+static uint8_t cfg_ssid_cols(void)
+{
+  uint8_t cols = cfg_cols();
+  uint8_t w = (uint8_t) (cols > 28 ? cols - 28 : 1);
+
+  return w > FN_WIFI_MAX_SSID ? FN_WIFI_MAX_SSID : w;
+}
+
+static void cfg_paint_tabs(void)
+{
+  uint8_t tab = gctl->net.view == AMIGA_NET_VIEW_DEVICE ? 0 : 1;
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_TAB_COUNT; i++) {
+    int selected = i == tab;
+    amiga_rect_t in = amiga_rect_inset(cfg.tab[i], 2, 1);
+
+    fill(&in, selected ? theme.fill : theme.background);
+    bevel(&cfg.tab[i], selected);
+    text_centred(&cfg.tab[i], cfg_tab_labels[i],
+                 selected ? theme.filltext : theme.text);
+  }
+}
+
+static void cfg_paint_info(void)
+{
+  fill(&cfg.info, theme.background);
+  switch (gctl->net.view) {
+  case AMIGA_NET_VIEW_DEVICE:
+    strcpy(tmp_text, "FujiNet device");
+    break;
+  case AMIGA_NET_VIEW_JOIN: {
+    /* Column heads over the rows' name, signal and security columns. */
+    uint8_t w = cfg_ssid_cols();
+
+    strcpy(tmp_text, padded("Network", w));
+    strcat(tmp_text, padded(" Signal", 21));
+    strcat(tmp_text, "Security");
+    break;
+  }
+  default:
+    strcpy(tmp_text, "Wi-Fi and network settings");
+    break;
+  }
+  text_at(cfg.info.left, (WORD) (cfg.info.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.highlight);
+}
+
+static void cfg_paint_rows(void)
+{
+  amiga_list_t *l = cfg_list();
+  amiga_rect_t in = cfg_list_interior();
+  uint8_t cols = cfg_cols();
+  int join = gctl->net.view == AMIGA_NET_VIEW_JOIN;
+  uint8_t r;
+
+  for (r = 0; r < cfg.list_rows; r++) {
+    amiga_rect_t row;
+    uint16_t idx = (uint16_t) (l->top + r);
+    /* Only the picker's rows are chosen; the others are read-only. */
+    int selected = join && idx == l->selected;
+
+    row.left = in.left;
+    row.top = (int16_t) (in.top + r * cfg.row_h);
+    row.width = in.width;
+    row.height = cfg.row_h;
+    if (idx >= l->count) {
+      fill(&row, theme.background);
+      continue;
+    }
+    fill(&row, selected ? theme.fill : theme.background);
+    if (join)
+      amiga_net_scan_row_text(&gctl->net.scan[idx], cfg_ssid_cols(), tmp_text);
+    else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
+      amiga_net_row_text(&gctl->net, AMIGA_NET_ROW_FIRMWARE, tmp_text);
+    else
+      amiga_net_row_text(&gctl->net, idx, tmp_text);
+    text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
+            cols, selected ? theme.filltext : theme.text);
+  }
+}
+
+static void cfg_paint_buttons(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++) {
+    const gui_button_t *b = &cfg_buttons[gctl->net.view][i];
+    amiga_rect_t in = amiga_rect_inset(cfg.button[i], 2, 1);
+
+    fill(&cfg.button[i], theme.background);
+    if (!b->label)
+      continue;
+    fill(&in, theme.background);
+    bevel(&cfg.button[i], 0);
+    text_centred(&cfg.button[i], b->label, theme.text);
+  }
+}
+
+static void cfg_paint_status(void)
+{
+  amiga_rect_t in = amiga_rect_inset(cfg.status, 2, 1);
+  uint8_t cols = (uint8_t) ((in.width - 8) / FONT_W);
+
+  fill(&in, theme.background);
+  bevel(&cfg.status, 1);
+  amiga_clip_head(tmp_text, sizeof(tmp_text), gctl->state->status, cols);
+  text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.text);
+}
+
+static void cfg_update_prop(void)
+{
+  uint16_t pot;
+  uint16_t body;
+
+  amiga_list_prop(cfg_list(), &pot, &body);
+  NewModifyProp(&cfg_gad[CFG_PROP], win, NULL, cfg_pi.Flags, 0, pot, MAXBODY,
+                body, 1);
+}
+
+static void cfg_paint(void)
+{
+  amiga_rect_t inner;
+
+  inner.left = (int16_t) win->BorderLeft;
+  inner.top = (int16_t) win->BorderTop;
+  inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
+  inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
+  fill(&inner, theme.background);
+  cfg_paint_tabs();
+  cfg_paint_info();
+  bevel(&cfg.list, 1);
+  cfg_paint_rows();
+  cfg_paint_buttons();
+  cfg_paint_status();
+  RefreshGadgets(win->FirstGadget, win, NULL);
+  cfg_update_prop();
+}
+
 /* After a join: wait up to 10 seconds for the FujiNet to connect or give
  * up, then report which. */
-static void gui_wait_join(const char *ssid)
+static void cfg_wait_join(const char *ssid)
 {
   int tries;
 
-  gui_paint_status();
+  cfg_paint_status();
   for (tries = 0; tries < 20; tries++) {
     uint8_t link;
 
@@ -1317,6 +1478,377 @@ static void gui_wait_join(const char *ssid)
       break;
   }
   (void) amiga_ctl_net_join_result(gctl, ssid);
+}
+
+/* Asks first where an action needs it; 0 means the user backed out. */
+static int cfg_confirm(uint8_t action)
+{
+  const amiga_net_t *n = &gctl->net;
+  uint16_t sel = gctl->networks.selected;
+
+  memset(join_pass, 0, sizeof(join_pass));
+  if (action == CA_OTHER)
+    return gui_ask_join(NULL);
+  if (action != CA_JOIN || sel >= n->scan_count)
+    return 1;
+  /* A secured network asks for its passphrase; the window is also the
+   * confirmation. */
+  if (n->scan[sel].auth)
+    return gui_ask_join(n->scan[sel].ssid);
+  /* Joining another (open) network drops the current one meanwhile. */
+  if (!n->have_config || !n->config.ssid[0] ||
+      strcmp(n->scan[sel].ssid, n->config.ssid) == 0)
+    return 1;
+  amiga_sprintf(tmp_text, "Join %.32s?\nThe FujiNet leaves %.32s and\n"
+                "reconnects; hosts pause until it does.",
+                n->scan[sel].ssid, n->config.ssid);
+  return confirm(tmp_text);
+}
+
+static void cfg_do_action(uint8_t action)
+{
+  uint8_t old_view = gctl->net.view;
+  char ssid[FN_WIFI_MAX_SSID + 1];
+
+  if (action == CA_NONE || !cfg_confirm(action))
+    return;
+  busy_begin();
+  switch (action) {
+  case CA_REFRESH:
+    (void) amiga_ctl_net_refresh(gctl);
+    break;
+  case CA_JOIN_BEGIN:
+    if (amiga_ctl_wifi_begin(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case CA_RESCAN:
+    if (amiga_ctl_wifi_rescan(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case CA_CANCEL:
+    amiga_ctl_wifi_cancel(gctl);
+    break;
+  case CA_JOIN: {
+    uint16_t sel = gctl->networks.selected;
+    int joined;
+
+    if (sel >= gctl->net.scan_count) {
+      config_nio_set_status(gctl->state, "Choose a network first");
+      break;
+    }
+    strcpy(ssid, gctl->net.scan[sel].ssid);
+    joined = amiga_ctl_wifi_commit(gctl, sel, (const char *) join_pass);
+    memset(join_pass, 0, sizeof(join_pass));
+    if (joined) {
+      cfg_paint();   /* back on the Network tab while it connects */
+      cfg_wait_join(ssid);
+    }
+    break;
+  }
+  case CA_OTHER: {
+    int joined;
+
+    strcpy(ssid, (const char *) join_ssid);
+    joined = amiga_ctl_wifi_join(gctl, ssid, (const char *) join_pass,
+                                 join_secured(-1));
+    memset(join_pass, 0, sizeof(join_pass));
+    if (joined) {
+      amiga_ctl_wifi_cancel(gctl);   /* back to the Network tab */
+      cfg_paint();
+      cfg_wait_join(ssid);
+    }
+    break;
+  }
+  default:
+    break;
+  }
+  busy_end();
+  if (gctl->net.view != old_view) {
+    cfg_paint();
+  } else {
+    cfg_paint_rows();
+    cfg_paint_status();
+    cfg_update_prop();
+  }
+}
+
+static void cfg_set_view(uint8_t view)
+{
+  if (view == gctl->net.view)
+    return;
+  amiga_ctl_wifi_cancel(gctl);   /* leaving the picker */
+  gctl->net.view = view;
+  cfg_paint();
+}
+
+/* Return / double-click: Join in the picker, else Refresh. */
+static void cfg_activate(void)
+{
+  cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN : CA_REFRESH);
+}
+
+static void cfg_select(uint16_t index)
+{
+  amiga_list_select(cfg_list(), index);
+  cfg_paint_rows();
+  if (gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    cfg_paint_status();
+  }
+  cfg_update_prop();
+}
+
+static void cfg_list_click(struct IntuiMessage *msg)
+{
+  amiga_rect_t in = cfg_list_interior();
+  uint16_t index;
+
+  if (gctl->net.view != AMIGA_NET_VIEW_JOIN ||
+      !amiga_list_hit(cfg_list(), (int16_t) (msg->MouseY - in.top), cfg.row_h,
+                      &index))
+    return;
+  if (index == cfg_last_index &&
+      DoubleClick(cfg_last_secs, cfg_last_micros, msg->Seconds, msg->Micros)) {
+    cfg_last_index = AMIGA_LIST_NONE;
+    cfg_select(index);
+    cfg_activate();
+    return;
+  }
+  cfg_last_index = index;
+  cfg_last_secs = msg->Seconds;
+  cfg_last_micros = msg->Micros;
+  cfg_select(index);
+}
+
+/* Returns 1 when the window should close. */
+static int cfg_handle_key(UWORD code, UWORD qualifier)
+{
+  amiga_list_t *l = cfg_list();
+
+  switch (amiga_key_from_raw(code, qualifier)) {
+  case AMIGA_KEY_UP:
+    amiga_list_move(l, -1);
+    break;
+  case AMIGA_KEY_DOWN:
+    amiga_list_move(l, 1);
+    break;
+  case AMIGA_KEY_PAGE_UP:
+    amiga_list_move(l, (int16_t) -cfg.list_rows);
+    break;
+  case AMIGA_KEY_PAGE_DOWN:
+    amiga_list_move(l, (int16_t) cfg.list_rows);
+    break;
+  case AMIGA_KEY_TOP:
+    amiga_list_move(l, (int16_t) -l->count);
+    break;
+  case AMIGA_KEY_BOTTOM:
+    amiga_list_move(l, (int16_t) l->count);
+    break;
+  case AMIGA_KEY_ACTIVATE:
+    cfg_activate();
+    return 0;
+  case AMIGA_KEY_CANCEL:
+    if (gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+      cfg_do_action(CA_CANCEL);
+      return 0;
+    }
+    return 1;
+  case AMIGA_KEY_NEXT_PAGE:
+  case AMIGA_KEY_PREV_PAGE:
+    cfg_set_view(gctl->net.view == AMIGA_NET_VIEW_DEVICE
+                   ? AMIGA_NET_VIEW_NETWORK : AMIGA_NET_VIEW_DEVICE);
+    return 0;
+  default:
+    return 0;
+  }
+  cfg_select(l->selected == AMIGA_LIST_NONE ? 0 : l->selected);
+  return 0;
+}
+
+static void cfg_make_gadget(uint8_t id, amiga_rect_t r, UWORD flags,
+                            UWORD activation, UWORD type)
+{
+  struct Gadget *g = &cfg_gad[id];
+
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left;
+  g->TopEdge = r.top;
+  g->Width = r.width;
+  g->Height = r.height;
+  g->Flags = flags;
+  g->Activation = activation;
+  g->GadgetType = type;
+  g->GadgetID = id;
+  if (id > 0)
+    cfg_gad[id - 1].NextGadget = g;
+}
+
+static void cfg_make_gadgets(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_TAB_COUNT; i++)
+    cfg_make_gadget((uint8_t) (CFG_TAB0 + i), cfg.tab[i], GADGHCOMP,
+                    RELVERIFY, BOOLGADGET);
+  cfg_make_gadget(CFG_LIST, cfg_list_interior(), GADGHNONE, GADGIMMEDIATE,
+                  BOOLGADGET);
+  memset(&cfg_pi, 0, sizeof(cfg_pi));
+  cfg_pi.Flags = (UWORD) (AUTOKNOB | FREEVERT | (new_look ? PROPNEWLOOK : 0));
+  cfg_pi.HorizBody = MAXBODY;
+  cfg_pi.VertBody = MAXBODY;
+  cfg_make_gadget(CFG_PROP, cfg.scroller, GADGHNONE,
+                  GADGIMMEDIATE | RELVERIFY | FOLLOWMOUSE, PROPGADGET);
+  cfg_gad[CFG_PROP].GadgetRender = (APTR) &cfg_knob;
+  cfg_gad[CFG_PROP].SpecialInfo = (APTR) &cfg_pi;
+  for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++)
+    cfg_make_gadget((uint8_t) (CFG_BTN0 + i), cfg.button[i], GADGHCOMP,
+                    RELVERIFY, BOOLGADGET);
+}
+
+/* Returns 1 when the window should close. */
+static int cfg_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
+                             int down)
+{
+  UWORD id = g->GadgetID;
+
+  if (id == CFG_PROP) {
+    cfg_prop_active = (uint8_t) down;
+    amiga_list_set_top_from_pot(cfg_list(), cfg_pi.VertPot);
+    cfg_paint_rows();
+    return 0;
+  }
+  if (id == CFG_LIST) {
+    if (down)
+      cfg_list_click(msg);
+    return 0;
+  }
+  if (down)
+    return 0;
+  if (id < CFG_TAB0 + AMIGA_CFG_TAB_COUNT) {
+    cfg_set_view(id == CFG_TAB0 ? AMIGA_NET_VIEW_DEVICE
+                                : AMIGA_NET_VIEW_NETWORK);
+  } else if (id >= CFG_BTN0 && id < CFG_GID_COUNT) {
+    uint8_t action = cfg_buttons[gctl->net.view][id - CFG_BTN0].action;
+
+    if (action == CA_CLOSE)
+      return 1;
+    cfg_do_action(action);
+  }
+  return 0;
+}
+
+/* Settings > Configure: the Configuration window, with the main window
+ * blocked until it closes. */
+static void gui_open_config(void)
+{
+  static struct Requester main_block;
+  struct Window *main_win = win;
+  struct Window *cw;
+  struct NewWindow nw;
+  amiga_layout_in_t in;
+  struct Screen *scr = main_win->WScreen;
+  int done = 0;
+
+  in.screen_w = (uint16_t) scr->Width;
+  in.screen_h = (uint16_t) scr->Height;
+  /* Same screen and window flags as the main window, so same borders. */
+  in.border_l = (uint8_t) main_win->BorderLeft;
+  in.border_t = (uint8_t) main_win->BorderTop;
+  in.border_r = (uint8_t) main_win->BorderRight;
+  in.border_b = (uint8_t) main_win->BorderBottom;
+  in.font_w = FONT_W;
+  in.font_h = FONT_H;
+  in.gadget_font_h = FONT_H;
+  in.logo_w = 0;
+  in.logo_h = 0;
+  if (!amiga_cfg_layout_compute(&in, &cfg)) {
+    config_nio_set_status(gctl->state, "The screen is too small for Configure");
+    gui_paint_status();
+    return;
+  }
+  cfg_make_gadgets();
+  amiga_list_init(&cfg_device, cfg.list_rows);
+  amiga_list_set_count(&cfg_device, 1);
+  amiga_list_set_rows(&gctl->netinfo, cfg.list_rows);
+  amiga_list_set_rows(&gctl->networks, cfg.list_rows);
+  gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+  cfg_prop_active = 0;
+  cfg_last_index = AMIGA_LIST_NONE;
+
+  memset(&nw, 0, sizeof(nw));
+  nw.Width = (WORD) cfg.win_w;
+  nw.Height = (WORD) cfg.win_h;
+  nw.LeftEdge = (WORD) (main_win->LeftEdge + (main_win->Width - nw.Width) / 2);
+  nw.TopEdge = (WORD) (main_win->TopEdge + (main_win->Height - nw.Height) / 2);
+  if (nw.LeftEdge + nw.Width > scr->Width)
+    nw.LeftEdge = (WORD) (scr->Width - nw.Width);
+  if (nw.TopEdge + nw.Height > scr->Height)
+    nw.TopEdge = (WORD) (scr->Height - nw.Height);
+  if (nw.LeftEdge < 0)
+    nw.LeftEdge = 0;
+  if (nw.TopEdge < 0)
+    nw.TopEdge = 0;
+  nw.DetailPen = (UBYTE) -1;
+  nw.BlockPen = (UBYTE) -1;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | GADGETDOWN | MOUSEMOVE | RAWKEY;
+  nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
+             SMART_REFRESH | NOCAREREFRESH;
+  nw.FirstGadget = &cfg_gad[0];
+  nw.Title = (UBYTE *) "Configuration";
+  nw.Type = WBENCHSCREEN;
+
+  InitRequester(&main_block);
+  (void) Request(&main_block, main_win);
+  cw = OpenWindow(&nw);
+  if (!cw) {
+    EndRequest(&main_block, main_win);
+    config_nio_set_status(gctl->state, "Unable to open the Configuration window");
+    gui_paint_status();
+    return;
+  }
+  if (font)
+    SetFont(cw->RPort, font);
+  win = cw;
+  config_nio_set_status(gctl->state, "Reading the FujiNet's settings...");
+  cfg_paint();
+  busy_begin();
+  (void) amiga_ctl_net_refresh(gctl);
+  busy_end();
+  cfg_paint();
+
+  while (!done) {
+    struct IntuiMessage *msg;
+
+    WaitPort(cw->UserPort);
+    while ((msg = (struct IntuiMessage *) GetMsg(cw->UserPort)) != NULL) {
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      struct Gadget *g = (struct Gadget *) msg->IAddress;
+      struct IntuiMessage copy = *msg;
+
+      ReplyMsg((struct Message *) msg);
+      if (done)
+        continue;
+      if (cls == CLOSEWINDOW)
+        done = 1;
+      else if (cls == GADGETDOWN)
+        done = cfg_handle_gadget(g, &copy, 1);
+      else if (cls == GADGETUP)
+        done = cfg_handle_gadget(g, &copy, 0);
+      else if (cls == MOUSEMOVE && cfg_prop_active) {
+        amiga_list_set_top_from_pot(cfg_list(), cfg_pi.VertPot);
+        cfg_paint_rows();
+      } else if (cls == RAWKEY)
+        done = cfg_handle_key(code, qual);
+    }
+  }
+  amiga_ctl_wifi_cancel(gctl);
+  win = main_win;
+  CloseWindow(cw);
+  EndRequest(&main_block, main_win);
+  amiga_ctl_set_rows(gctl, layout.list_rows);
+  gui_paint_status();
 }
 
 /* ---- Actions ------------------------------------------------------------- */
@@ -1345,26 +1877,6 @@ static int gui_confirm_action(uint8_t action)
     old = amiga_ctl_slot(gctl, slot);
     amiga_sprintf(tmp_text, "Slot %u holds %.40s.\nReplace it with %.40s?",
                   (unsigned) slot, old ? old->uri : "?", gctl->mount_name);
-    return confirm(tmp_text);
-  }
-  case ACT_WIFI_OTHER:
-    return gui_ask_join(NULL);
-  case ACT_WIFI_JOIN: {
-    const amiga_net_t *n = &gctl->net;
-    uint16_t sel = gctl->networks.selected;
-
-    memset(join_pass, 0, sizeof(join_pass));
-    /* A secured network asks for its passphrase; the window is also the
-     * confirmation.  A hidden one is refused by the controller. */
-    if (sel < n->scan_count && n->scan[sel].auth && n->scan[sel].ssid[0])
-      return gui_ask_join(n->scan[sel].ssid);
-    /* Joining another network drops the current one while it connects. */
-    if (sel >= n->scan_count || !n->have_config || !n->config.ssid[0] ||
-        strcmp(n->scan[sel].ssid, n->config.ssid) == 0)
-      return 1;
-    amiga_sprintf(tmp_text, "Join %.32s?\nThe FujiNet leaves %.32s and\n"
-                  "reconnects; hosts pause until it does.",
-                  n->scan[sel].ssid, n->config.ssid);
     return confirm(tmp_text);
   }
   case ACT_MOUNT_COMMIT:
@@ -1483,51 +1995,6 @@ static void gui_do_action(uint8_t action)
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
     break;
-  case ACT_NET_REFRESH:
-    (void) amiga_ctl_net_refresh(gctl);
-    break;
-  case ACT_NET_JOIN:
-    if (amiga_ctl_wifi_begin(gctl) && gctl->net.scan_count)
-      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
-    break;
-  case ACT_WIFI_RESCAN:
-    if (amiga_ctl_wifi_rescan(gctl) && gctl->net.scan_count)
-      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
-    break;
-  case ACT_WIFI_CANCEL:
-    amiga_ctl_wifi_cancel(gctl);
-    break;
-  case ACT_WIFI_OTHER: {
-    char ssid[FN_WIFI_MAX_SSID + 1];
-    int joined;
-
-    strcpy(ssid, (const char *) join_ssid);
-    joined = amiga_ctl_wifi_join(gctl, ssid, (const char *) join_pass,
-                                 join_secured(-1));
-    memset(join_pass, 0, sizeof(join_pass));
-    if (joined) {
-      amiga_ctl_wifi_cancel(gctl);   /* back to the Network page */
-      gui_wait_join(ssid);
-    }
-    break;
-  }
-  case ACT_WIFI_JOIN: {
-    uint16_t sel = gctl->networks.selected;
-
-    if (sel < gctl->net.scan_count) {
-      char ssid[FN_WIFI_MAX_SSID + 1];
-      int joined;
-
-      strcpy(ssid, gctl->net.scan[sel].ssid);
-      joined = amiga_ctl_wifi_commit(gctl, sel, (const char *) join_pass);
-      memset(join_pass, 0, sizeof(join_pass));
-      if (joined)
-        gui_wait_join(ssid);
-    } else {
-      config_nio_set_status(gctl->state, "Choose a network first");
-    }
-    break;
-  }
   case ACT_DRIVE_REMOUNT:
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
       uint8_t unit = (uint8_t) gctl->drives.selected;
@@ -1641,12 +2108,6 @@ static void gui_activate(void)
   case AMIGA_PAGE_ADD:
     gui_do_action(ACT_ADD_COMMIT);
     break;
-  case AMIGA_PAGE_NETWORK:
-    gui_do_action(ACT_NET_REFRESH);
-    break;
-  case AMIGA_PAGE_WIFI:
-    gui_do_action(ACT_WIFI_JOIN);
-    break;
   case AMIGA_PAGE_DRIVES:
     /* A saved drive that is not mounted yet is mounted again first. */
     if (gctl->drives.selected != AMIGA_LIST_NONE &&
@@ -1668,10 +2129,6 @@ static void gui_select(uint16_t index)
   gui_paint_rows();
   if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
-  if (gctl->page == AMIGA_PAGE_WIFI) {
-    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
-    gui_paint_status();
-  }
   update_prop();
 }
 
@@ -1705,8 +2162,6 @@ static uint8_t current_tab(void)
 
   if (page == AMIGA_PAGE_MOUNT || page == AMIGA_PAGE_ADD)
     page = gctl->mount_return;
-  if (page == AMIGA_PAGE_WIFI)
-    page = gctl->net.net_return;
 
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
     if (tab_pages[i] == page)
@@ -1787,10 +2242,6 @@ not_scroll:
       gui_do_action(ACT_ADD_CANCEL);
       return 0;
     }
-    if (gctl->page == AMIGA_PAGE_WIFI) {
-      gui_do_action(ACT_WIFI_CANCEL);
-      return 0;
-    }
     if (gctl->page == AMIGA_PAGE_HELP) {
       gui_do_action(ACT_HELP_CLOSE);
       return 0;
@@ -1813,10 +2264,6 @@ not_scroll:
   gui_paint_rows();
   if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
-  if (gctl->page == AMIGA_PAGE_WIFI) {
-    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
-    gui_paint_status();
-  }
   update_prop();
   return 0;
 }
@@ -1906,12 +2353,14 @@ static void gui_make_menus(void)
     make_item(&settings_items[i], &menu_text[2 + i], settings_labels[i],
               (WORD) (i * 10), w, (UWORD) (CHECKIT | checked),
               (LONG) (1L << (i ^ 1)), 0);
-    settings_items[i].NextItem = i + 1 < 4 ? &settings_items[i + 1] : NULL;
+    settings_items[i].NextItem = &settings_items[i + 1];
   }
+  make_item(&settings_items[SETTINGS_CONFIGURE], &menu_text[6],
+            settings_labels[SETTINGS_CONFIGURE], (WORD) (4 * 10), w, 0, 0, 0);
   /* Help menu: Contents (Right-Amiga-H), then every topic. */
   w = (WORD) (22 * FONT_W + COMMWIDTH + 8);
   for (i = 0; i < AMIGA_HELP_TOPICS; i++) {
-    make_item(&help_items[i], &menu_text[6 + i], amiga_help_title(i),
+    make_item(&help_items[i], &menu_text[7 + i], amiga_help_title(i),
               (WORD) (i * 10), w, (UWORD) (i == 0 ? COMMSEQ : 0), 0,
               (BYTE) (i == 0 ? 'H' : 0));
     help_items[i].NextItem = i + 1 < AMIGA_HELP_TOPICS ? &help_items[i + 1]
@@ -1946,6 +2395,7 @@ static int gui_handle_menu(UWORD code)
 {
   int quit = 0;
   int settings = 0;
+  int configure = 0;
 
   while (code != MENUNULL) {
     struct MenuItem *item = ItemAddress(&menus[0], code);
@@ -1958,7 +2408,10 @@ static int gui_handle_menu(UWORD code)
       else
         quit = 1;
     } else if (MENUNUM(code) == 1) {
-      settings = 1;
+      if (ITEMNUM(code) == SETTINGS_CONFIGURE)
+        configure = 1;
+      else
+        settings = 1;
     } else if (MENUNUM(code) == 2) {
       gui_open_help((uint8_t) ITEMNUM(code));
     }
@@ -1976,6 +2429,8 @@ static int gui_handle_menu(UWORD code)
     gui_paint_rows();
     gui_paint_status();
   }
+  if (configure && !quit)
+    gui_open_config();
   return quit;
 }
 

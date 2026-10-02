@@ -70,7 +70,7 @@ static void test_scan_and_pick(void)
   int i;
 
   setup();
-  amiga_ctl_set_page(&ctl, AMIGA_PAGE_NETWORK);
+  ctl.net.view = AMIGA_NET_VIEW_NETWORK;
   /* 20 networks arrive over three scan pages (at most 9 per reply). */
   for (i = 0; i < 20; i++) {
     sprintf(name, "net%02d", i);
@@ -78,18 +78,18 @@ static void test_scan_and_pick(void)
   }
   fake_wifi_add_network("home", -70, 1);
   CHECK(amiga_ctl_wifi_begin(&ctl));
-  CHECK(ctl.page == AMIGA_PAGE_WIFI);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_JOIN);
   CHECK(ctl.net.scan_count == 21 && ctl.networks.count == 21);
   CHECK(fake_wifi_scan_calls() == 3);
   CHECK(strstr(state.status, "Found 21 networks") != NULL);
   /* The saved network is selected even though others are stronger. */
   CHECK(ctl.networks.selected == 20);
 
-  /* A tab cannot be changed under the picker; Cancel goes back. */
-  amiga_ctl_set_page(&ctl, AMIGA_PAGE_HOSTS);
-  CHECK(ctl.page == AMIGA_PAGE_WIFI);
+  /* The picker leaves the main window's page alone; Cancel goes back to
+   * the Network tab. */
+  CHECK(ctl.page == AMIGA_PAGE_HOSTS);
   amiga_ctl_wifi_cancel(&ctl);
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_NETWORK);
 
   /* Hidden networks (no name) are left out; paging still reads past
    * them, so names after a hidden one are kept. */
@@ -120,10 +120,10 @@ static void test_scan_and_pick(void)
 
   /* Scan failures leave the Network page showing. */
   setup();
-  amiga_ctl_set_page(&ctl, AMIGA_PAGE_NETWORK);
+  ctl.net.view = AMIGA_NET_VIEW_NETWORK;
   fake_wifi_scan_error(FN_ERR_UNSUPPORTED);
   CHECK(!amiga_ctl_wifi_begin(&ctl));
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_NETWORK);
   CHECK_STR(state.status, "This FujiNet cannot scan for networks");
 
   /* A host-managed adapter (POSIX host mode) cannot change networks. */
@@ -139,7 +139,7 @@ static void test_scan_and_pick(void)
 static void test_join(void)
 {
   setup();
-  amiga_ctl_set_page(&ctl, AMIGA_PAGE_NETWORK);
+  ctl.net.view = AMIGA_NET_VIEW_NETWORK;
   fake_wifi_add_network("cafe", -60, 0);
   fake_wifi_add_network("office", -50, 1);
   fake_wifi_add_network("home", -70, 1);
@@ -167,7 +167,7 @@ static void test_join(void)
   CHECK(!amiga_ctl_wifi_commit(&ctl, 1,
         "0123456789012345678901234567890123456789012345678901234567890123x"));
   CHECK(fake_wifi_set_calls() == 0);
-  CHECK(ctl.page == AMIGA_PAGE_WIFI);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_JOIN);
 
   /* Join saves SSID and passphrase, clears a pinned BSSID, enables Wi-Fi,
    * persists and reconnects, then returns to the Network page. */
@@ -180,7 +180,7 @@ static void test_join(void)
   CHECK_STR(fake_wifi_config()->ssid, "office");
   CHECK_STR(fake_wifi_password(), "correct horse");
   CHECK_STR(fake_wifi_bssid(), "");
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_NETWORK);
   CHECK(strstr(state.status, "Saved office") != NULL);
   CHECK(ctl.net.status.link_state == 1);
 
@@ -212,7 +212,7 @@ static void test_join(void)
   CHECK(amiga_ctl_wifi_begin(&ctl));
   fake_wifi_set_error(FN_ERR_NOT_READY);
   CHECK(!amiga_ctl_wifi_commit(&ctl, 1, "correct horse"));
-  CHECK(ctl.page == AMIGA_PAGE_WIFI);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_JOIN);
   CHECK_STR(state.status, "The FujiNet could not save the network");
 
   /* No selection. */
@@ -226,8 +226,8 @@ static void test_script(void)
   fake_wifi_add_network("office", -50, 1);
   fake_wifi_add_network("cafe", -60, 0);
 
-  CHECK(run("page network") == AMIGA_SCRIPT_OK);
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  /* Network settings are a window now, not a main-window page. */
+  CHECK(run("page network") == AMIGA_SCRIPT_ERR);
 
   CHECK(run("wifi status") == AMIGA_SCRIPT_OK);
   CHECK(strstr(transcript, "NET Wi-Fi         Connected\n") != NULL);
@@ -244,13 +244,13 @@ static void test_script(void)
   CHECK(run("wifi scan") == AMIGA_SCRIPT_OK);
   CHECK(strstr(transcript, "NETWORK 0 -50 SECURED office\n") != NULL);
   CHECK(strstr(transcript, "NETWORK 1 -60 OPEN cafe\n") != NULL);
-  CHECK(ctl.page == AMIGA_PAGE_WIFI);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_JOIN);
 
   /* The passphrase is the rest of the line, spaces included. */
   CHECK(run("wifi connect 0 correct horse battery") == AMIGA_SCRIPT_OK);
   CHECK_STR(fake_wifi_config()->ssid, "office");
   CHECK_STR(fake_wifi_password(), "correct horse battery");
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_NETWORK);
 
   /* join names any network, hidden ones included. */
   CHECK(run("wifi join hidden-net s3cret-passphrase") == AMIGA_SCRIPT_OK);
@@ -267,7 +267,7 @@ static void test_script(void)
 
   CHECK(run("wifi scan") == AMIGA_SCRIPT_OK);
   CHECK(run("wifi cancel") == AMIGA_SCRIPT_OK);
-  CHECK(ctl.page == AMIGA_PAGE_NETWORK);
+  CHECK(ctl.net.view == AMIGA_NET_VIEW_NETWORK);
   CHECK(run("wifi") == AMIGA_SCRIPT_ERR);
   CHECK(run("wifi bogus") == AMIGA_SCRIPT_ERR);
   CHECK(strstr(transcript, "ERR Bad arguments") != NULL);

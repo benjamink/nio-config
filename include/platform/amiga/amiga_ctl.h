@@ -10,11 +10,9 @@ typedef enum {
   AMIGA_PAGE_BROWSE,
   AMIGA_PAGE_CATALOGUE,
   AMIGA_PAGE_DRIVES,
-  AMIGA_PAGE_NETWORK, /* Wi-Fi and adapter details */
   AMIGA_PAGE_MOUNT,   /* drive picker; entered only via mount_begin_* */
   AMIGA_PAGE_HELP,    /* built-in help; entered only via help_open */
   AMIGA_PAGE_ADD,     /* Browse > Add to Slot prompt; via add_begin */
-  AMIGA_PAGE_WIFI,    /* Network > Join picker; via amiga_ctl_wifi_begin */
   AMIGA_PAGE_COUNT
 } amiga_page_t;
 
@@ -28,8 +26,16 @@ typedef enum {
 #define AMIGA_NET_SCAN_MAX FN_WIFI_MAX_SCAN_RECORDS
 #define AMIGA_NET_ROWS 11
 
-/* Network page data, re-read by amiga_ctl_net_refresh.  A have_* flag is
- * clear when that request failed; the rows then show "Unknown". */
+/* What the Configuration window shows: its Device and Network tabs, and
+ * the Join picker that Network > Join... opens in place of its rows. */
+enum {
+  AMIGA_NET_VIEW_DEVICE = 0,
+  AMIGA_NET_VIEW_NETWORK,
+  AMIGA_NET_VIEW_JOIN
+};
+
+/* Configuration window data, re-read by amiga_ctl_net_refresh.  A have_*
+ * flag is clear when that request failed; the rows then show "Unknown". */
 typedef struct {
   uint8_t have_status;
   uint8_t have_config;
@@ -40,7 +46,7 @@ typedef struct {
   fn_wifi_adapter_info_t adapter;
   uint8_t scan_count;
   fn_wifi_scan_record_t scan[AMIGA_NET_SCAN_MAX];
-  uint8_t net_return;      /* page to go back to from the Join picker */
+  uint8_t view;            /* AMIGA_NET_VIEW_* */
 } amiga_net_t;
 
 /* Runs a Shell command (FMOUNT/FUMOUNT) and returns its return code; the
@@ -104,7 +110,7 @@ typedef struct {
   uint8_t help_topic;
   uint8_t help_return;
   amiga_list_t help;   /* help lines (topic text) or titles (Contents) */
-  amiga_list_t netinfo;    /* Network page rows */
+  amiga_list_t netinfo;    /* Configuration window rows (Device/Network) */
   amiga_list_t networks;   /* Join picker: scanned networks */
   amiga_net_t net;
 } amiga_ctl_t;

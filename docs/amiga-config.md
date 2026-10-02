@@ -14,7 +14,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
-| Wi-Fi / adapter info | **Network** page: link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC, firmware version; Refresh / **Join…** (scan, pick, passphrase) |
+| Wi-Fi / adapter info | **Settings ▸ Configure** opens the **Configuration** window: **Device** tab (firmware version) and **Network** tab (link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC); Refresh / **Join…** (scan, pick, passphrase) / Close |
 
 The pages use the same model as the Shell commands, so the two can be used
 side by side:
@@ -27,7 +27,7 @@ side by side:
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
 | Eject | `FUMOUNT drive` (the image stays in its slot) |
-| Network page / Join… | Wi-Fi service (`0xF3`) `GET_STATUS`, `GET_CONFIG`, `GET_ADAPTER_INFO`, `SCAN`, `SET_CONFIG` |
+| Configuration window / Join… | Wi-Fi service (`0xF3`) `GET_STATUS`, `GET_CONFIG`, `GET_ADAPTER_INFO`, `SCAN`, `SET_CONFIG` |
 
 Every change is saved to the FujiNet as soon as you make it. For that
 reason the window has no Save/Use/Cancel buttons.
@@ -70,7 +70,7 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 
 ## Using the window
 
-- Click a page button (Hosts / Browse / Catalogue / Drives / Network), or press Tab /
+- Click a page button (Hosts / Browse / Catalogue / Drives), or press Tab /
   Shift-Tab, to change page.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
@@ -108,11 +108,19 @@ page.
   `..` row at the top of a drawer's listing, goes to the parent drawer. Help shows About. Esc quits.
 - Remove, Clear, Eject and Replace ask for confirmation first.
 - **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
+- **Settings** menu: date and size formats, and **Configure** (the
+  Configuration window below).
 
 ## Network and Wi-Fi
 
-The **Network** page is read from the FujiNet each time you open it, and
-again with **Refresh** (or Return):
+**Settings ▸ Configure** opens the **Configuration** window over the main
+window, which waits until it closes. It is read from the FujiNet when it
+opens, and again with **Refresh** (or Return). It has two tabs (Tab switches
+between them) and a **Close** button on every tab; Esc or the close gadget
+also close it.
+
+The **Device** tab shows the FujiNet's **Firmware** version. The **Network**
+tab shows:
 
 | Row | Shows |
 | --- | --- |
@@ -122,7 +130,6 @@ again with **Refresh** (or Return):
 | Access point | BSSID of the access point in use |
 | IP address, Subnet mask, Gateway, DNS server | IPv4 settings (when connected) |
 | MAC address | The FujiNet's station MAC |
-| Firmware | The FujiNet firmware version |
 | Wi-Fi control | FujiNet (ESP32), Host computer, Simulated or Unavailable |
 
 MAC address and Firmware need firmware with the Wi-Fi service's
@@ -130,9 +137,11 @@ MAC address and Firmware need firmware with the Wi-Fi service's
 
 To change network:
 
-1. Press **Join…**. The FujiNet scans and lists the networks with signal and
-   Open/Secured. The saved network, else the strongest, is selected.
-   Hidden networks (no name) are not listed.
+1. On the **Network** tab press **Join…**. The FujiNet scans, and the list
+   becomes the network picker (**Join**, **Rescan**, **Other…**, **Cancel**,
+   **Close**) showing each network's signal and Open/Secured. The saved
+   network, else the strongest, is selected. Hidden networks (no name) are
+   not listed.
 2. Select a network and press **Join** (or double-click, or Return). For a
    secured network a **Join Wi-Fi Network** window asks for the passphrase
    (8–64 characters); press **Join** or Return there, **Cancel** to go back.
@@ -142,7 +151,7 @@ To change network:
 3. For a hidden network press **Other…**: the window also has a
    **Network** field for its name. Return moves from Network to Passphrase.
    Leave the passphrase empty for an open network.
-4. **Rescan** scans again; **Cancel** or Esc goes back to the Network page.
+4. **Rescan** scans again; **Cancel** or Esc goes back to the Network tab.
 
 Join saves the SSID and passphrase on the FujiNet (persisted), clears any
 pinned BSSID, enables Wi-Fi and asks the FujiNet to reconnect. config-nio then
@@ -175,13 +184,13 @@ failed, and 5 otherwise.
 
 | Command | Action |
 | --- | --- |
-| `page hosts\|browse\|catalogue\|drives\|network` | Show a page |
+| `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
 | `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is Add to Slot |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `wifi status` | Re-read the Network page and write `NET <label> <value>` per row |
+| `wifi status` | Re-read the Configuration window's data and write `NET <label> <value>` per row (Network rows, then Firmware) |
 | `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per listed network (hidden ones are left out) |
 | `wifi connect N [PASSPHRASE]` | Join scanned network `N` (after `wifi scan`); the passphrase is the rest of the line, spaces included |
 | `wifi join SSID [PASSPHRASE]` | Join any network by name, hidden ones included. Without a passphrase, the saved network keeps its stored one; another network is joined as open |
@@ -196,7 +205,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `amiga_ctl.c` | Controller over the portable `config_nio` state and store |
 | `amiga_script.c` | `SCRIPT=` interpreter |
-| `amiga_net.c` | Network page rows and the Wi-Fi Join flow over `fn_wifi_*` |
+| `amiga_net.c` | Configuration window rows and the Wi-Fi Join flow over `fn_wifi_*` |
 | `amiga_list.c`, `amiga_layout.c`, `amiga_theme.c`, `amiga_input.c`, `amiga_format.c`, `amiga_options.c`, `amiga_drives.c` | Pure helpers |
 | `amiga_gui.c` | Intuition window, gadgets, menus and rendering (V33 API) |
 | `amiga_main.c`, `amiga_exec.c`, `amiga_stack.c` | Process start-up, command execution, stack size |

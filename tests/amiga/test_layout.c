@@ -83,6 +83,38 @@ void test_layout(void)
           AMIGA_LAYOUT_GAP <= o.logo.left);
     CHECK(o.info.left + o.info.width + AMIGA_LAYOUT_GAP <= o.logo.left);
   }
+  /* Configuration window: fits the smallest Workbench, never overlaps,
+   * and shows every Network row (10) on NTSC without scrolling. */
+  {
+    amiga_cfg_layout_t c;
+    amiga_layout_in_t *screens[3];
+    int s;
+    int i;
+
+    screens[0] = &ntsc13;
+    screens[1] = &pal32;
+    screens[2] = &tall;
+    for (s = 0; s < 3; s++) {
+      CHECK(amiga_cfg_layout_compute(screens[s], &c));
+      CHECK(c.win_w <= screens[s]->screen_w && c.win_h <= screens[s]->screen_h);
+      CHECK(c.list_rows >= 10 && c.list_rows <= AMIGA_CFG_MAX_ROWS);
+      CHECK(c.info.top >= c.tab[0].top + c.tab[0].height);
+      CHECK(c.list.top >= c.info.top + c.info.height);
+      CHECK(c.button[0].top >= c.list.top + c.list.height);
+      CHECK(c.status.top >= c.button[0].top + c.button[0].height);
+      CHECK(c.scroller.left == c.list.left + c.list.width);
+      CHECK(c.list.height == c.list_rows * c.row_h + 4);
+      CHECK(c.tab[1].width - c.tab[0].width <= 1);   /* remainder to the last */
+      for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++)
+        CHECK(c.button[i].left + c.button[i].width <=
+              c.status.left + c.status.width);
+      CHECK(c.win_h == c.status.top + c.status.height + AMIGA_LAYOUT_PAD +
+                       screens[s]->border_b);
+    }
+    CHECK(amiga_cfg_layout_compute(&ntsc13, &c) && c.list_rows == 12);
+    CHECK(!amiga_cfg_layout_compute(&narrow, &c));
+  }
+
   /* Without a logo the header spans the full width. */
   CHECK(amiga_layout_compute(&ntsc13, &o));
   CHECK(o.logo.width == 0);

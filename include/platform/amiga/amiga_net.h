@@ -9,7 +9,8 @@
 
 #define AMIGA_NET_LABEL_W 14
 
-/* Network page rows, in order. */
+/* Configuration window rows: the Network tab shows the first
+ * AMIGA_NET_NETWORK_ROWS, the Device tab AMIGA_NET_ROW_FIRMWARE. */
 enum {
   AMIGA_NET_ROW_LINK = 0,
   AMIGA_NET_ROW_SSID,
@@ -20,9 +21,10 @@ enum {
   AMIGA_NET_ROW_GATEWAY,
   AMIGA_NET_ROW_DNS,
   AMIGA_NET_ROW_MAC,
-  AMIGA_NET_ROW_FIRMWARE,
-  AMIGA_NET_ROW_CONTROL
+  AMIGA_NET_ROW_CONTROL,
+  AMIGA_NET_ROW_FIRMWARE
 };
+#define AMIGA_NET_NETWORK_ROWS AMIGA_NET_ROW_FIRMWARE
 
 #define AMIGA_NET_PASS_MIN 8
 #define AMIGA_NET_PASS_MAX FN_WIFI_MAX_PASSWORD
