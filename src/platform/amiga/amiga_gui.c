@@ -1426,8 +1426,10 @@ static void cfg_paint_rows(void)
   for (r = 0; r < cfg.list_rows; r++) {
     amiga_rect_t row;
     uint16_t idx = (uint16_t) (l->top + r);
-    /* Only the picker's rows are chosen; the others are read-only. */
-    int selected = join && idx == l->selected;
+    /* Only the picker's rows and help Contents are chosen from. */
+    int selected = (join || (cfg_help &&
+                             cfg_help_topic == AMIGA_HELP_CONTENTS)) &&
+                   idx == l->selected;
 
     row.left = in.left;
     row.top = (int16_t) (in.top + r * cfg.row_h);
@@ -1439,7 +1441,9 @@ static void cfg_paint_rows(void)
     }
     fill(&row, selected ? theme.fill : theme.background);
     bars = -1;
-    if (cfg_help) {
+    if (cfg_help && cfg_help_topic == AMIGA_HELP_CONTENTS) {
+      amiga_sprintf(tmp_text, "  %s", amiga_help_title((uint8_t) (idx + 1)));
+    } else if (cfg_help) {
       const amiga_help_line_t *hl = &help_lines[idx];
 
       memset(tmp_text, ' ', hl->indent);
@@ -1634,17 +1638,24 @@ static void cfg_do_action(uint8_t action)
   }
 }
 
-/* Help: the Configuration topic, wrapped to this window's list. */
-static void cfg_open_help(void)
+/* Help in this window: a topic wrapped to its list, or Contents (the
+ * other topics' titles, to choose from). */
+static void cfg_open_help(uint8_t topic)
 {
-  cfg_help_topic = amiga_help_find("Configuration");
+  cfg_help_topic = topic;
   amiga_list_init(&cfg_help_list, cfg.list_rows);
-  amiga_list_set_count(&cfg_help_list,
-                       amiga_help_layout(amiga_help_text(cfg_help_topic),
-                                         cfg_cols(), help_lines,
-                                         HELP_LINES_MAX));
+  if (topic == AMIGA_HELP_CONTENTS) {
+    amiga_list_set_count(&cfg_help_list, AMIGA_HELP_TOPICS - 1);
+    amiga_list_select(&cfg_help_list, 0);
+    config_nio_set_status(gctl->state,
+                          "Double-click a topic to read it; Back returns");
+  } else {
+    amiga_list_set_count(&cfg_help_list,
+                         amiga_help_layout(amiga_help_text(topic), cfg_cols(),
+                                           help_lines, HELP_LINES_MAX));
+    config_nio_set_status(gctl->state, "Back or Esc returns to the settings");
+  }
   cfg_help = 1;
-  config_nio_set_status(gctl->state, "Back or Esc returns to the settings");
   cfg_paint();
 }
 
@@ -1668,8 +1679,12 @@ static void cfg_set_view(uint8_t view)
 /* Return / double-click: Join in the picker, else Refresh. */
 static void cfg_activate(void)
 {
-  if (cfg_help)
+  if (cfg_help) {
+    if (cfg_help_topic == AMIGA_HELP_CONTENTS &&
+        cfg_help_list.selected < cfg_help_list.count)
+      cfg_open_help((uint8_t) (cfg_help_list.selected + 1));
     return;
+  }
   cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN : CA_REFRESH);
 }
 
@@ -1677,7 +1692,7 @@ static void cfg_select(uint16_t index)
 {
   amiga_list_select(cfg_list(), index);
   cfg_paint_rows();
-  if (gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+  if (!cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN) {
     amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
     cfg_paint_status();
   }
@@ -1689,7 +1704,10 @@ static void cfg_list_click(struct IntuiMessage *msg)
   amiga_rect_t in = cfg_list_interior();
   uint16_t index;
 
-  if (cfg_help || gctl->net.view != AMIGA_NET_VIEW_JOIN ||
+  int choosing = cfg_help ? cfg_help_topic == AMIGA_HELP_CONTENTS
+                         : gctl->net.view == AMIGA_NET_VIEW_JOIN;
+
+  if (!choosing ||
       !amiga_list_hit(cfg_list(), (int16_t) (msg->MouseY - in.top), cfg.row_h,
                       &index))
     return;
@@ -1714,11 +1732,15 @@ static int cfg_handle_key(UWORD code, UWORD qualifier)
 
   if (key == AMIGA_KEY_HELP) {
     if (!cfg_help)
-      cfg_open_help();
+      cfg_open_help(amiga_help_find("Configuration"));
+    return 0;
+  }
+  if (cfg_help && key == AMIGA_KEY_CANCEL) {
+    cfg_do_action(CA_HELP_BACK);
     return 0;
   }
   /* Help text has no selection: the movement keys scroll it. */
-  if (cfg_help) {
+  if (cfg_help && cfg_help_topic != AMIGA_HELP_CONTENTS) {
     int32_t max_top = l->count > l->rows ? l->count - l->rows : 0;
     int32_t top = l->top;
 
@@ -1852,10 +1874,49 @@ static int cfg_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
   return 0;
 }
 
-/* Settings > Configure: the Configuration window, with the main window
- * blocked until it closes. */
-static void gui_open_config(void)
+/* The main window's menus, shared with this window.  Returns 1 to close
+ * it; *quit is set for Project > Quit. */
+static int cfg_handle_menu(UWORD code, int *quit)
 {
+  int settings = 0;
+
+  while (code != MENUNULL) {
+    struct MenuItem *item = ItemAddress(&menus[0], code);
+
+    if (!item)
+      break;
+    if (MENUNUM(code) == 0) {
+      if (ITEMNUM(code) == 0)
+        about();
+      else
+        *quit = 1;
+    } else if (MENUNUM(code) == 1) {
+      if (ITEMNUM(code) != SETTINGS_CONFIGURE)   /* already open */
+        settings = 1;
+    } else if (MENUNUM(code) == 2) {
+      cfg_open_help((uint8_t) ITEMNUM(code));
+    }
+    code = item->NextSelect;
+  }
+  if (settings) {
+    uint8_t date = (settings_items[1].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
+    uint8_t size = (settings_items[3].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
+
+    busy_begin();
+    (void) amiga_ctl_set_prefs(gctl, date, size);
+    busy_end();
+    cfg_paint_status();
+  }
+  return *quit;
+}
+
+/* Settings > Configure: the Configuration window, with the main window
+ * blocked until it closes.  Returns 1 when Project > Quit was chosen. */
+static int gui_open_config(void)
+{
+  int quit = 0;
   static struct Requester main_block;
   struct Window *main_win = win;
   struct Window *cw;
@@ -1879,7 +1940,7 @@ static void gui_open_config(void)
   if (!amiga_cfg_layout_compute(&in, &cfg)) {
     config_nio_set_status(gctl->state, "The screen is too small for Configure");
     gui_paint_status();
-    return;
+    return 0;
   }
   cfg_make_gadgets();
   amiga_list_init(&cfg_device, cfg.list_rows);
@@ -1906,7 +1967,8 @@ static void gui_open_config(void)
     nw.TopEdge = 0;
   nw.DetailPen = (UBYTE) -1;
   nw.BlockPen = (UBYTE) -1;
-  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | GADGETDOWN | MOUSEMOVE | RAWKEY;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | GADGETDOWN | MOUSEMOVE | RAWKEY |
+                  MENUPICK;
   nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
              SMART_REFRESH | NOCAREREFRESH;
   nw.FirstGadget = &cfg_gad[0];
@@ -1920,10 +1982,14 @@ static void gui_open_config(void)
     EndRequest(&main_block, main_win);
     config_nio_set_status(gctl->state, "Unable to open the Configuration window");
     gui_paint_status();
-    return;
+    return 0;
   }
   if (font)
     SetFont(cw->RPort, font);
+  /* The same menus as the main window (Intuition lets windows share a
+   * strip). */
+  if (menus_attached)
+    (void) SetMenuStrip(cw, &menus[0]);
   win = cw;
   config_nio_set_status(gctl->state, "Reading the FujiNet's settings...");
   cfg_paint();
@@ -1957,14 +2023,20 @@ static void gui_open_config(void)
         cfg_paint_rows();
       } else if (cls == RAWKEY)
         done = cfg_handle_key(code, qual);
+      else if (cls == MENUPICK)
+        done = cfg_handle_menu(code, &quit);
     }
   }
   amiga_ctl_wifi_cancel(gctl);
   win = main_win;
+  if (menus_attached)
+    ClearMenuStrip(cw);
   CloseWindow(cw);
   EndRequest(&main_block, main_win);
   amiga_ctl_set_rows(gctl, layout.list_rows);
+  gui_paint_rows();   /* Settings may have changed the date or size format */
   gui_paint_status();
+  return quit;
 }
 
 /* ---- Actions ------------------------------------------------------------- */
@@ -2546,7 +2618,7 @@ static int gui_handle_menu(UWORD code)
     gui_paint_status();
   }
   if (configure && !quit)
-    gui_open_config();
+    quit = gui_open_config();
   return quit;
 }
 

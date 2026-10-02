@@ -123,6 +123,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "gateway and DNS server, its MAC address and who controls the Wi-Fi.\n"
   "- Refresh (or Return) reads them again. Tab switches tabs. Help "
   "shows this topic in the window; Back returns.\n"
+  "- The Project, Settings and Help menus work here too; Help topics "
+  "open in this window.\n"
   "- Join... on the Network tab scans for networks and lists them with their signal and "
   "whether they are Open or Secured. The network in use, else the "
   "strongest, is selected.\n"

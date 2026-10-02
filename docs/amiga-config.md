@@ -118,7 +118,10 @@ window, which waits until it closes. It is read from the FujiNet when it
 opens, and again with **Refresh** (or Return). It has two tabs (Tab switches
 between them) and a **Close** button on every tab; Esc or the close gadget
 also close it. **Help** shows the built-in **Configuration** help topic in
-the window's list; **Back** (or Esc) returns.
+the window's list; **Back** (or Esc) returns. The main window's **Project**,
+**Settings** and **Help** menus work in this window too: Quit quits
+config-nio, Settings changes apply at once, and Help topics (and Contents)
+open in this window.
 
 The **Device** tab shows the FujiNet's **Firmware** version. The **Network**
 tab shows:
