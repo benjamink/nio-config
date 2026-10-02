@@ -1338,7 +1338,7 @@ static uint8_t cfg_cols(void)
 }
 
 /* Join picker: the network name takes what the signal and security
- * columns leave (" -61 dBm  Excellent Secured" is 27 columns). */
+ * columns leave (" [bars]  Excellent Secured" is 23 columns). */
 static uint8_t cfg_ssid_cols(void)
 {
   uint8_t cols = cfg_cols();
@@ -1378,7 +1378,7 @@ static void cfg_paint_info(void)
     uint8_t w = cfg_ssid_cols();
 
     strcpy(tmp_text, padded("Network", w));
-    strcat(tmp_text, padded(" Signal", 21));
+    strcat(tmp_text, padded(" Signal", 16));
     strcat(tmp_text, "Security");
     break;
   }
@@ -1390,12 +1390,37 @@ static void cfg_paint_info(void)
           (WORD) strlen(tmp_text), theme.highlight);
 }
 
+/* Signal icon: AMIGA_NET_BARS rising bars, `level` of them lit, bottom
+ * aligned with the text drawn at `top`. */
+static void cfg_draw_bars(WORD x, WORD top, uint8_t level, int selected)
+{
+  struct RastPort *rp = win->RPort;
+  /* Unlit bars need a pen apart from the text: the light shine pen on
+   * 2.0+, the shadow pen on 1.3, where shine and text are both white. */
+  uint8_t lit = selected ? theme.filltext : theme.text;
+  uint8_t dim = selected ? theme.background
+                         : (theme.shine != theme.text ? theme.shine
+                                                      : theme.shadow);
+  WORD bottom = (WORD) (top + FONT_H - 1);
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_NET_BARS; i++) {
+    WORD left = (WORD) (x + i * 6);
+    WORD height = (WORD) (2 * (i + 1));
+
+    SetAPen(rp, i < level ? lit : dim);
+    RectFill(rp, left, (WORD) (bottom - height + 1), (WORD) (left + 3), bottom);
+  }
+}
+
 static void cfg_paint_rows(void)
 {
   amiga_list_t *l = cfg_list();
   amiga_rect_t in = cfg_list_interior();
   uint8_t cols = cfg_cols();
   int join = !cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN;
+  int bars;
+  uint8_t bars_col = 0;
   uint8_t r;
 
   for (r = 0; r < cfg.list_rows; r++) {
@@ -1413,6 +1438,7 @@ static void cfg_paint_rows(void)
       continue;
     }
     fill(&row, selected ? theme.fill : theme.background);
+    bars = -1;
     if (cfg_help) {
       const amiga_help_line_t *hl = &help_lines[idx];
 
@@ -1421,13 +1447,18 @@ static void cfg_paint_rows(void)
              amiga_help_text(cfg_help_topic) + hl->start, hl->len);
       tmp_text[hl->indent + hl->len] = 0;
     } else if (join)
-      amiga_net_scan_row_text(&gctl->net.scan[idx], cfg_ssid_cols(), tmp_text);
+      bars = amiga_net_scan_row_display(&gctl->net.scan[idx], cfg_ssid_cols(),
+                                        tmp_text, &bars_col);
     else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
       amiga_net_row_text(&gctl->net, AMIGA_NET_ROW_FIRMWARE, tmp_text);
     else
-      amiga_net_row_text(&gctl->net, idx, tmp_text);
+      bars = amiga_net_row_display(&gctl->net, idx, tmp_text, &bars_col);
     text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
             cols, selected ? theme.filltext : theme.text);
+    /* The row text leaves blank columns where the icon goes. */
+    if (bars >= 0 && bars_col + AMIGA_NET_BARS_COLS <= cols)
+      cfg_draw_bars((WORD) (row.left + 2 + bars_col * FONT_W + 1),
+                    (WORD) (row.top + 1), (uint8_t) bars, selected);
   }
 }
 

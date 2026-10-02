@@ -41,6 +41,18 @@ const char *amiga_net_auth_text(uint8_t auth);
 void amiga_net_mac_text(char *out, const uint8_t bytes[6]);
 /* "Label         value" for a Network page row; out holds 80 chars. */
 void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out);
+/* Signal icon: 0-4 lit bars for an RSSI (4 >= -55, 3 >= -67, 2 >= -75,
+ * 1 >= -85 dBm, else 0), drawn in AMIGA_NET_BARS_COLS text columns. */
+#define AMIGA_NET_BARS 4
+#define AMIGA_NET_BARS_COLS 3
+uint8_t amiga_net_signal_bars(int8_t rssi);
+/* Window rows: as the _text functions, but with the dBm reading replaced
+ * by AMIGA_NET_BARS_COLS blanks for the icon.  Return the bars to draw
+ * there and set *col to its column, or return -1 (no icon on this row). */
+int amiga_net_row_display(const amiga_net_t *net, uint16_t row, char *out,
+                          uint8_t *col);
+int amiga_net_scan_row_display(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
+                               char *out, uint8_t *col);
 /* Join picker row: SSID padded to ssid_w, then signal, quality, security. */
 void amiga_net_scan_row_text(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
                              char *out);

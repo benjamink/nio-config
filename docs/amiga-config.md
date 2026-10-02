@@ -127,7 +127,7 @@ tab shows:
 | --- | --- |
 | Wi-Fi | Connected, Connecting, Disconnected, Failed to connect, or Off |
 | Network | The saved SSID |
-| Signal | RSSI in dBm with Excellent/Good/Fair/Weak (when connected) |
+| Signal | A 4-bar icon and Excellent/Good/Fair/Weak (when connected): 4 bars from −55 dBm, 3 from −67, 2 from −75, 1 from −85. `SCRIPT` output keeps the dBm reading |
 | Access point | BSSID of the access point in use |
 | IP address, Subnet mask, Gateway, DNS server | IPv4 settings (when connected) |
 | MAC address | The FujiNet's station MAC |
@@ -140,7 +140,8 @@ To change network:
 
 1. On the **Network** tab press **Join…**. The FujiNet scans, and the list
    becomes the network picker (**Join**, **Rescan**, **Other…**, **Cancel**,
-   **Close**) showing each network's signal and Open/Secured. The saved
+   **Close**) showing each network's signal (bar icon and rating) and
+   Open/Secured. The saved
    network, else the strongest, is selected. Hidden networks (no name) are
    not listed.
 2. Select a network and press **Join** (or double-click, or Return). For a

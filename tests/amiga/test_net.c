@@ -22,6 +22,47 @@ void test_net(void)
   CHECK_STR(amiga_net_auth_text(0), "Open");
   CHECK_STR(amiga_net_auth_text(1), "Secured");
 
+  /* Signal icon levels and the rows that leave room for it. */
+  CHECK(amiga_net_signal_bars(-40) == 4 && amiga_net_signal_bars(-55) == 4);
+  CHECK(amiga_net_signal_bars(-56) == 3 && amiga_net_signal_bars(-67) == 3);
+  CHECK(amiga_net_signal_bars(-70) == 2 && amiga_net_signal_bars(-80) == 1);
+  CHECK(amiga_net_signal_bars(-90) == 0);
+  {
+    amiga_net_t n;
+    fn_wifi_scan_record_t sr;
+    uint8_t col = 0;
+
+    memset(&n, 0, sizeof(n));
+    n.have_status = 1;
+    n.status.link_state = 2;
+    n.status.rssi = -61;
+    CHECK(amiga_net_row_display(&n, AMIGA_NET_ROW_SIGNAL, text, &col) == 3);
+    CHECK(col == AMIGA_NET_LABEL_W);
+    CHECK_STR(text, "Signal            Good");
+    /* Other rows, and a missing reading, have no icon. */
+    CHECK(amiga_net_row_display(&n, AMIGA_NET_ROW_IP, text, &col) == -1);
+    n.status.rssi = 0;
+    CHECK(amiga_net_row_display(&n, AMIGA_NET_ROW_SIGNAL, text, &col) == -1);
+    CHECK_STR(text, "Signal        Unknown");
+    n.status.link_state = 0;
+    n.status.rssi = -50;
+    CHECK(amiga_net_row_display(&n, AMIGA_NET_ROW_SIGNAL, text, &col) == -1);
+    CHECK_STR(text, "Signal        -");
+
+    memset(&sr, 0, sizeof(sr));
+    strcpy(sr.ssid, "home");
+    sr.rssi = -48;
+    sr.auth = 1;
+    CHECK(amiga_net_scan_row_display(&sr, 10, text, &col) == 4);
+    CHECK(col == 11);
+    CHECK_STR(text, "home            Excellent Secured");
+    strcpy(sr.ssid, "a-very-long-network-name");
+    sr.rssi = -90;
+    sr.auth = 0;
+    CHECK(amiga_net_scan_row_display(&sr, 6, text, &col) == 0);
+    CHECK_STR(text, "a-very      Weak      Open");
+  }
+
   /* Join window validation, shared with the controller and SCRIPT. */
   CHECK(amiga_net_pass_problem(0, 0, 0) == NULL);                 /* open */
   CHECK(amiga_net_pass_problem(1, 12, 0) == NULL);

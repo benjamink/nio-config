@@ -480,3 +480,50 @@ uint8_t amiga_ctl_net_join_result(amiga_ctl_t *ctl, const char *ssid)
   status(ctl, ctl->msg);
   return link;
 }
+
+uint8_t amiga_net_signal_bars(int8_t rssi)
+{
+  if (rssi >= -55)
+    return 4;
+  if (rssi >= -67)
+    return 3;
+  if (rssi >= -75)
+    return 2;
+  if (rssi >= -85)
+    return 1;
+  return 0;
+}
+
+int amiga_net_row_display(const amiga_net_t *net, uint16_t row, char *out,
+                          uint8_t *col)
+{
+  const fn_wifi_status_t *s = &net->status;
+
+  /* Only a real reading on a connected link gets the icon. */
+  if (row != AMIGA_NET_ROW_SIGNAL || !net->have_status ||
+      s->link_state != 2 || !s->rssi) {
+    amiga_net_row_text(net, row, out);
+    return -1;
+  }
+  amiga_sprintf(out, "%-14s%-3s %s", "Signal", "",
+                amiga_net_signal_text(s->rssi));
+  *col = AMIGA_NET_LABEL_W;
+  return amiga_net_signal_bars(s->rssi);
+}
+
+int amiga_net_scan_row_display(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
+                               char *out, uint8_t *col)
+{
+  char name[FN_WIFI_MAX_SSID + 1];
+
+  strcpy(name, r->ssid);
+  if (strlen(name) > ssid_w)
+    name[ssid_w] = 0;
+  /* amiga_sprintf has no '*' width; pad by hand. */
+  memset(out, ' ', ssid_w);
+  memcpy(out, name, strlen(name));
+  amiga_sprintf(out + ssid_w, " %-3s  %-9s %s", "",
+                amiga_net_signal_text(r->rssi), amiga_net_auth_text(r->auth));
+  *col = (uint8_t) (ssid_w + 1);
+  return amiga_net_signal_bars(r->rssi);
+}
