@@ -264,7 +264,7 @@ static int scan_all(amiga_ctl_t *ctl)
     if (!count)
       break;
     offset = (uint16_t) (offset + count);
-    /* Hidden networks have no name to list; Join Other reaches them.
+    /* Hidden networks have no name to list; Other... reaches them.
      * Compact this page in place, behind the networks already kept. */
     base = n->scan_count;
     for (i = 0; i < count; i++) {
@@ -441,7 +441,7 @@ int amiga_ctl_wifi_commit(amiga_ctl_t *ctl, uint16_t index, const char *pass)
   }
   r = &ctl->net.scan[index];
   if (!r->ssid[0]) {
-    status(ctl, "Hidden networks need their name; use Join Other");
+    status(ctl, "Hidden networks need their name; use Other...");
     return 0;
   }
   if (!amiga_ctl_wifi_join(ctl, r->ssid, pass, r->auth))

@@ -139,7 +139,7 @@ To change network:
    For the saved network, leave it empty to keep the stored passphrase. An
    open network needs no passphrase; joining one asks first when it replaces
    the current network.
-3. For a hidden network press **Join Other…**: the window also has a
+3. For a hidden network press **Other…**: the window also has a
    **Network** field for its name. Return moves from Network to Passphrase.
    Leave the passphrase empty for an open network.
 4. **Rescan** scans again; **Cancel** or Esc goes back to the Network page.

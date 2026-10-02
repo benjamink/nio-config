@@ -130,7 +130,7 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_ADD_CANCEL } },
   { { "Join", ACT_WIFI_JOIN }, { "Rescan", ACT_WIFI_RESCAN },
-    { "Join Other...", ACT_WIFI_OTHER }, { NULL, ACT_NONE },
+    { "Other...", ACT_WIFI_OTHER }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { "Cancel", ACT_WIFI_CANCEL } },
 };
 
@@ -1159,7 +1159,7 @@ static int join_saved(const char *ssid)
 }
 
 /* Whether the Join window's network is secured: a listed network says so;
- * one typed in (Join Other) is secured when it has a passphrase, typed now
+ * one typed in (Other...) is secured when it has a passphrase, typed now
  * or stored. */
 static uint8_t join_secured(int listed_auth)
 {
@@ -1168,7 +1168,7 @@ static uint8_t join_secured(int listed_auth)
   return (uint8_t) (join_pass[0] || join_saved((const char *) join_ssid));
 }
 
-/* Asks for a network's passphrase (and, for Join Other, its name: ssid
+/* Asks for a network's passphrase (and, for Other..., its name: ssid
  * NULL) in its own window, with the main window blocked.  Returns 1 with
  * join_ssid and join_pass filled when the user joins. */
 static int gui_ask_join(const char *ssid)

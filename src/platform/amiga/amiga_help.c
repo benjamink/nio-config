@@ -133,7 +133,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "status line says whether it connected. Until it does, hosts cannot be "
   "browsed. The passphrase is never read back from the FujiNet.\n"
   "\n"
-  "Hidden networks are not listed. Press Join Other... and type the "
+  "Hidden networks are not listed. Press Other... and type the "
   "network's name and passphrase; leave the passphrase empty for an open "
   "network.\n"
   "\n"
