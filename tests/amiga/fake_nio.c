@@ -43,6 +43,8 @@ static uint8_t range_buf[1024];
 static uint8_t last_error;
 static uint8_t last_status;
 
+static void fake_wifi_reset(void);
+
 void fake_nio_reset(void)
 {
   memset(keys, 0, sizeof(keys));
@@ -52,6 +54,7 @@ void fake_nio_reset(void)
   slot_range_calls = 0;
   last_error = 0;
   last_status = 0;
+  fake_wifi_reset();
 }
 
 static fake_key_t *find_key(const char *ns, const char *key, int create)
@@ -377,5 +380,161 @@ uint8_t fn_slot_catalog_next_entry(const fn_slot_catalog_page_t *page,
   out->uri_len = page->entry_data[pos + 2];
   out->uri = &page->entry_data[pos + 3];
   *offset = (uint16_t) (pos + 3 + out->uri_len);
+  return FN_OK;
+}
+
+/* ---- Wi-Fi service ------------------------------------------------------ */
+
+#define FAKE_WIFI_NETS 40
+/* Records per scan reply, as the library gets from a 420-byte buffer. */
+#define FAKE_WIFI_PAGE 9
+
+static fn_wifi_status_t wifi_status;
+static fn_wifi_config_t wifi_config;
+static char wifi_password[FN_WIFI_MAX_PASSWORD + 1];
+static uint8_t wifi_status_err, wifi_adapter_err, wifi_set_err, wifi_scan_err;
+static fn_wifi_scan_record_t wifi_nets[FAKE_WIFI_NETS];
+static uint8_t wifi_net_count;
+static unsigned wifi_set_calls, wifi_scan_calls;
+static uint8_t wifi_last_fields;
+
+static void fake_wifi_reset(void)
+{
+  memset(&wifi_status, 0, sizeof(wifi_status));
+  memset(&wifi_config, 0, sizeof(wifi_config));
+  wifi_status.link_state = 2;
+  wifi_status.configured_enabled = 1;
+  wifi_status.bssid_valid = 1;
+  wifi_status.bssid.valid = 1;
+  wifi_status.bssid.bytes[0] = 0x02;
+  wifi_status.bssid.bytes[5] = 0x01;
+  wifi_status.scan_supported = 1;
+  wifi_status.rssi = -61;
+  wifi_status.capabilities = FN_WIFI_CAP_CONFIG | FN_WIFI_CAP_STATUS |
+                             FN_WIFI_CAP_CONNECT | FN_WIFI_CAP_DISCONNECT |
+                             FN_WIFI_CAP_SCAN | FN_WIFI_CAP_BSSID;
+  wifi_status.backend_kind = FN_WIFI_BACKEND_ESP32;
+  strcpy(wifi_status.ip, "192.168.1.50");
+  strcpy(wifi_status.subnet, "255.255.255.0");
+  strcpy(wifi_status.gateway, "192.168.1.1");
+  strcpy(wifi_status.dns, "192.168.1.1");
+  wifi_config.enabled = 1;
+  wifi_config.password_present = 1;
+  strcpy(wifi_config.ssid, "home");
+  strcpy(wifi_password, "home-pass");
+  wifi_status_err = wifi_adapter_err = wifi_set_err = wifi_scan_err = FN_OK;
+  wifi_net_count = 0;
+  wifi_set_calls = 0;
+  wifi_scan_calls = 0;
+  wifi_last_fields = 0;
+}
+
+fn_wifi_status_t *fake_wifi_status(void) { return &wifi_status; }
+fn_wifi_config_t *fake_wifi_config(void) { return &wifi_config; }
+void fake_wifi_status_error(uint8_t err) { wifi_status_err = err; }
+void fake_wifi_adapter_error(uint8_t err) { wifi_adapter_err = err; }
+void fake_wifi_set_error(uint8_t err) { wifi_set_err = err; }
+void fake_wifi_scan_error(uint8_t err) { wifi_scan_err = err; }
+unsigned fake_wifi_set_calls(void) { return wifi_set_calls; }
+unsigned fake_wifi_scan_calls(void) { return wifi_scan_calls; }
+uint8_t fake_wifi_last_fields(void) { return wifi_last_fields; }
+const char *fake_wifi_password(void) { return wifi_password; }
+const char *fake_wifi_bssid(void) { return wifi_config.bssid; }
+
+void fake_wifi_add_network(const char *ssid, int8_t rssi, uint8_t auth)
+{
+  fn_wifi_scan_record_t *r;
+
+  if (wifi_net_count >= FAKE_WIFI_NETS)
+    return;
+  r = &wifi_nets[wifi_net_count];
+  memset(r, 0, sizeof(*r));
+  strncpy(r->ssid, ssid, FN_WIFI_MAX_SSID);
+  r->bssid.valid = 1;
+  r->bssid.bytes[5] = wifi_net_count;
+  r->rssi = rssi;
+  r->channel = 6;
+  r->auth = auth;
+  wifi_net_count++;
+}
+
+uint8_t fn_wifi_get_status(fn_wifi_status_t *status)
+{
+  if (wifi_status_err)
+    return wifi_status_err;
+  *status = wifi_status;
+  return FN_OK;
+}
+
+uint8_t fn_wifi_get_config(fn_wifi_config_t *config)
+{
+  if (wifi_status_err)
+    return wifi_status_err;
+  *config = wifi_config;
+  return FN_OK;
+}
+
+uint8_t fn_wifi_get_adapter_info(fn_wifi_adapter_info_t *info)
+{
+  static const uint8_t mac[6] = { 0x24, 0x6F, 0x28, 0xAB, 0xCD, 0xEF };
+
+  if (wifi_adapter_err)
+    return wifi_adapter_err;
+  memset(info, 0, sizeof(*info));
+  memcpy(info->mac.bytes, mac, 6);
+  info->mac.valid = 1;
+  strcpy(info->firmware, "0.1.1");
+  return FN_OK;
+}
+
+uint8_t fn_wifi_set_config(const fn_wifi_config_update_t *u)
+{
+  wifi_set_calls++;
+  wifi_last_fields = u->fields;
+  if (wifi_set_err)
+    return wifi_set_err;
+  if ((u->fields & FN_WIFI_SET_SSID) && (!u->ssid || strlen(u->ssid) > FN_WIFI_MAX_SSID))
+    return FN_ERR_INVALID;
+  if ((u->fields & FN_WIFI_SET_PASSWORD) &&
+      (!u->password || strlen(u->password) > FN_WIFI_MAX_PASSWORD))
+    return FN_ERR_INVALID;
+  if (u->fields & FN_WIFI_SET_ENABLED)
+    wifi_config.enabled = u->enabled;
+  if (u->fields & FN_WIFI_SET_SSID)
+    strcpy(wifi_config.ssid, u->ssid);
+  if (u->fields & FN_WIFI_SET_BSSID)
+    strcpy(wifi_config.bssid, u->bssid);
+  if (u->fields & FN_WIFI_SET_PASSWORD) {
+    strcpy(wifi_password, u->password);
+    wifi_config.password_present = u->password[0] != 0;
+  }
+  if (u->fields & FN_WIFI_SET_RECONNECT)
+    wifi_status.link_state = 1;   /* connecting */
+  return FN_OK;
+}
+
+uint8_t fn_wifi_scan(uint16_t offset, uint8_t limit, fn_wifi_scan_record_t *records,
+                     uint8_t capacity, uint8_t *count, uint8_t *more,
+                     uint8_t *response_buffer, uint16_t response_capacity)
+{
+  uint8_t n = limit < capacity ? limit : capacity;
+  uint8_t i;
+
+  (void) response_buffer;
+  wifi_scan_calls++;
+  if (!response_capacity || !n)
+    return FN_ERR_INVALID;
+  if (wifi_scan_err)
+    return wifi_scan_err;
+  if (n > FAKE_WIFI_PAGE)
+    n = FAKE_WIFI_PAGE;
+  if (offset > wifi_net_count)
+    offset = wifi_net_count;
+  if (n > wifi_net_count - offset)
+    n = (uint8_t) (wifi_net_count - offset);
+  for (i = 0; i < n; i++)
+    records[i] = wifi_nets[offset + i];
+  *count = n;
+  *more = (uint8_t) (offset + n < wifi_net_count);
   return FN_OK;
 }

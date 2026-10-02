@@ -41,6 +41,9 @@ void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,
   amiga_list_set_count(&ctl->slots, AMIGA_CAT_SLOTS);
   amiga_list_init(&ctl->drives, rows);
   amiga_list_init(&ctl->help, rows);
+  amiga_list_init(&ctl->netinfo, rows);
+  amiga_list_set_count(&ctl->netinfo, AMIGA_NET_ROWS);
+  amiga_list_init(&ctl->networks, rows);
   amiga_list_set_count(&ctl->hosts, state->host_count);
   amiga_list_set_count(&ctl->drives, AMIGA_DRIVE_COUNT);
 }
@@ -60,13 +63,16 @@ void amiga_ctl_set_rows(amiga_ctl_t *ctl, uint8_t rows)
   amiga_list_set_rows(&ctl->slots, rows);
   amiga_list_set_rows(&ctl->drives, rows);
   amiga_list_set_rows(&ctl->help, rows);
+  amiga_list_set_rows(&ctl->netinfo, rows);
+  amiga_list_set_rows(&ctl->networks, rows);
 }
 
 void amiga_ctl_set_page(amiga_ctl_t *ctl, uint8_t page)
 {
   if (page < AMIGA_PAGE_COUNT && page != AMIGA_PAGE_MOUNT &&
       page != AMIGA_PAGE_HELP && page != AMIGA_PAGE_ADD &&
-      ctl->page != AMIGA_PAGE_ADD)
+      page != AMIGA_PAGE_WIFI && ctl->page != AMIGA_PAGE_ADD &&
+      ctl->page != AMIGA_PAGE_WIFI)
     ctl->page = page;
 }
 

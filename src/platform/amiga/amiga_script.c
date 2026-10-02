@@ -1,6 +1,7 @@
 #include "amiga_script.h"
 #include "amiga_fmt.h"
 #include "amiga_drives.h"
+#include "amiga_net.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,6 +87,84 @@ static int fail(amiga_ctl_t *ctl, const char *msg, amiga_script_out_fn out,
   return result(ctl, 0, out, ctx);
 }
 
+/* The original line after its first `skip` words, so a passphrase keeps
+ * its spaces. */
+static const char *rest_after(const char *line, int skip)
+{
+  while (skip-- > 0) {
+    while (*line == ' ' || *line == '\t')
+      line++;
+    while (*line && *line != ' ' && *line != '\t')
+      line++;
+  }
+  while (*line == ' ' || *line == '\t')
+    line++;
+  return line;
+}
+
+static void dump_network(amiga_ctl_t *ctl, amiga_script_out_fn out, void *ctx)
+{
+  uint16_t row;
+
+  for (row = 0; row < AMIGA_NET_ROWS; row++) {
+    char text[96];
+
+    amiga_net_row_text(&ctl->net, row, text);
+    amiga_sprintf(out_buf, "NET %s", text);
+    out(out_buf, ctx);
+  }
+}
+
+static int wifi_command(amiga_ctl_t *ctl, const char *line, char **t, int n,
+                        amiga_script_out_fn out, void *ctx)
+{
+  uint8_t i;
+
+  if (is(t[1], "status") && n == 2) {
+    int ok = amiga_ctl_net_refresh(ctl);
+
+    dump_network(ctl, out, ctx);
+    return result(ctl, ok, out, ctx);
+  }
+  if (is(t[1], "scan") && n == 2) {
+    if (!amiga_ctl_wifi_begin(ctl))
+      return result(ctl, 0, out, ctx);
+    for (i = 0; i < ctl->net.scan_count; i++) {
+      const fn_wifi_scan_record_t *r = &ctl->net.scan[i];
+
+      amiga_sprintf(out_buf, "NETWORK %u %d %s %s", (unsigned) i, (int) r->rssi,
+                    r->auth ? "SECURED" : "OPEN", r->ssid);
+      out(out_buf, ctx);
+    }
+    return result(ctl, 1, out, ctx);
+  }
+  if (is(t[1], "connect") && n >= 3 && parse_u8(t[2], &i)) {
+    if (ctl->page != AMIGA_PAGE_WIFI)
+      return fail(ctl, "Run wifi scan first", out, ctx);
+    return result(ctl, amiga_ctl_wifi_commit(ctl, i, rest_after(line, 3)),
+                  out, ctx);
+  }
+  if (is(t[1], "join") && n >= 3) {
+    const char *pass = rest_after(line, 3);
+    uint8_t secured;
+
+    if (!ctl->net.have_config)
+      (void) amiga_ctl_net_refresh(ctl);
+    /* A passphrase means a secured network; none rejoins the saved one
+     * with its stored passphrase, or joins an open network. */
+    secured = pass[0] || (ctl->net.have_config &&
+                          ctl->net.config.password_present &&
+                          strcmp(ctl->net.config.ssid, t[2]) == 0);
+    return result(ctl, amiga_ctl_wifi_join(ctl, t[2], pass, secured), out,
+                  ctx);
+  }
+  if (is(t[1], "cancel") && n == 2) {
+    amiga_ctl_wifi_cancel(ctl);
+    return result(ctl, 1, out, ctx);
+  }
+  return fail(ctl, "Bad arguments", out, ctx);
+}
+
 static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
                 void *ctx)
 {
@@ -136,6 +215,12 @@ static int dump(amiga_ctl_t *ctl, char **t, int n, amiga_script_out_fn out,
                     ctl->cat_ro[k] ? "RO" : "RW", ctl->cat_uri[k]);
       out(out_buf, ctx);
     }
+  } else if (n == 2 && is(t[1], "network")) {
+    int ok = amiga_ctl_net_refresh(ctl);
+
+    dump_network(ctl, out, ctx);
+    if (!ok)
+      return result(ctl, 0, out, ctx);
   } else if (n == 2 && is(t[1], "status")) {
     amiga_sprintf(out_buf, "STATUS %s", s->status);
     out(out_buf, ctx);
@@ -175,7 +260,7 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
 {
   /* Pages a script may show; the mount picker is entered via "mount". */
   static const char *const pages[AMIGA_PAGE_MOUNT] = {
-    "hosts", "browse", "catalogue", "drives"
+    "hosts", "browse", "catalogue", "drives", "network"
   };
   char *t[MAX_TOKENS];
   int n;
@@ -204,6 +289,8 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
     }
     return fail(ctl, "Unknown page", out, out_ctx);
   }
+  if (is(t[0], "wifi") && n >= 2)
+    return wifi_command(ctl, line, t, n, out, out_ctx);
   if (is(t[0], "host") && n >= 2)
     return host_command(ctl, t, n, out, out_ctx);
   if (is(t[0], "browse") && n == 1)
@@ -256,7 +343,8 @@ int amiga_script_line(amiga_ctl_t *ctl, const char *line,
   if (is(t[0], "insert") || is(t[0], "eject") || is(t[0], "assign") ||
       is(t[0], "slot") || is(t[0], "page") || is(t[0], "wait") ||
       is(t[0], "quit") || is(t[0], "browse") || is(t[0], "select") ||
-      is(t[0], "enter") || is(t[0], "parent") || is(t[0], "mount"))
+      is(t[0], "enter") || is(t[0], "parent") || is(t[0], "mount") ||
+      is(t[0], "wifi"))
     return fail(ctl, "Bad arguments", out, out_ctx);
   return fail(ctl, "Unknown command", out, out_ctx);
 }

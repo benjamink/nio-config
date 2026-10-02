@@ -1,7 +1,8 @@
 # config-nio for the Amiga Workbench
 
 `config-nio` for the Amiga is a Workbench program. It configures FujiNet NIO
-hosts, the disk images you mount and the `DN0:`–`DN7:` drives. It runs on
+hosts, the disk images you mount, the `DN0:`–`DN7:` drives and the FujiNet's
+Wi-Fi network. It runs on
 Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 
 ## Feature map
@@ -13,6 +14,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
+| Wi-Fi / adapter info | **Network** page: link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC, firmware version; Refresh / **Join…** (scan, pick, passphrase) |
 
 The pages use the same model as the Shell commands, so the two can be used
 side by side:
@@ -25,6 +27,7 @@ side by side:
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
 | Eject | `FUMOUNT drive` (the image stays in its slot) |
+| Network page / Join… | Wi-Fi service (`0xF3`) `GET_STATUS`, `GET_CONFIG`, `GET_ADAPTER_INFO`, `SCAN`, `SET_CONFIG` |
 
 Every change is saved to the FujiNet as soon as you make it. For that
 reason the window has no Save/Use/Cancel buttons.
@@ -67,7 +70,7 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 
 ## Using the window
 
-- Click a page button (Hosts / Browse / Catalogue / Drives), or press Tab /
+- Click a page button (Hosts / Browse / Catalogue / Drives / Network), or press Tab /
   Shift-Tab, to change page.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
@@ -106,6 +109,46 @@ page.
 - Remove, Clear, Eject and Replace ask for confirmation first.
 - **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
 
+## Network and Wi-Fi
+
+The **Network** page is read from the FujiNet each time you open it, and
+again with **Refresh** (or Return):
+
+| Row | Shows |
+| --- | --- |
+| Wi-Fi | Connected, Connecting, Disconnected, Failed to connect, or Off |
+| Network | The saved SSID |
+| Signal | RSSI in dBm with Excellent/Good/Fair/Weak (when connected) |
+| Access point | BSSID of the access point in use |
+| IP address, Subnet mask, Gateway, DNS server | IPv4 settings (when connected) |
+| MAC address | The FujiNet's station MAC |
+| Firmware | The FujiNet firmware version |
+| Wi-Fi control | FujiNet (ESP32), Host computer, Simulated or Unavailable |
+
+MAC address and Firmware need firmware with the Wi-Fi service's
+`GET_ADAPTER_INFO` command; older firmware shows `Needs newer firmware`.
+
+To change network:
+
+1. Press **Join…**. The FujiNet scans and lists the networks with signal and
+   Open/Secured. The saved network, else the strongest, is selected.
+2. Select a network and type its passphrase in the **Pass** field (8–64
+   characters). An open network needs none. For the saved network, leave
+   Pass empty to keep the stored passphrase.
+3. Press **Join** (or double-click, or Return). Joining a different network
+   asks first. **Rescan** scans again; **Cancel** or Esc goes back.
+
+Join saves the SSID and passphrase on the FujiNet (persisted), clears any
+pinned BSSID, enables Wi-Fi and asks the FujiNet to reconnect. config-nio then
+waits up to 10 seconds and reports `Connected to … address …`,
+`Could not connect …` or `Still connecting …`. The passphrase is never read
+back from the FujiNet; the Pass field shows it while typing (Workbench 1.3
+string gadgets cannot mask input) and is cleared when you leave the picker.
+
+Hidden networks have no name in the list; join them from a `SCRIPT` with
+`wifi join`. A FujiNet whose Wi-Fi is managed by its host computer (POSIX
+host mode) can be viewed but not switched.
+
 ## Drives, FMOUNT and FMOUNTRESTORE
 
 Mount and Eject run the standard `FMOUNT` and `FUMOUNT` commands. The
@@ -127,13 +170,18 @@ failed, and 5 otherwise.
 
 | Command | Action |
 | --- | --- |
-| `page hosts\|browse\|catalogue\|drives` | Show a page |
+| `page hosts\|browse\|catalogue\|drives\|network` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
 | `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is Add to Slot |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `dump hosts\|entries\|drives\|catalogue\|status`, `dump slot N` | Write state to the transcript (`dump catalogue` writes `SLOT N RO\|RW URI` per occupied slot) |
+| `wifi status` | Re-read the Network page and write `NET <label> <value>` per row |
+| `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per network |
+| `wifi connect N [PASSPHRASE]` | Join scanned network `N` (after `wifi scan`); the passphrase is the rest of the line, spaces included |
+| `wifi join SSID [PASSPHRASE]` | Join any network by name, hidden ones included. Without a passphrase, the saved network keeps its stored one; another network is joined as open |
+| `wifi cancel` | Leave the Join picker |
+| `dump hosts\|entries\|drives\|catalogue\|network\|status`, `dump slot N` | Write state to the transcript (`dump catalogue` writes `SLOT N RO\|RW URI` per occupied slot; `dump network` re-reads and writes the `NET` rows) |
 | `wait TICKS` | Pause (1/50 s) so the window can be inspected |
 | `quit` | Stop |
 
@@ -143,6 +191,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `amiga_ctl.c` | Controller over the portable `config_nio` state and store |
 | `amiga_script.c` | `SCRIPT=` interpreter |
+| `amiga_net.c` | Network page rows and the Wi-Fi Join flow over `fn_wifi_*` |
 | `amiga_list.c`, `amiga_layout.c`, `amiga_theme.c`, `amiga_input.c`, `amiga_format.c`, `amiga_options.c`, `amiga_drives.c` | Pure helpers |
 | `amiga_gui.c` | Intuition window, gadgets, menus and rendering (V33 API) |
 | `amiga_main.c`, `amiga_exec.c`, `amiga_stack.c` | Process start-up, command execution, stack size |

@@ -9,6 +9,7 @@ static const char *const titles[AMIGA_HELP_TOPICS] = {
   "Browsing and mounting",
   "Drives and ejecting",
   "Catalogue",
+  "Network and Wi-Fi",
   "Settings",
   "Keyboard",
   "Starting automatically",
@@ -112,6 +113,33 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "There are 256 slots, 0 to 255. When all are used, Mount reports that "
   "the catalogue is full; clear some here.",
 
+  "The Network page shows how the FujiNet is connected: whether Wi-Fi is "
+  "connected, the network (SSID) it uses, the signal, the access point, "
+  "its IP address, subnet mask, gateway and DNS server, its MAC address "
+  "and its firmware version. The page is read each time you open it.\n"
+  "\n"
+  "- Refresh (or Return) reads it again.\n"
+  "- Join... scans for networks and lists them with their signal and "
+  "whether they are Open or Secured. The network in use, else the "
+  "strongest, is selected.\n"
+  "\n"
+  "To change network, select it, type its passphrase in the Pass field "
+  "and press Join (or double-click it). An open network needs no "
+  "passphrase. For the network already saved you can leave Pass empty to "
+  "keep its stored passphrase. Rescan scans again; Cancel or Esc goes "
+  "back.\n"
+  "\n"
+  "Join saves the network on the FujiNet, which then reconnects; the "
+  "status line says whether it connected. Until it does, hosts cannot be "
+  "browsed. The passphrase is shown as you type it and is never read back "
+  "from the FujiNet.\n"
+  "\n"
+  "Hidden networks are not listed by name. Join them from a SCRIPT file "
+  "with wifi join NAME PASSPHRASE.\n"
+  "\n"
+  "MAC address and Firmware read \"Needs newer firmware\" when the "
+  "FujiNet's firmware cannot report them.",
+
   "The Settings menu changes how the Browse page shows files. Settings "
   "are saved on the FujiNet at once.\n"
   "\n"
@@ -126,8 +154,10 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Return, or a double-click, runs the page's main action.\n"
   "- Backspace goes to the parent drawer on the Browse page.\n"
   "- On the Add to Slot list, typing a number jumps to that slot.\n"
-  "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives.\n"
-  "- Help opens this help. Esc closes help, cancels Mount, or quits.\n"
+  "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives, "
+  "Network.\n"
+  "- Help opens this help. Esc closes help, cancels Mount or Join, or "
+  "quits.\n"
   "- Right-Amiga-? shows About and Right-Amiga-Q quits.",
 
   "To start FujiNet Config every time Workbench starts, run the installer "
@@ -160,7 +190,9 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- \"Cannot open fujinet-disk.device\": the disk device is not loaded. "
   "The installer adds it to S:User-Startup; reboot afterwards.\n"
   "- \"Browse failed\": the host could not be reached. Check the URI and "
-  "the FujiNet's network.\n"
+  "the FujiNet's network on the Network page.\n"
+  "- \"Could not connect\" after Join: the passphrase is wrong or the "
+  "network is out of range. Join again with the right passphrase.\n"
   "- \"FUMOUNT failed ... handler (busy)\": a program still uses the "
   "disk, for example an open drawer or a Shell whose current directory is "
   "on it. Close it and try again. The Workbench 3.1 filesystem cannot "
@@ -170,7 +202,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "FujiNet Config for the Amiga, part of FujiNet NIO.\n"
   "\n"
   "It runs on Workbench 1.3 and later and uses the FMOUNT and FUMOUNT "
-  "commands to mount FujiNet disk images."
+  "commands to mount FujiNet disk images. The Network page shows and "
+  "changes the FujiNet's Wi-Fi network."
 };
 
 const char *amiga_help_title(uint8_t topic)

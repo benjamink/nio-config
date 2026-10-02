@@ -12,6 +12,7 @@
 #include "amiga_input.h"
 #include "amiga_layout.h"
 #include "amiga_logo.h"
+#include "amiga_net.h"
 #include "amiga_script.h"
 #include "amiga_theme.h"
 
@@ -80,7 +81,12 @@ enum {
   ACT_HELP_CONTENTS,
   ACT_HELP_PREV,
   ACT_HELP_NEXT,
-  ACT_HELP_CLOSE
+  ACT_HELP_CLOSE,
+  ACT_NET_REFRESH,
+  ACT_NET_JOIN,
+  ACT_WIFI_JOIN,
+  ACT_WIFI_RESCAN,
+  ACT_WIFI_CANCEL
 };
 
 typedef struct {
@@ -88,12 +94,13 @@ typedef struct {
   uint8_t action;
 } gui_button_t;
 
-/* The mount picker and help have no page button. */
+/* The mount, add and join pickers and help have no page button. */
 static const char *const tab_labels[AMIGA_TAB_COUNT] = {
-  "Hosts", "Browse", "Catalogue", "Drives"
+  "Hosts", "Browse", "Catalogue", "Drives", "Network"
 };
 static const uint8_t tab_pages[AMIGA_TAB_COUNT] = {
-  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_CATALOGUE, AMIGA_PAGE_DRIVES
+  AMIGA_PAGE_HOSTS, AMIGA_PAGE_BROWSE, AMIGA_PAGE_CATALOGUE, AMIGA_PAGE_DRIVES,
+  AMIGA_PAGE_NETWORK
 };
 
 static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
@@ -109,6 +116,9 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
+  { { "Refresh", ACT_NET_REFRESH }, { "Join...", ACT_NET_JOIN },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_MOUNT_CANCEL } },
@@ -118,6 +128,9 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
   { { "Add", ACT_ADD_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { "Cancel", ACT_ADD_CANCEL } },
+  { { "Join", ACT_WIFI_JOIN }, { "Rescan", ACT_WIFI_RESCAN },
+    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { "Cancel", ACT_WIFI_CANCEL } },
 };
 
 /* RKM wait pointer image; sprite data must live in chip RAM. */
@@ -309,8 +322,8 @@ static int confirm(const char *message)
 
 static void about(void)
 {
-  (void) requester(win, "FujiNet Config\nHosts, catalogue and drives\n"
-                   "for FujiNet NIO on the Amiga", NULL, "OK");
+  (void) requester(win, "FujiNet Config\nHosts, catalogue, drives and\n"
+                   "Wi-Fi for FujiNet NIO on the Amiga", NULL, "OK");
 }
 
 /* ---- Busy state ---------------------------------------------------------- */
@@ -420,7 +433,8 @@ static int page_has(uint8_t id)
   switch (id) {
   case GID_EDIT:
     return gctl->page == AMIGA_PAGE_HOSTS ||
-           gctl->page == AMIGA_PAGE_CATALOGUE;
+           gctl->page == AMIGA_PAGE_CATALOGUE ||
+           gctl->page == AMIGA_PAGE_WIFI;   /* the passphrase */
   case GID_SLOT:
     return gctl->page == AMIGA_PAGE_CATALOGUE;
   case GID_RO:
@@ -462,6 +476,14 @@ static void set_string(uint8_t id, const char *text)
     (void) AddGadget(win, &gad[id], pos);
     RefreshGList(&gad[id], win, NULL, 1);
   }
+}
+
+/* Empties the URI/Pass field and its undo copy, so a passphrase does not
+ * outlive the Join picker. */
+static void clear_edit(void)
+{
+  set_string(GID_EDIT, "");
+  memset(edit_undo, 0, sizeof(edit_undo));
 }
 
 static void set_ro(int readonly)
@@ -513,6 +535,10 @@ static amiga_list_t *page_list(void)
     return &gctl->drives;
   case AMIGA_PAGE_HELP:
     return &gctl->help;
+  case AMIGA_PAGE_NETWORK:
+    return &gctl->netinfo;
+  case AMIGA_PAGE_WIFI:
+    return &gctl->networks;
   default:
     return &gctl->hosts;
   }
@@ -529,6 +555,15 @@ static uint8_t list_cols(void)
   int cols = (in.width - 4) / FONT_W;
 
   return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
+}
+
+/* Join picker: the network name takes what the signal and security
+ * columns leave (" -61 dBm  Excellent Secured" is 27 columns). */
+static uint8_t wifi_ssid_cols(uint8_t cols)
+{
+  uint8_t w = (uint8_t) (cols > 28 ? cols - 28 : 1);
+
+  return w > FN_WIFI_MAX_SSID ? FN_WIFI_MAX_SSID : w;
 }
 
 static void row_string(uint16_t idx, uint8_t cols)
@@ -555,6 +590,13 @@ static void row_string(uint16_t idx, uint8_t cols)
     amiga_clip_head(uri_text, sizeof(uri_text), s->hosts[idx],
                     (uint8_t) (cols - 3));
     amiga_sprintf(tmp_text, "%2u %s", (unsigned) idx, uri_text);
+    break;
+  case AMIGA_PAGE_NETWORK:
+    amiga_net_row_text(&gctl->net, idx, tmp_text);
+    break;
+  case AMIGA_PAGE_WIFI:
+    amiga_net_scan_row_text(&gctl->net.scan[idx], wifi_ssid_cols(cols),
+                            tmp_text);
     break;
   case AMIGA_PAGE_ADD: {
     int c = amiga_ctl_catalogue_index(gctl, (uint8_t) idx);
@@ -705,6 +747,18 @@ static void gui_paint_info(void)
                     (uint8_t) (cols - 16));
     amiga_sprintf(tmp_text, "Mount %s on drive:", uri_text);
     break;
+  case AMIGA_PAGE_NETWORK:
+    strcpy(tmp_text, "FujiNet network and Wi-Fi");
+    break;
+  case AMIGA_PAGE_WIFI: {
+    /* Column heads over the rows' name, signal and security columns. */
+    uint8_t w = wifi_ssid_cols(list_cols());
+
+    strcpy(tmp_text, padded("Network", w));
+    strcat(tmp_text, padded(" Signal", 21));
+    strcat(tmp_text, "Security");
+    break;
+  }
   default:
     strcpy(tmp_text, "Drive Mode Slot  Image");
     break;
@@ -830,9 +884,18 @@ static void gui_paint_editors(void)
   WORD label_top = (WORD) (layout.edit.top + (layout.edit.height - FONT_H) / 2);
 
   if (attached[GID_EDIT]) {
+    int pass = gctl->page == AMIGA_PAGE_WIFI;
+    amiga_rect_t label;
+
     bevel(&layout.edit, 1);
-    text_at((WORD) (layout.edit.left - 4 * FONT_W - 4), label_top, "URI", 3,
-            theme.text);
+    /* Clear the label column: the label changes with the page. */
+    label.left = (int16_t) (layout.edit.left - 4 * FONT_W - 4);
+    label.top = label_top;
+    label.width = 4 * FONT_W;
+    label.height = FONT_H;
+    fill(&label, theme.background);
+    text_at((WORD) (layout.edit.left - 4 * FONT_W - 4), label_top,
+            pass ? "Pass" : "URI", pass ? 4 : 3, theme.text);
   }
   if (attached[GID_SLOT]) {
     bevel(&layout.slot, 1);
@@ -924,8 +987,12 @@ static void gui_help_sync(void)
 
 static void gui_set_page(uint8_t page)
 {
+  uint8_t old_page = gctl->page;
+
   if (gctl->page == AMIGA_PAGE_MOUNT && page != AMIGA_PAGE_MOUNT)
     amiga_ctl_mount_cancel(gctl);
+  if (gctl->page == AMIGA_PAGE_WIFI && page != AMIGA_PAGE_WIFI)
+    amiga_ctl_wifi_cancel(gctl);
   if (gctl->page == AMIGA_PAGE_ADD && page != AMIGA_PAGE_ADD)
     amiga_ctl_add_cancel(gctl);
   if (gctl->page == AMIGA_PAGE_HELP && page != AMIGA_PAGE_HELP)
@@ -933,6 +1000,18 @@ static void gui_set_page(uint8_t page)
   amiga_ctl_set_page(gctl, page);
   if (gctl->page == AMIGA_PAGE_CATALOGUE)
     (void) amiga_ctl_catalogue_refresh(gctl);
+  /* Read on arrival, and on the first showing (a SCRIPT "page network"
+   * has already switched the page). */
+  if (gctl->page == AMIGA_PAGE_NETWORK &&
+      ((old_page != AMIGA_PAGE_NETWORK && old_page != AMIGA_PAGE_WIFI) ||
+       (!gctl->net.have_status && !gctl->net.have_config))) {
+    busy_begin();
+    (void) amiga_ctl_net_refresh(gctl);
+    busy_end();
+  }
+  /* The passphrase field starts empty and is not left on other pages. */
+  if ((gctl->page == AMIGA_PAGE_WIFI) != (old_page == AMIGA_PAGE_WIFI))
+    clear_edit();
   gui_sync_gadgets();
   gui_sync_editors();
   gui_paint();
@@ -942,6 +1021,10 @@ static void gui_set_page(uint8_t page)
 static void gui_after_action(uint8_t old_page)
 {
   gui_help_sync();
+  /* Join and Cancel switch the picker in the controller, so gui_set_page
+   * below no longer sees the page that held (or will hold) a passphrase. */
+  if ((gctl->page == AMIGA_PAGE_WIFI) != (old_page == AMIGA_PAGE_WIFI))
+    clear_edit();
   if (gctl->page != old_page) {
     gui_set_page(gctl->page);
     return;
@@ -999,6 +1082,19 @@ static int gui_confirm_action(uint8_t action)
     old = amiga_ctl_slot(gctl, slot);
     amiga_sprintf(tmp_text, "Slot %u holds %.40s.\nReplace it with %.40s?",
                   (unsigned) slot, old ? old->uri : "?", gctl->mount_name);
+    return confirm(tmp_text);
+  }
+  case ACT_WIFI_JOIN: {
+    const amiga_net_t *n = &gctl->net;
+    uint16_t sel = gctl->networks.selected;
+
+    /* Joining another network drops the current one while it connects. */
+    if (sel >= n->scan_count || !n->have_config || !n->config.ssid[0] ||
+        strcmp(n->scan[sel].ssid, n->config.ssid) == 0)
+      return 1;
+    amiga_sprintf(tmp_text, "Join %.32s?\nThe FujiNet leaves %.32s and\n"
+                  "reconnects; hosts pause until it does.",
+                  n->scan[sel].ssid, n->config.ssid);
     return confirm(tmp_text);
   }
   case ACT_MOUNT_COMMIT:
@@ -1117,6 +1213,48 @@ static void gui_do_action(uint8_t action)
     if (gctl->drives.selected != AMIGA_LIST_NONE)
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
     break;
+  case ACT_NET_REFRESH:
+    (void) amiga_ctl_net_refresh(gctl);
+    break;
+  case ACT_NET_JOIN:
+    if (amiga_ctl_wifi_begin(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case ACT_WIFI_RESCAN:
+    if (amiga_ctl_wifi_rescan(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case ACT_WIFI_CANCEL:
+    amiga_ctl_wifi_cancel(gctl);
+    break;
+  case ACT_WIFI_JOIN: {
+    uint16_t sel = gctl->networks.selected;
+
+    if (sel < gctl->net.scan_count) {
+      char ssid[FN_WIFI_MAX_SSID + 1];
+
+      strcpy(ssid, gctl->net.scan[sel].ssid);
+      if (amiga_ctl_wifi_commit(gctl, sel, (const char *) edit_buf)) {
+        int tries;
+
+        clear_edit();
+        gui_paint_status();
+        /* Wait up to 10 seconds for the FujiNet to connect or give up. */
+        for (tries = 0; tries < 20; tries++) {
+          uint8_t link;
+
+          Delay(25);
+          link = amiga_ctl_net_poll(gctl);
+          if (link == 2 || link == 3 || link == 0xFF)
+            break;
+        }
+        (void) amiga_ctl_net_join_result(gctl, ssid);
+      }
+    } else {
+      config_nio_set_status(gctl->state, "Choose a network first");
+    }
+    break;
+  }
   case ACT_DRIVE_REMOUNT:
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
       uint8_t unit = (uint8_t) gctl->drives.selected;
@@ -1230,6 +1368,12 @@ static void gui_activate(void)
   case AMIGA_PAGE_ADD:
     gui_do_action(ACT_ADD_COMMIT);
     break;
+  case AMIGA_PAGE_NETWORK:
+    gui_do_action(ACT_NET_REFRESH);
+    break;
+  case AMIGA_PAGE_WIFI:
+    gui_do_action(ACT_WIFI_JOIN);
+    break;
   case AMIGA_PAGE_DRIVES:
     /* A saved drive that is not mounted yet is mounted again first. */
     if (gctl->drives.selected != AMIGA_LIST_NONE &&
@@ -1251,6 +1395,10 @@ static void gui_select(uint16_t index)
   gui_paint_rows();
   if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
+  if (gctl->page == AMIGA_PAGE_WIFI) {
+    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    gui_paint_status();
+  }
   update_prop();
 }
 
@@ -1284,6 +1432,8 @@ static uint8_t current_tab(void)
 
   if (page == AMIGA_PAGE_MOUNT || page == AMIGA_PAGE_ADD)
     page = gctl->mount_return;
+  if (page == AMIGA_PAGE_WIFI)
+    page = gctl->net.net_return;
 
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
     if (tab_pages[i] == page)
@@ -1364,6 +1514,10 @@ not_scroll:
       gui_do_action(ACT_ADD_CANCEL);
       return 0;
     }
+    if (gctl->page == AMIGA_PAGE_WIFI) {
+      gui_do_action(ACT_WIFI_CANCEL);
+      return 0;
+    }
     if (gctl->page == AMIGA_PAGE_HELP) {
       gui_do_action(ACT_HELP_CLOSE);
       return 0;
@@ -1386,6 +1540,10 @@ not_scroll:
   gui_paint_rows();
   if (gctl->page == AMIGA_PAGE_MOUNT || gctl->page == AMIGA_PAGE_ADD)
     gui_paint_buttons();
+  if (gctl->page == AMIGA_PAGE_WIFI) {
+    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    gui_paint_status();
+  }
   update_prop();
   return 0;
 }
