@@ -1267,6 +1267,7 @@ enum {
   CA_RESCAN,
   CA_OTHER,
   CA_CANCEL,
+  CA_HELP_BACK,
   CA_CLOSE
 };
 
@@ -1274,14 +1275,18 @@ static const char *const cfg_tab_labels[AMIGA_CFG_TAB_COUNT] = {
   "Device", "Network"
 };
 
-/* Per view (AMIGA_NET_VIEW_*); Close is on every one. */
-static const gui_button_t cfg_buttons[3][AMIGA_CFG_BUTTON_COUNT] = {
+/* Per view (AMIGA_NET_VIEW_*), then the help shown over any of them;
+ * Close is on every one. */
+#define CFG_HELP_BUTTONS 3
+static const gui_button_t cfg_buttons[4][AMIGA_CFG_BUTTON_COUNT] = {
   { { "Refresh", CA_REFRESH }, { NULL, CA_NONE }, { NULL, CA_NONE },
     { NULL, CA_NONE }, { "Close", CA_CLOSE } },
   { { "Refresh", CA_REFRESH }, { "Join...", CA_JOIN_BEGIN },
     { NULL, CA_NONE }, { NULL, CA_NONE }, { "Close", CA_CLOSE } },
   { { "Join", CA_JOIN }, { "Rescan", CA_RESCAN }, { "Other...", CA_OTHER },
-    { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } }
+    { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } },
+  { { "Back", CA_HELP_BACK }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { NULL, CA_NONE }, { "Close", CA_CLOSE } }
 };
 
 static amiga_cfg_layout_t cfg;
@@ -1293,9 +1298,21 @@ static amiga_list_t cfg_device;   /* the Device tab's one row */
 static ULONG cfg_last_secs;
 static ULONG cfg_last_micros;
 static uint16_t cfg_last_index = AMIGA_LIST_NONE;
+/* Help pressed in this window shows the Configuration topic in its list,
+ * over the current tab, until Back. */
+static uint8_t cfg_help;
+static uint8_t cfg_help_topic;
+static amiga_list_t cfg_help_list;
+
+static const gui_button_t *cfg_button(uint8_t i)
+{
+  return &cfg_buttons[cfg_help ? CFG_HELP_BUTTONS : gctl->net.view][i];
+}
 
 static amiga_list_t *cfg_list(void)
 {
+  if (cfg_help)
+    return &cfg_help_list;
   switch (gctl->net.view) {
   case AMIGA_NET_VIEW_DEVICE:
     return &cfg_device;
@@ -1349,7 +1366,10 @@ static void cfg_paint_tabs(void)
 static void cfg_paint_info(void)
 {
   fill(&cfg.info, theme.background);
-  switch (gctl->net.view) {
+  switch (cfg_help ? 0xFF : gctl->net.view) {
+  case 0xFF:
+    amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(cfg_help_topic));
+    break;
   case AMIGA_NET_VIEW_DEVICE:
     strcpy(tmp_text, "FujiNet device");
     break;
@@ -1375,7 +1395,7 @@ static void cfg_paint_rows(void)
   amiga_list_t *l = cfg_list();
   amiga_rect_t in = cfg_list_interior();
   uint8_t cols = cfg_cols();
-  int join = gctl->net.view == AMIGA_NET_VIEW_JOIN;
+  int join = !cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN;
   uint8_t r;
 
   for (r = 0; r < cfg.list_rows; r++) {
@@ -1393,7 +1413,14 @@ static void cfg_paint_rows(void)
       continue;
     }
     fill(&row, selected ? theme.fill : theme.background);
-    if (join)
+    if (cfg_help) {
+      const amiga_help_line_t *hl = &help_lines[idx];
+
+      memset(tmp_text, ' ', hl->indent);
+      memcpy(tmp_text + hl->indent,
+             amiga_help_text(cfg_help_topic) + hl->start, hl->len);
+      tmp_text[hl->indent + hl->len] = 0;
+    } else if (join)
       amiga_net_scan_row_text(&gctl->net.scan[idx], cfg_ssid_cols(), tmp_text);
     else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
       amiga_net_row_text(&gctl->net, AMIGA_NET_ROW_FIRMWARE, tmp_text);
@@ -1409,7 +1436,7 @@ static void cfg_paint_buttons(void)
   uint8_t i;
 
   for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++) {
-    const gui_button_t *b = &cfg_buttons[gctl->net.view][i];
+    const gui_button_t *b = cfg_button(i);
     amiga_rect_t in = amiga_rect_inset(cfg.button[i], 2, 1);
 
     fill(&cfg.button[i], theme.background);
@@ -1528,6 +1555,10 @@ static void cfg_do_action(uint8_t action)
   case CA_CANCEL:
     amiga_ctl_wifi_cancel(gctl);
     break;
+  case CA_HELP_BACK:
+    cfg_help = 0;
+    config_nio_set_status(gctl->state, "");
+    break;
   case CA_JOIN: {
     uint16_t sel = gctl->networks.selected;
     int joined;
@@ -1563,7 +1594,7 @@ static void cfg_do_action(uint8_t action)
     break;
   }
   busy_end();
-  if (gctl->net.view != old_view) {
+  if (gctl->net.view != old_view || action == CA_HELP_BACK) {
     cfg_paint();
   } else {
     cfg_paint_rows();
@@ -1572,8 +1603,30 @@ static void cfg_do_action(uint8_t action)
   }
 }
 
+/* Help: the Configuration topic, wrapped to this window's list. */
+static void cfg_open_help(void)
+{
+  cfg_help_topic = amiga_help_find("Configuration");
+  amiga_list_init(&cfg_help_list, cfg.list_rows);
+  amiga_list_set_count(&cfg_help_list,
+                       amiga_help_layout(amiga_help_text(cfg_help_topic),
+                                         cfg_cols(), help_lines,
+                                         HELP_LINES_MAX));
+  cfg_help = 1;
+  config_nio_set_status(gctl->state, "Back or Esc returns to the settings");
+  cfg_paint();
+}
+
 static void cfg_set_view(uint8_t view)
 {
+  if (cfg_help) {
+    cfg_help = 0;
+    config_nio_set_status(gctl->state, "");
+    if (view == gctl->net.view) {
+      cfg_paint();
+      return;
+    }
+  }
   if (view == gctl->net.view)
     return;
   amiga_ctl_wifi_cancel(gctl);   /* leaving the picker */
@@ -1584,6 +1637,8 @@ static void cfg_set_view(uint8_t view)
 /* Return / double-click: Join in the picker, else Refresh. */
 static void cfg_activate(void)
 {
+  if (cfg_help)
+    return;
   cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN : CA_REFRESH);
 }
 
@@ -1603,7 +1658,7 @@ static void cfg_list_click(struct IntuiMessage *msg)
   amiga_rect_t in = cfg_list_interior();
   uint16_t index;
 
-  if (gctl->net.view != AMIGA_NET_VIEW_JOIN ||
+  if (cfg_help || gctl->net.view != AMIGA_NET_VIEW_JOIN ||
       !amiga_list_hit(cfg_list(), (int16_t) (msg->MouseY - in.top), cfg.row_h,
                       &index))
     return;
@@ -1624,8 +1679,37 @@ static void cfg_list_click(struct IntuiMessage *msg)
 static int cfg_handle_key(UWORD code, UWORD qualifier)
 {
   amiga_list_t *l = cfg_list();
+  amiga_key_t key = amiga_key_from_raw(code, qualifier);
 
-  switch (amiga_key_from_raw(code, qualifier)) {
+  if (key == AMIGA_KEY_HELP) {
+    if (!cfg_help)
+      cfg_open_help();
+    return 0;
+  }
+  /* Help text has no selection: the movement keys scroll it. */
+  if (cfg_help) {
+    int32_t max_top = l->count > l->rows ? l->count - l->rows : 0;
+    int32_t top = l->top;
+
+    switch (key) {
+    case AMIGA_KEY_UP: top -= 1; break;
+    case AMIGA_KEY_DOWN: top += 1; break;
+    case AMIGA_KEY_PAGE_UP: top -= l->rows; break;
+    case AMIGA_KEY_PAGE_DOWN: top += l->rows; break;
+    case AMIGA_KEY_TOP: top = 0; break;
+    case AMIGA_KEY_BOTTOM: top = max_top; break;
+    case AMIGA_KEY_CANCEL:
+      cfg_do_action(CA_HELP_BACK);
+      return 0;
+    default:
+      return 0;
+    }
+    l->top = (uint16_t) (top < 0 ? 0 : (top > max_top ? max_top : top));
+    cfg_paint_rows();
+    cfg_update_prop();
+    return 0;
+  }
+  switch (key) {
   case AMIGA_KEY_UP:
     amiga_list_move(l, -1);
     break;
@@ -1728,7 +1812,7 @@ static int cfg_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
     cfg_set_view(id == CFG_TAB0 ? AMIGA_NET_VIEW_DEVICE
                                 : AMIGA_NET_VIEW_NETWORK);
   } else if (id >= CFG_BTN0 && id < CFG_GID_COUNT) {
-    uint8_t action = cfg_buttons[gctl->net.view][id - CFG_BTN0].action;
+    uint8_t action = cfg_button((uint8_t) (id - CFG_BTN0))->action;
 
     if (action == CA_CLOSE)
       return 1;
@@ -1772,6 +1856,7 @@ static void gui_open_config(void)
   amiga_list_set_rows(&gctl->netinfo, cfg.list_rows);
   amiga_list_set_rows(&gctl->networks, cfg.list_rows);
   gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+  cfg_help = 0;
   cfg_prop_active = 0;
   cfg_last_index = AMIGA_LIST_NONE;
 

@@ -75,9 +75,9 @@ void test_help(void)
   CHECK(strstr(amiga_help_text(amiga_help_find("Drives and ejecting")),
                "FUMOUNT") != NULL);
   CHECK(amiga_help_find("No such topic") == AMIGA_HELP_CONTENTS);
-  CHECK(strstr(amiga_help_text(amiga_help_find("Network and Wi-Fi")),
+  CHECK(strstr(amiga_help_text(amiga_help_find("Configuration")),
                "Join...") != NULL);
-  CHECK(strstr(amiga_help_text(amiga_help_find("Network and Wi-Fi")),
+  CHECK(strstr(amiga_help_text(amiga_help_find("Configuration")),
                "Configure") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Settings")), "Configure") != NULL);
 }

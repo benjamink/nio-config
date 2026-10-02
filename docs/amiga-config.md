@@ -111,13 +111,14 @@ page.
 - **Settings** menu: date and size formats, and **Configure** (the
   Configuration window below).
 
-## Network and Wi-Fi
+## Configuration
 
 **Settings ▸ Configure** opens the **Configuration** window over the main
 window, which waits until it closes. It is read from the FujiNet when it
 opens, and again with **Refresh** (or Return). It has two tabs (Tab switches
 between them) and a **Close** button on every tab; Esc or the close gadget
-also close it.
+also close it. **Help** shows the built-in **Configuration** help topic in
+the window's list; **Back** (or Esc) returns.
 
 The **Device** tab shows the FujiNet's **Firmware** version. The **Network**
 tab shows:

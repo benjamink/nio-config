@@ -9,7 +9,7 @@ static const char *const titles[AMIGA_HELP_TOPICS] = {
   "Browsing and mounting",
   "Drives and ejecting",
   "Catalogue",
-  "Network and Wi-Fi",
+  "Configuration",
   "Settings",
   "Keyboard",
   "Starting automatically",
@@ -121,7 +121,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- The Network tab shows whether Wi-Fi is connected, the network (SSID) "
   "it uses, the signal, the access point, its IP address, subnet mask, "
   "gateway and DNS server, its MAC address and who controls the Wi-Fi.\n"
-  "- Refresh (or Return) reads them again. Tab switches tabs.\n"
+  "- Refresh (or Return) reads them again. Tab switches tabs. Help "
+  "shows this topic in the window; Back returns.\n"
   "- Join... on the Network tab scans for networks and lists them with their signal and "
   "whether they are Open or Secured. The network in use, else the "
   "strongest, is selected.\n"
@@ -151,8 +152,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Sizes Full shows exact byte counts; Sizes Compact shows Kb, Mb and "
   "Gb.\n"
   "- Configure opens the Configuration window: the FujiNet's firmware "
-  "version, its network settings and Wi-Fi network (see Network and "
-  "Wi-Fi).\n"
+  "version, its network settings and Wi-Fi network (see the "
+  "Configuration topic).\n"
   "\n"
   "Colours follow your Workbench palette.",
 
