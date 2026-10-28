@@ -17,6 +17,10 @@
 
 /* Wait until the console keys, stick and keyboard are idle. */
 void input_settle(void);
+/* While input_key() waits, call fn every `step` jiffies once nothing has been
+ * pressed for `delay` jiffies (the animation hook).  A key, stick or console
+ * press restarts the delay. */
+void input_set_idle(void (*fn)(void), uint16_t delay, uint8_t step);
 /* Block for a key press: keyboard, joystick, or console switch. */
 uint8_t input_key(void);
 

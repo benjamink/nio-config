@@ -377,10 +377,12 @@ static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
     pos = (uint16_t) (pos + n);
     if (iobuf[1] & 2) {
       e->size = 0;
+      e->mtime = 0;
     } else {
       if ((uint16_t) (pos + 16) > raw.payload_length)
         break;
       memcpy(&e->size, iobuf + pos, 4);
+      memcpy(&e->mtime, iobuf + pos + 8, 4);
       pos = (uint16_t) (pos + 16);
     }
     entry_count++;

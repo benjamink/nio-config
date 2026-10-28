@@ -76,6 +76,8 @@ class AtariUiSmoke(unittest.TestCase):
         listing = "\n".join(rows[3:21])
         self.assertIn("notes.txt", listing)
         self.assertIn("<DIR>", listing)
+        # the status row shows the size/date of the entry under the cursor
+        self.assertTrue("<DIR>" in rows[23] or "bytes" in rows[23], rows[23])
 
     def test_3_assign_image_to_drive(self):
         s = self.s

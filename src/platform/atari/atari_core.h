@@ -18,6 +18,7 @@
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */
   uint32_t size;
+  uint32_t mtime;               /* Unix seconds, 0 if unknown */
   char name[CORE_NAME_MAX + 1];
 } core_entry_t;
 
@@ -46,7 +47,7 @@ extern uint8_t core_error;
 /* A scratch block (the directory page buffer) for callers that need a few
  * hundred bytes briefly; the directory page is marked stale. */
 void *core_scratch(void);
-#define CORE_SCRATCH_SIZE (CORE_WINDOW * 37)
+#define CORE_SCRATCH_SIZE (CORE_WINDOW * 41)
 
 uint8_t core_load(void);
 uint8_t core_save_hosts(void);

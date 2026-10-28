@@ -235,6 +235,197 @@ static uint8_t confirm(const char *question)
   return k == 'y' || k == 'Y' || k == K_RET;
 }
 
+static const core_entry_t *entry_at(uint16_t idx);
+
+/* ---- Long-name animation ------------------------------------------------------------ */
+
+/* When nothing has been pressed for a couple of seconds, the selected row's
+ * name, if it does not fit its column, slides to and fro inside that column
+ * (the rest of the row stays put), pausing a moment at each end. */
+#define MARQ_DELAY 100          /* jiffies idle before it starts (about 2 s) */
+#define MARQ_STEP  7            /* jiffies per step */
+#define MARQ_HOLD  3            /* steps to rest at each end */
+
+static char marq[CORE_URI_MAX + 1];
+static uint8_t marq_state;      /* 0 not tried, 1 animating, 2 fits / nothing to do */
+static uint8_t marq_len;
+static uint8_t marq_off;
+static uint8_t marq_dir;        /* 0 forward, 1 back */
+static uint8_t marq_hold;
+static uint8_t marq_row;
+static uint8_t marq_col;
+static uint8_t marq_w;
+static uint8_t idle_ok;         /* the main key wait is running: animate */
+
+static void marq_draw(void)
+{
+  scr_text(marq_row, marq_col, marq + marq_off, marq_w);
+}
+
+/* Put the row back as drawn and forget the animation (a key was pressed). */
+static void marq_stop(void)
+{
+  if (marq_state == 1) {
+    marq_off = 0;
+    marq_draw();
+  }
+  marq_state = 0;
+}
+
+static void marq_start(void)
+{
+  const core_entry_t *e;
+
+  marq_state = 2;
+  marq_off = 0;
+  if (tab == TAB_HOSTS && host_count) {
+    strcpy(marq, hosts[host_sel]);
+    marq_row = (uint8_t) (LIST_ROW + host_sel - top);
+    marq_col = 3;
+    marq_w = 35;
+  } else if (tab == TAB_DRIVES && drive_on[drive_sel]) {
+    strcpy(marq, base_name(drive_uri[drive_sel]));
+    marq_row = (uint8_t) (LIST_ROW + drive_sel);
+    marq_col = 5;
+    marq_w = 28;
+  } else if (tab == TAB_BROWSE && browse_valid && (e = entry_at(cur)) != 0) {
+    strcpy(marq, e->name);
+    if (e->flags & CORE_ENTRY_TRUNCATED) {
+      /* the page keeps only the start of the name: fetch all of it */
+      if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "") ||
+          !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
+                          marq, sizeof(marq)))
+        return;
+    }
+    marq_row = (uint8_t) (LIST_ROW + cur - top);
+    marq_col = 1;
+    marq_w = 29;
+  } else {
+    return;
+  }
+  marq_len = (uint8_t) strlen(marq);
+  if (marq_len <= marq_w)
+    return;
+  marq_state = 1;
+  marq_dir = 0;
+  marq_hold = MARQ_HOLD;
+}
+
+static void idle_tick(void)
+{
+  if (!idle_ok)
+    return;
+  if (marq_state == 0)
+    marq_start();
+  if (marq_state != 1)
+    return;
+  if (marq_hold) {
+    marq_hold--;
+    return;
+  }
+  if (!marq_dir) {
+    marq_off++;
+    if ((uint8_t) (marq_off + marq_w) >= marq_len) {
+      marq_dir = 1;
+      marq_hold = MARQ_HOLD;
+    }
+  } else {
+    marq_off--;
+    if (!marq_off) {
+      marq_dir = 0;
+      marq_hold = MARQ_HOLD;
+    }
+  }
+  marq_draw();
+}
+
+/* ---- Entry details (size and date) -------------------------------------------------- */
+
+static void put_dec(char **p, uint32_t v, uint8_t width)
+{
+  char tmp[11];
+  uint8_t n;
+
+  n = 0;
+  do {
+    tmp[n++] = (char) ('0' + (uint8_t) (v % 10));
+    v /= 10;
+  } while (v);
+  while (n < width) {
+    tmp[n++] = '0';
+  }
+  while (n)
+    *(*p)++ = tmp[--n];
+}
+
+/* "2026-10-28 14:07" from Unix seconds (UTC), civil-from-days. */
+static void put_date(char **p, uint32_t t)
+{
+  uint32_t z;
+  uint32_t era;
+  uint32_t doe;
+  uint32_t yoe;
+  uint32_t doy;
+  uint32_t mp;
+  uint32_t y;
+  uint8_t m;
+  uint8_t d;
+  uint32_t secs;
+
+  secs = t % 86400UL;
+  z = t / 86400UL + 719468UL;
+  era = z / 146097UL;
+  doe = z % 146097UL;
+  yoe = (doe - doe / 1460UL + doe / 36524UL - doe / 146096UL) / 365UL;
+  y = yoe + era * 400UL;
+  doy = doe - (365UL * yoe + yoe / 4UL - yoe / 100UL);
+  mp = (5UL * doy + 2UL) / 153UL;
+  d = (uint8_t) (doy - (153UL * mp + 2UL) / 5UL + 1UL);
+  m = (uint8_t) (mp < 10 ? mp + 3 : mp - 9);
+  if (m <= 2)
+    y++;
+  put_dec(p, y, 4);
+  *(*p)++ = '-';
+  put_dec(p, m, 2);
+  *(*p)++ = '-';
+  put_dec(p, d, 2);
+  *(*p)++ = ' ';
+  put_dec(p, secs / 3600UL, 2);
+  *(*p)++ = ':';
+  put_dec(p, secs / 60UL % 60UL, 2);
+}
+
+/* Show the size and date of the entry under the cursor on the status row,
+ * unless a message is showing there. */
+static void browse_detail(void)
+{
+  const core_entry_t *e;
+  char *p;
+
+  if (status[0] || tab != TAB_BROWSE || !browse_valid)
+    return;
+  scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
+  e = entry_at(cur);
+  if (!e)
+    return;
+  p = line;
+  if (e->flags & CORE_ENTRY_DIR) {
+    strcpy(p, "<DIR>");
+    p += 5;
+  } else {
+    put_dec(&p, e->size, 0);
+    strcpy(p, " bytes");
+    p += 6;
+  }
+  if (e->mtime) {
+    *p++ = ' ';
+    *p++ = ' ';
+    put_date(&p, e->mtime);
+  }
+  *p = 0;
+  scr_text(ROW_STATUS, 1, line, 38);
+}
+
 /* ---- Hosts tab ------------------------------------------------------------------ */
 
 static void draw_hosts(void)
@@ -427,6 +618,7 @@ static void draw_browse(void)
   }
   scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, known);
   browse_info();
+  browse_detail();
 }
 
 /* ---- Drives --------------------------------------------------------------------------- */
@@ -901,6 +1093,7 @@ static void update_selection(void)
     if (core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, ""))
       tail_text(ROW_FIELD, uri_buf);
     browse_info();
+    browse_detail();
   }
 }
 
@@ -924,6 +1117,7 @@ static void run(void)
 
   setup_refresh();
   say("Ready", 0);
+  input_set_idle(idle_tick, MARQ_DELAY, MARQ_STEP);
   redraw = 1;
   for (;;) {
     if (redraw) {
@@ -935,7 +1129,10 @@ static void run(void)
       }
     }
     redraw = 1;
+    idle_ok = 1;
     k = input_key();
+    idle_ok = 0;
+    marq_stop();
     if (k == K_BOOT) {
       boot_now();
       continue;
@@ -967,6 +1164,10 @@ static void run(void)
     }
     if (cursor_only && tab == old_tab && top == old_top && list_gen == old_gen) {
       /* keep_in_view may still scroll on the next draw; here it did not */
+      status[0] = 0;            /* the size/date of the new entry replaces it */
+      status_error = 0;
+      scr_theme(ROW_STATUS, T_STATUS);
+      scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
       update_selection();
       redraw = 0;
     }
