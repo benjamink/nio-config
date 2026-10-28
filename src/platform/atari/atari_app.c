@@ -421,6 +421,7 @@ static void browse_detail(void)
   e = entry_at(cur);
   if (!e)
     return;
+  /* size (or <DIR>) flush left, date flush right so it never shifts */
   p = line;
   if (e->flags & CORE_ENTRY_DIR) {
     strcpy(p, "<DIR>");
@@ -430,13 +431,14 @@ static void browse_detail(void)
     strcpy(p, " bytes");
     p += 6;
   }
-  if (e->mtime) {
-    *p++ = ' ';
-    *p++ = ' ';
-    put_date(&p, e->mtime);
-  }
   *p = 0;
-  scr_text(ROW_STATUS, 1, line, 38);
+  scr_text(ROW_STATUS, 1, line, 21);
+  if (e->mtime) {
+    p = line;
+    put_date(&p, e->mtime);
+    *p = 0;
+    scr_text(ROW_STATUS, (uint8_t) (SCR_COLS - 1 - (p - line)), line, (uint8_t) (p - line));
+  }
 }
 
 /* ---- Hosts tab ------------------------------------------------------------------ */

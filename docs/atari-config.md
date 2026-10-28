@@ -66,7 +66,7 @@ does not use `fnsvc`, `fnctl` or conio.
 * `makefiles/cc65-atari-nio.cfg` loads the program at `$0C00` (PicoBoot only needs
   the page below) up to `$BC00`.
 * The first load chunk (`atari_basicoff.s`) switches the BASIC ROM off with
-  PORTB and moves `MEMTOP` to `$C000`, so the program may load into the RAM
+  PORTB and moves `MEMTOP` to `$BC00`, so the program may load into the RAM
   under BASIC and cc65's C stack (set from `MEMTOP`) lands at the top of RAM.
   Without it a disk boot with BASIC in would put the stack inside the program.
   XL/XE only.
