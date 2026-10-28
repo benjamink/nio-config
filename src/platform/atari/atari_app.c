@@ -32,6 +32,8 @@ static char path[CORE_URI_MAX + 1];
 
 static uint8_t tab;
 static uint8_t status_error;
+static uint8_t cursor_only;     /* the key only moved the cursor within the page */
+static uint8_t list_gen;        /* bumped when the directory page is reloaded */
 
 static uint8_t host_sel;
 static uint8_t drive_sel;
@@ -136,7 +138,14 @@ static void draw_frame(const char *hint)
   uint8_t r;
   uint8_t w;
 
-  scr_clear();
+  /* No full-screen clear: that blanks the display for a few frames.  Every
+   * cell is rewritten in place, a row at a time. */
+  scr_fill(0, 0, SCR_COLS, ' ');
+  scr_fill(1, 0, SCR_COLS, ' ');
+  scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
+  scr_fill(ROW_INFO, 0, SCR_COLS, ' ');
+  scr_fill(ROW_HINT, 0, SCR_COLS, ' ');
+  scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
   scr_theme(0, T_TITLE);
   scr_theme(1, T_TABS);
   scr_theme(ROW_FIELD, T_FIELD);
@@ -242,9 +251,10 @@ static void draw_hosts(void)
     uint8_t row;
 
     idx = (uint16_t) (top + r);
-    if (idx >= host_count)
-      break;
     row = (uint8_t) (LIST_ROW + r);
+    scr_fill(row, 0, SCR_COLS, ' ');
+    if (idx >= host_count)
+      continue;
     list_row(row, idx == host_sel);
     scr_uint(row, 0, idx + 1, 2);
     scr_text(row, 3, hosts[idx], 35);
@@ -265,6 +275,7 @@ static uint16_t browse_known(void)
 
 static uint8_t browse_load(uint16_t first)
 {
+  list_gen++;
   entry_count = 0;
   entry_more = 0;
   entry_start = first;
@@ -358,6 +369,25 @@ static void draw_size(uint8_t row, const core_entry_t *e)
   }
 }
 
+static void browse_info(void)
+{
+  uint16_t known;
+
+  known = browse_known();
+  scr_fill(ROW_INFO, 0, SCR_COLS, ' ');
+  if (target_unit != NO_UNIT) {
+    scr_text(ROW_INFO, 1, "Choose an image for drive D", 27);
+    scr_putc(ROW_INFO, 28, (char) ('1' + target_unit));
+  } else if (!known) {
+    scr_text(ROW_INFO, 1, "Empty directory", 20);
+  } else {
+    scr_uint(ROW_INFO, 1, cur + 1, 5);
+    scr_text(ROW_INFO, 7, "of", 2);
+    scr_uint(ROW_INFO, 10, known, 5);
+    scr_text(ROW_INFO, 16, entry_more ? "+" : "", 1);
+  }
+}
+
 static void draw_browse(void)
 {
   uint8_t r;
@@ -365,6 +395,8 @@ static void draw_browse(void)
 
   draw_frame("RET Open BS Up R Reload OPT Boot");
   if (!browse_valid) {
+    for (r = 0; r < LIST_ROWS; r++)
+      scr_fill((uint8_t) (LIST_ROW + r), 0, SCR_COLS, ' ');
     scr_text(LIST_ROW + 1, 3, "Pick a host on the Hosts tab", 36);
     return;
   }
@@ -377,9 +409,10 @@ static void draw_browse(void)
     const core_entry_t *e;
 
     idx = (uint16_t) (top + r);
-    if (idx >= known)
-      break;
     row = (uint8_t) (LIST_ROW + r);
+    scr_fill(row, 0, SCR_COLS, ' ');
+    if (idx >= known)
+      continue;
     list_row(row, idx == cur);
     if (has_parent && idx == 0) {
       scr_text(row, 1, "..", 28);
@@ -393,17 +426,7 @@ static void draw_browse(void)
     draw_size(row, e);
   }
   scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, known);
-  if (target_unit != NO_UNIT) {
-    scr_text(ROW_INFO, 1, "Choose an image for drive D", 27);
-    scr_putc(ROW_INFO, 28, (char) ('1' + target_unit));
-  } else if (!known) {
-    scr_text(ROW_INFO, 1, "Empty directory", 20);
-  } else {
-    scr_uint(ROW_INFO, 1, cur + 1, 5);
-    scr_text(ROW_INFO, 7, "of", 2);
-    scr_uint(ROW_INFO, 10, known, 5);
-    scr_text(ROW_INFO, 16, entry_more ? "+" : "", 1);
-  }
+  browse_info();
 }
 
 /* ---- Drives --------------------------------------------------------------------------- */
@@ -441,6 +464,7 @@ static void draw_drives(void)
     uint8_t row;
 
     row = (uint8_t) (LIST_ROW + u);
+    scr_fill(row, 0, SCR_COLS, ' ');
     list_row(row, u == drive_sel);
     scr_putc(row, 1, 'D');
     scr_putc(row, 2, (char) ('1' + u));
@@ -452,6 +476,8 @@ static void draw_drives(void)
       scr_text(row, 5, "(empty)", 28);
     }
   }
+  for (u = CORE_UNITS; u < LIST_ROWS; u++)
+    scr_fill((uint8_t) (LIST_ROW + u), 0, SCR_COLS, ' ');
   scr_text(ROW_INFO, 1, "OPTION boots with these drives mounted", 38);
 }
 
@@ -496,6 +522,8 @@ static void draw_setup(void)
   uint8_t i;
 
   draw_frame("RET Join Wi-Fi R Refresh OPT Boot");
+  for (i = 0; i < LIST_ROWS; i++)
+    scr_fill((uint8_t) (LIST_ROW + i), 0, SCR_COLS, ' ');
   list_row(LIST_ROW, 1);
   setup_row(0, "Wi-Fi", wifi_cfg.ssid[0] ? wifi_cfg.ssid : "(not set)");
   setup_row(1, "Link", link_text());
@@ -701,6 +729,7 @@ static void key_hosts(uint8_t k)
   pos = host_sel;
   if (move_cursor(k, &pos, host_count)) {
     host_sel = (uint8_t) pos;
+    cursor_only = 1;
     return;
   }
   if (k == K_RET && host_count) {
@@ -748,6 +777,7 @@ static void key_browse(uint8_t k)
   }
   if (move_cursor(k, &cur, browse_known())) {
     browse_fix();
+    cursor_only = 1;
     return;
   }
   if (k == K_BS || k == 'u' || (k == K_RET && has_parent && cur == 0)) {
@@ -793,6 +823,7 @@ static void key_drives(uint8_t k)
   pos = drive_sel;
   if (move_cursor(k, &pos, CORE_UNITS)) {
     drive_sel = (uint8_t) pos;
+    cursor_only = 1;
     return;
   }
   if (k == 'x' || k == K_BS) {
@@ -826,6 +857,35 @@ static void key_setup(uint8_t k)
   }
 }
 
+/* The cursor moved but the page did not scroll: only the selection bar, the
+ * field and the info line change, so redraw just those. */
+static void update_selection(void)
+{
+  uint8_t r;
+  uint16_t idx;
+
+  for (r = 0; r < LIST_ROWS; r++) {
+    idx = (uint16_t) (top + r);
+    if (tab == TAB_HOSTS && idx < host_count)
+      list_row((uint8_t) (LIST_ROW + r), idx == host_sel);
+    else if (tab == TAB_BROWSE && idx < browse_known())
+      list_row((uint8_t) (LIST_ROW + r), idx == cur);
+    else if (tab == TAB_DRIVES && idx < CORE_UNITS)
+      list_row((uint8_t) (LIST_ROW + r), idx == drive_sel);
+  }
+  scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
+  if (tab == TAB_HOSTS) {
+    scr_text(ROW_FIELD, 1, host_count ? hosts[host_sel] : "", 38);
+  } else if (tab == TAB_DRIVES) {
+    if (drive_on[drive_sel])
+      tail_text(ROW_FIELD, drive_uri[drive_sel]);
+  } else {
+    if (core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, ""))
+      tail_text(ROW_FIELD, uri_buf);
+    browse_info();
+  }
+}
+
 static void set_tab(uint8_t t)
 {
   tab = t;
@@ -839,37 +899,58 @@ static void set_tab(uint8_t t)
 static void run(void)
 {
   uint8_t k;
+  uint8_t redraw;
+  uint8_t old_tab;
+  uint16_t old_top;
+  uint8_t old_gen;
 
   setup_refresh();
   say("Ready", 0);
+  redraw = 1;
   for (;;) {
-    switch (tab) {
-    case TAB_HOSTS:  draw_hosts();  break;
-    case TAB_BROWSE: draw_browse(); break;
-    case TAB_DRIVES: draw_drives(); break;
-    default:         draw_setup();  break;
+    if (redraw) {
+      switch (tab) {
+      case TAB_HOSTS:  draw_hosts();  break;
+      case TAB_BROWSE: draw_browse(); break;
+      case TAB_DRIVES: draw_drives(); break;
+      default:         draw_setup();  break;
+      }
     }
+    redraw = 1;
     k = input_key();
     if (k == K_BOOT) {
       boot_now();
       continue;
     }
-    if (k == K_TAB || k == K_RIGHT) {
+    if (k == K_TAB) {
       set_tab((uint8_t) ((tab + 1) % TAB_COUNT));
       continue;
     }
-    if (k == K_LEFT) {
-      set_tab((uint8_t) ((tab + TAB_COUNT - 1) % TAB_COUNT));
+    /* In a list, right opens the item and left goes up a level (so the
+     * joystick can browse); the tabs change with TAB or SELECT. */
+    if (k == K_RIGHT && tab != TAB_SETUP)
+      k = K_RET;
+    else if (k == K_LEFT && tab == TAB_BROWSE)
+      k = K_BS;
+    else if (k == K_LEFT || k == K_RIGHT)
       continue;
-    }
     if (k >= 'A' && k <= 'Z')
       k = (uint8_t) (k + 32);
     status_error = 0;
+    cursor_only = 0;
+    old_tab = tab;
+    old_top = top;
+    old_gen = list_gen;
     switch (tab) {
     case TAB_HOSTS:  key_hosts(k);  break;
     case TAB_BROWSE: key_browse(k); break;
     case TAB_DRIVES: key_drives(k); break;
     default:         key_setup(k);  break;
+    }
+    if (cursor_only && tab == old_tab && top == old_top && list_gen == old_gen) {
+      /* keep_in_view may still scroll on the next draw; here it did not */
+      update_selection();
+      redraw = 0;
     }
   }
 }

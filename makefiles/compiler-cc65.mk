@@ -5,6 +5,11 @@ ATARI_LINK_CONFIG ?= makefiles/cc65-atari-nio.cfg
 BBC_START_ADDRESS ?= 0x1900
 
 CFLAGS += -Osir -O $(EXTRA_DEFS)
+# Atari: static locals shrink the code by about 1.2K (the program has no
+# recursion); the C stack is small to match.
+ifeq ($(TARGET),atari)
+CFLAGS += -Cl
+endif
 ASMFLAGS += $(EXTRA_ASMDEFS)
 CFLAGS += --include-dir $(APP_INCLUDE_DIR)
 CFLAGS += --include-dir $(CONFIG_NIO_INCLUDE_DIR)
