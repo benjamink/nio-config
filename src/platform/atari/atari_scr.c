@@ -81,7 +81,11 @@ void scr_init(void)
     uint16_t addr;
 
     addr = (uint16_t) &screen[(uint16_t) r * SCR_COLS];
+#ifdef NO_DLI
+    *dl++ = 0x42;               /* mode 2, load address (diagnostic: no DLI) */
+#else
     *dl++ = 0xC2;               /* mode 2, load address, DLI */
+#endif
     *dl++ = (uint8_t) addr;
     *dl++ = (uint8_t) (addr >> 8);
   }

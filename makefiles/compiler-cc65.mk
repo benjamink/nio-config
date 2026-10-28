@@ -4,7 +4,8 @@ ATARI_START_ADDRESS ?= 0x2400
 ATARI_LINK_CONFIG ?= makefiles/cc65-atari-nio.cfg
 BBC_START_ADDRESS ?= 0x1900
 
-CFLAGS += -Osir -O
+CFLAGS += -Osir -O $(EXTRA_DEFS)
+ASMFLAGS += $(EXTRA_ASMDEFS)
 CFLAGS += --include-dir $(APP_INCLUDE_DIR)
 CFLAGS += --include-dir $(CONFIG_NIO_INCLUDE_DIR)
 CFLAGS += --include-dir $(PLATFORM_INCLUDE_DIR)

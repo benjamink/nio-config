@@ -7,7 +7,7 @@ FujiNet-NIO device, replay a key script, and save screenshots.
 
 Script words: wait:<seconds>  shot:<name>  key:<NAME> (UP and DOWN are
 the Atari Ctrl+arrow keys)  keyc:<NAME> (with Ctrl)  type:<text> (_ is a
-space)  joy:<dir>[+fire]  option|start|select  regs  peek:<hexaddr>:<len>.
+space)  waitfor:<text>[@secs] (_ is a space)  joy:<dir>[+fire]  option|start|select  regs  peek:<hexaddr>:<len>.
 --data DEST=SRC copies files into the FujiNet data directory first (the
 `host:/` filesystem), and --dump prints the decoded screen at the end.
 For a boot ATR through the real firmware use atari_shot_netsio.py.

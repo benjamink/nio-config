@@ -47,6 +47,33 @@ def screen_code_to_char(code):
     return chr(c)
 
 
+def read_screen(bridge):
+    """The 24 rows of text on the app's screen, from its screen memory."""
+    dl = bridge.peek(DL, 3 + ROWS * 3)
+    rows = []
+    for r in range(ROWS):
+        op = 3 + r * 3
+        addr = dl[op + 1] | (dl[op + 2] << 8)
+        raw = bridge.peek(addr, COLS)
+        rows.append("".join(screen_code_to_char(c) for c in raw))
+    return rows
+
+
+def wait_screen(bridge, text, timeout=60, row=None):
+    """Wait until `text` is on the screen (or on one row); returns the rows."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            rows = read_screen(bridge)
+        except Exception:
+            rows = []
+        hay = rows if row is None else rows[row:row + 1]
+        if any(text in line for line in hay):
+            return rows
+        time.sleep(.5)
+    raise TimeoutError(f"{text!r} not on screen")
+
+
 class EmbeddedSession:
     """One headless AltirraSDL run of an XEX with a private FujiNet data dir."""
 
@@ -131,29 +158,14 @@ class EmbeddedSession:
         return data
 
     def screen(self):
-        """The 24 rows of text, decoded from the program's screen memory."""
-        dl = self.bridge.peek(DL, 3 + ROWS * 3)
-        rows = []
-        for r in range(ROWS):
-            op = 3 + r * 3
-            addr = dl[op + 1] | (dl[op + 2] << 8)
-            raw = self.bridge.peek(addr, COLS)
-            rows.append("".join(screen_code_to_char(c) for c in raw))
-        return rows
+        return read_screen(self.bridge)
 
     def wait_for(self, text, timeout=10, row=None):
         """Wait until `text` appears on the screen (or on one row)."""
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            try:
-                rows = self.screen()
-            except Exception:
-                rows = []
-            hay = rows if row is None else rows[row:row + 1]
-            if any(text in line for line in hay):
-                return rows
-            time.sleep(.25)
-        raise TimeoutError(f"{text!r} not on screen; screen was:\n" + "\n".join(self.screen()))
+        try:
+            return wait_screen(self.bridge, text, timeout, row)
+        except TimeoutError:
+            raise TimeoutError(f"{text!r} not on screen; screen was:\n" + "\n".join(self.screen()))
 
 
 def run_script(b, script, out, xex=False):
@@ -176,6 +188,9 @@ def run_script(b, script, out, xex=False):
             b.joy(0, d, fire=bool(f)); time.sleep(.15); b.joy(0, "centre"); time.sleep(.25)
         elif k in ("option", "start", "select"):
             b.consol(**{k: True}); time.sleep(.3); b.consol(); time.sleep(.3)
+        elif k == "waitfor":
+            text, _, t = v.partition("@")      # waitfor:Hosts@90 (seconds)
+            wait_screen(b, text.replace("_", " "), float(t or 60))
         elif k == "regs": print("regs", b.regs())
         elif k == "peek":
             addr, ln = v.split(":"); print(addr, b.peek(int(addr, 16), int(ln)).hex())

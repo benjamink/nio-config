@@ -886,15 +886,18 @@ int main(void)
   failed = 0;
   if (fn_init() != FN_OK)
     failed = 1;
-  else if (!fn_is_ready())
+  scr_sio_hook();               /* after fn_init, which sets the plain SIO vector */
+  if (!failed && !fn_is_ready())
     failed = 2;
-  else if (!core_load())
+  if (!failed && !core_load())
     failed = 3;
   if (failed) {
     scr_theme(ROW_STATUS, T_ERROR);
     scr_text(ROW_STATUS, 1, failed == 1 ? "FujiNet is not responding" :
-             failed == 2 ? "FujiNet is not ready" : "Cannot read FujiNet settings", 34);
-    scr_uint(ROW_STATUS, 36, core_error, 3);
+             failed == 2 ? "FujiNet is not ready" : "Cannot read settings", 29);
+    scr_uint(ROW_STATUS, 30, core_error, 3);
+    scr_text(ROW_STATUS, 34, "sio", 3);
+    scr_uint(ROW_STATUS, 36, fn_atari_last_sio_status(), 3);
     for (;;)
       ;
   }

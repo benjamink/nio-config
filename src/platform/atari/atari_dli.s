@@ -3,8 +3,9 @@
 ; interrupt at the end of each row loads the next row's colours, so every row
 ; (title bar, selection bar, status bar, dialog) can be a different colour.
 
-        .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart
+        .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
         .import _row_bg, _row_fg
+        .import fn_sio_vec
 
 VDSLST  = $0200
 SDLSTL  = $0230
@@ -15,6 +16,12 @@ COLPF2  = $D018
 COLBK   = $D01A
 DLIST   = $0600
 COLDST  = $0244
+SIOV    = $E459
+        .ifdef  NO_DLI
+NMI_ON  = $40
+        .else
+NMI_ON  = $C0
+        .endif
 VVBLKD  = $0224
 XITVBV  = $E462
 
@@ -39,8 +46,31 @@ _scr_vectors_set:
         sta     SDLSTL
         lda     #>DLIST
         sta     SDLSTL+1
-        lda     #$C0
+        lda     #NMI_ON
         sta     NMIEN
+        rts
+
+; void scr_sio_hook(void): route the library's SIO calls through sio_nodli.
+; Call it after fn_init(), which installs the plain SIOV vector.
+_scr_sio_hook:
+        lda     #<(sio_nodli-1)
+        sta     fn_sio_vec
+        lda     #>(sio_nodli-1)
+        sta     fn_sio_vec+1
+        rts
+
+; SIO with display list interrupts off.  The row-colour interrupt stalls the
+; CPU on every row, which makes the OS serial routines miss bytes on a real
+; Atari (the FujiNet answers 'device error'), so only vertical blank runs
+; while a call is in flight.
+sio_nodli:
+        lda     #$40
+        sta     NMIEN
+        jsr     SIOV
+        sty     siotmp
+        lda     #NMI_ON
+        sta     NMIEN
+        ldy     siotmp
         rts
 
 ; void scr_vectors_off(void)
@@ -93,3 +123,4 @@ dli:    pha
 
         .segment "BSS"
 dlirow: .res    1
+siotmp: .res    1
