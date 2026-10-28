@@ -9,6 +9,19 @@
 
 #include <string.h>
 
+/* Shared buffers and who may use them (nothing here is held across a key
+ * wait except where noted):
+ *   uri_buf  (CORE_URI_MAX+1)  a composed URI: the listing request, the field
+ *            on screen, the mount dialog (held while the dialog waits for a
+ *            key) and the text of a host being edited.  The idle animation is
+ *            off during dialogs and edits, so it never competes.
+ *   marq     the full name being animated; only idle_tick() touches it.
+ *   entries  (core_scratch)  the directory page, borrowed for host text, a
+ *            name being opened, and the Wi-Fi scan and SSID/password; each
+ *            borrower marks the page stale so the next draw reloads it.
+ *   iobuf    (atari_core.c)  every FujiNet request/response; never held.
+ *   line     one row of text; the detail line and the MAC.
+ */
 #define TAB_HOSTS  0
 #define TAB_BROWSE 1
 #define TAB_DRIVES 2
@@ -25,7 +38,7 @@
 
 #define SHFLOK (*(volatile uint8_t *) 0x02BE)
 
-static char uri_buf[CORE_URI_MAX + 24];
+static char uri_buf[CORE_URI_MAX + 1];
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
 static char path[CORE_URI_MAX + 1];
@@ -860,7 +873,7 @@ static void open_file(const char *name)
 
   if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, name) ||
       strlen(uri_buf) > CORE_URI_MAX) {
-    say("URI is longer than 79 characters", 1);
+    say("URI is longer than 196 characters", 1);
     return;
   }
   if (target_unit != NO_UNIT) {
@@ -934,7 +947,7 @@ static void key_hosts(uint8_t k)
   } else if (k == 'a' && host_count < CORE_MAX_HOSTS) {
     uri_buf[0] = 0;
     if (edit_line("New host or URI", "RET Add ESC Cancel", uri_buf,
-                  CORE_URI_MAX + 1, 0) && uri_buf[0]) {
+                  CORE_HOST_MAX + 1, 0) && uri_buf[0]) {
       strcpy(hosts[host_count], uri_buf);
       host_sel = host_count++;
       say(core_save_hosts() ? "Host added" : "Unable to save hosts", 0);
@@ -942,7 +955,7 @@ static void key_hosts(uint8_t k)
   } else if (k == 'e' && host_count) {
     strcpy(uri_buf, hosts[host_sel]);
     if (edit_line("Edit host or URI", "RET Save ESC Cancel", uri_buf,
-                  CORE_URI_MAX + 1, 0) && uri_buf[0]) {
+                  CORE_HOST_MAX + 1, 0) && uri_buf[0]) {
       strcpy(hosts[host_sel], uri_buf);
       say(core_save_hosts() ? "Host saved" : "Unable to save hosts", 0);
     }
@@ -1002,7 +1015,7 @@ static void key_browse(uint8_t k)
     if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "") ||
         !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
                         fullname, CORE_URI_MAX + 1)) {
-      say("Name is longer than 79 characters", 1);
+      say("Name is longer than 196 characters", 1);
       return;
     }
   } else {
@@ -1012,7 +1025,7 @@ static void key_browse(uint8_t k)
     len = (uint8_t) strlen(path);
     nlen = (uint8_t) strlen(fullname);
     if ((uint16_t) (len + nlen + 2) > CORE_URI_MAX) {
-      say("Path is longer than 79 characters", 1);
+      say("Path is longer than 196 characters", 1);
       return;
     }
     strcpy(path + len, fullname);

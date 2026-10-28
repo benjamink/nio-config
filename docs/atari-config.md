@@ -63,7 +63,8 @@ The Atari is the tightest target: the portable layer (`src/platform/portable`)
 does not fit, so the Atari has a compact core of its own (`atari_core.c`) and
 does not use `fnsvc`, `fnctl` or conio.
 
-* `makefiles/cc65-atari-nio.cfg` loads the program at `$2400` to `$C000`.
+* `makefiles/cc65-atari-nio.cfg` loads the program at `$0C00` (PicoBoot only needs
+  the page below) up to `$BC00`.
 * The first load chunk (`atari_basicoff.s`) switches the BASIC ROM off with
   PORTB and moves `MEMTOP` to `$C000`, so the program may load into the RAM
   under BASIC and cc65's C stack (set from `MEMTOP`) lands at the top of RAM.
@@ -72,6 +73,11 @@ does not use `fnsvc`, `fnctl` or conio.
 * The OS screen is not used. The display list lives at `$0600`; the 960 byte
   screen is in BSS, placed so that no row crosses a 4K boundary (ANTIC wraps a
   line inside its 4K block).
+* The OS screen is rebuilt at `$BC40` on RESET, so the program stops at `$BC00`
+  (C stack below it). The first chunk also sets `BASICF` (BASIC stays off across
+  RESET) and points `DOSVEC` at the program start, so RESET restarts the app.
+* URIs may be 196 characters (host + path + name); a saved host 100. The buffers
+  that hold them are shared by design; atari_app.c lists who may use each.
 * One 512 byte buffer serves the app store, slot catalogue and directory pages;
   host text and Wi-Fi scan results borrow the directory page buffer.
 

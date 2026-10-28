@@ -191,6 +191,8 @@ def run_script(b, script, out, xex=False):
         elif k == "waitfor":
             text, _, t = v.partition("@")      # waitfor:Hosts@90 (seconds)
             wait_screen(b, text.replace("_", " "), float(t or 60))
+        elif k == "reset": b.warm_reset(); time.sleep(.5)
+        elif k == "coldreset": b.cold_reset(); time.sleep(.5)
         elif k == "regs": print("regs", b.regs())
         elif k == "peek":
             addr, ln = v.split(":"); print(addr, b.peek(int(addr, 16), int(ln)).hex())

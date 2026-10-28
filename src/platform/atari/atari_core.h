@@ -10,7 +10,8 @@
 
 #define CORE_NS        "config-nio"
 #define CORE_MAX_HOSTS 8
-#define CORE_URI_MAX   79
+#define CORE_URI_MAX   196   /* a whole URI: host + path + name */
+#define CORE_HOST_MAX  100   /* one saved host */
 #define CORE_NAME_MAX  31
 #define CORE_UNITS     8
 #define CORE_WINDOW    22
@@ -25,7 +26,7 @@ typedef struct {
 #define CORE_ENTRY_DIR       0x01
 #define CORE_ENTRY_TRUNCATED 0x80
 
-extern char hosts[CORE_MAX_HOSTS][CORE_URI_MAX + 1];
+extern char hosts[CORE_MAX_HOSTS][CORE_HOST_MAX + 1];
 extern uint8_t host_count;
 
 /* Drive map: unit -> catalogue slot, with its URI and write protect. */

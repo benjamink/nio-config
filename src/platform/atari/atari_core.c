@@ -11,14 +11,14 @@
 #define MAPPING_VALID    0x01
 #define MAPPING_READONLY 0x02
 #define MAPPINGS_SIZE (1 + CORE_UNITS * 2)
-#define TEXT_MAX ((CORE_URI_MAX + 1) * CORE_MAX_HOSTS)
+#define TEXT_MAX ((CORE_HOST_MAX + 1) * CORE_MAX_HOSTS)
 
 #define FILE_DEVICE 0xFE
 #define FILE_LIST   0x02
 #define LIST_SORT   0x02
 #define LIST_PAYLOAD 420
 
-char hosts[CORE_MAX_HOSTS][CORE_URI_MAX + 1];
+char hosts[CORE_MAX_HOSTS][CORE_HOST_MAX + 1];
 uint8_t host_count;
 uint8_t drive_on[CORE_UNITS];
 uint8_t drive_ro[CORE_UNITS];
@@ -86,7 +86,7 @@ static void parse_hosts(void)
     d = hosts[host_count];
     n = 0;
     while (*p && *p != '\n' && *p != '\r') {
-      if (n < CORE_URI_MAX)
+      if (n < CORE_HOST_MAX)
         d[n++] = *p;
       p++;
     }
@@ -289,8 +289,8 @@ uint8_t core_list_error(void)
   return list_error;
 }
 
-/* uri_buf in atari_app.c is CORE_URI_MAX + 24 bytes: the longest URI asked about. */
-#define LIST_URI_MAX (CORE_URI_MAX + 24)
+/* the longest URI asked about is one composed in atari_app.c's uri_buf */
+#define LIST_URI_MAX CORE_URI_MAX
 #define LIST_REQ_MAX (6 + LIST_URI_MAX + 8)
 
 static uint8_t req[LIST_REQ_MAX];   /* shared by every list request */
