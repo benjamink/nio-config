@@ -9,16 +9,22 @@ disk/stage flow needs it.
 See [RUNNING_TESTS.md](RUNNING_TESTS.md) for copy-and-run build and Beebium
 integration-test commands.
 
-Supported default targets are `msdos`, `bbc`, and `linux`.
+Supported default targets are `msdos`, `bbc`, `linux`, and `atari`.
 
 ```sh
 make TARGET=msdos FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=bbc FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=linux FUJINET_NIO_LIB=../fujinet-nio-lib
+make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
-There is still Atari UI source in the tree, but the current Atari link exceeds
-the existing cc65 Atari memory layout and is not part of `all-targets`.
+## Atari
+
+The Atari build is the machine's launcher: a 40x24 full-screen application
+(Hosts, Browse, Drives, Setup) that is the default boot disk of the FujiNet.
+Choose images, assign them to D1-D8 and press OPTION to boot with them
+mounted. See [docs/atari-config.md](docs/atari-config.md) for the design,
+the memory layout, and how to run and test it in the emulator.
 
 BBC stage targets:
 

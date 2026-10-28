@@ -35,13 +35,14 @@ The embedded model puts the working tables directly inside
 
 The ordinary table functions in `src/platform/portable/config_nio_tables.c`
 read and write those fields directly. This is the simplest model and is used
-by the portable implementation and by the Atari, MS-DOS, and Linux targets.
+by the portable implementation and by the MS-DOS and Linux targets. The
+Atari reads and writes the same records through its own compact core
+(see [atari-config.md](atari-config.md)).
 
 The limits depend on the compiler family:
 
 | Target family | Hosts | Entries | URI limit | Entry limit | Notes |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Atari/cc65 | 4 | 5 | 48 | 31-character names | Deliberately small RAM profile |
 | MS-DOS/Linux | 8 | 20 | `FNSVC_MAX_URI` (255) | 79-character names | Includes size and modification time |
 
 The embedded structure is convenient, but its size grows as the table limits
@@ -119,8 +120,8 @@ char status[CONFIG_NIO_STATUS_MAX + 1];
 `src/platform/portable/config_nio_state.c::config_nio_set_status()` copies a
 message into that buffer, truncating it to fit. The portable UI renders
 `state->status` on each screen. This is the meaningful status path used by the
-portable implementation and is also available to the embedded Atari,
-MS-DOS, and Linux builds where the embedded structure is selected.
+portable implementation and is also available to the embedded
+MS-DOS and Linux builds where the embedded structure is selected.
 
 The external header deliberately defines:
 

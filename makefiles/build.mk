@@ -57,7 +57,7 @@ endif
 rwildcard=$(wildcard $(1)$(2)) $(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
 
 CONFIG_NIO_EXTRA_SRC_DIRS_msdos := $(SRC_DIR)/platform/portable
-CONFIG_NIO_EXTRA_SRC_DIRS_atari := $(SRC_DIR)/platform/portable
+CONFIG_NIO_EXTRA_SRC_DIRS_atari :=
 CONFIG_NIO_EXTRA_SRC_DIRS_linux := $(SRC_DIR)/platform/portable
 CONFIG_NIO_EXTRA_SRC_DIRS := $(CONFIG_NIO_EXTRA_SRC_DIRS_$(TARGET))
 
@@ -87,6 +87,11 @@ CONFIG_NIO_EXTRA_SRCS_amiga := \
 	$(SRC_DIR)/platform/portable/fnsvc.c \
 	$(SRC_DIR)/platform/linux/fnctl.c
 CONFIG_NIO_SRCS += $(CONFIG_NIO_EXTRA_SRCS_$(TARGET))
+# Atari has its own full-screen front end (atari_app.c, with its own main) on
+# a compact core (atari_core.c): the shared portable layer does not fit in 48K.
+ifeq ($(TARGET),atari)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
+endif
 ifeq ($(TARGET),amiga)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif

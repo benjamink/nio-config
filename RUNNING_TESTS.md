@@ -1,10 +1,12 @@
 # Running nio-config tests
 
-The repository currently has three practical test layers:
+The repository currently has four practical test layers:
 
 * target builds, which catch C/ASM, linker, and memory-limit regressions;
 * BBC Beebium integration tests, which exercise `CONFNIO` through the BBC UI,
   fn-rom, and a real fujinet-nio PTY process;
+* Atari UI smoke tests, which drive the Atari XEX in headless AltirraSDL and
+  assert on its screen memory (`tests/atari`);
 * Amiga host tests, which exercise the Amiga controller and helpers with gcc
   against an in-memory fake of the fujinet-nio calls.
 
@@ -26,6 +28,13 @@ Build the Linux target:
 
 ```sh
 make TARGET=linux FUJINET_NIO_LIB=../fujinet-nio-lib
+```
+
+Build the Atari target (a link failure here means the program no longer fits
+the Atari memory layout):
+
+```sh
+make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
 Build the BBC target (including the 8-bit memory/linker check):
@@ -164,3 +173,16 @@ make amiga AMIGA_PROFILE=wb13
 The guest acceptance scripts in `tests/amiga/guest/` are run by the workspace
 Amiberry suite (`integration-tests/amiberry/test_config_nio.py`); see
 [docs/amiga-config.md](docs/amiga-config.md).
+
+## Atari UI smoke tests
+
+Needs the workspace environment, the Atari XEX built, and the AltirraSDL build
+that embeds FujiNet-NIO (`repos/AltirraSDL`). No window opens.
+
+```sh
+source ../../scripts/env.sh
+make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
+python3 -m unittest discover -s tests/atari -v
+```
+
+The tests skip themselves when the XEX or the emulator is missing.
