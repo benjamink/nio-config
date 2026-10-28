@@ -289,30 +289,27 @@ uint8_t core_list_error(void)
   return list_error;
 }
 
-/* One ListDirectory request from entry `start`, appended to entries[].  The
- * device returns as many whole entries as fit in LIST_PAYLOAD bytes, which is
- * fewer than a window with long names.  Sets entry_more if the directory has
- * more after what was taken. */
-static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
+/* uri_buf in atari_app.c is CORE_URI_MAX + 24 bytes: the longest URI asked about. */
+#define LIST_URI_MAX (CORE_URI_MAX + 24)
+#define LIST_REQ_MAX (6 + LIST_URI_MAX + 8)
+
+static uint8_t req[LIST_REQ_MAX];   /* shared by every list request */
+
+/* Build a ListDirectory request into req; the length, or 0 if uri is too long.
+ * name_max caps each name in the reply (0 = the device's 220). */
+static uint16_t list_request(const char *uri, uint16_t start,
+                             uint8_t name_max)
 {
-  uint8_t req[6 + CORE_URI_MAX + 12 + 4 + 8];
-  fn_raw_response_t raw;
   uint16_t ulen;
   uint16_t off;
-  uint16_t count;
-  uint16_t pos;
-  uint16_t i;
 
-  *taken = 0;
   ulen = (uint16_t) strlen(uri);
-  if (ulen > sizeof(req) - 12) {
-    list_error = 1;
+  if (ulen > LIST_URI_MAX)
     return 0;
-  }
   off = 0;
   req[off++] = 1;
   req[off++] = (uint8_t) ulen;
-  req[off++] = (uint8_t) (ulen >> 8);
+  req[off++] = 0;
   memcpy(req + off, uri, ulen);
   off = (uint16_t) (off + ulen);
   req[off++] = (uint8_t) start;
@@ -320,8 +317,28 @@ static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
   req[off++] = (uint8_t) LIST_PAYLOAD;
   req[off++] = (uint8_t) (LIST_PAYLOAD >> 8);
   req[off++] = LIST_SORT;
-  req[off++] = CORE_NAME_MAX;
+  req[off++] = name_max;
+  return off;
+}
 
+/* One ListDirectory request from entry `start`, appended to entries[].  The
+ * device returns as many whole entries as fit in LIST_PAYLOAD bytes, which is
+ * fewer than a window with long names.  Sets entry_more if the directory has
+ * more after what was taken. */
+static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
+{
+  fn_raw_response_t raw;
+  uint16_t off;
+  uint16_t count;
+  uint16_t pos;
+  uint16_t i;
+
+  *taken = 0;
+  off = list_request(uri, start, CORE_NAME_MAX);
+  if (!off) {
+    list_error = 1;
+    return 0;
+  }
   if (fn_raw_call(FILE_DEVICE, FILE_LIST, req, off, iobuf, sizeof(iobuf),
                   &raw) != FN_OK) {
     list_error = 2;
@@ -388,6 +405,31 @@ uint8_t core_list(const char *uri, uint16_t start)
     if (!list_once(uri, (uint16_t) (start + entry_count), &taken))
       return 0;
   } while (entry_more && entry_count < CORE_WINDOW && taken);
+  return 1;
+}
+
+/* The whole name of entry `index` of directory `uri`: a list page keeps only
+ * CORE_NAME_MAX characters of each name, which is enough to show but not to
+ * open an entry with a longer one.  0 if it cannot be fetched or does not fit
+ * in cap bytes. */
+uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap)
+{
+  fn_raw_response_t raw;
+  uint16_t off;
+  uint8_t n;
+
+  off = list_request(uri, index, 0);
+  if (!off)
+    return 0;
+  if (fn_raw_call(FILE_DEVICE, FILE_LIST, req, off, iobuf, sizeof(iobuf),
+                  &raw) != FN_OK || raw.status != 0 || raw.payload_length < 12 ||
+      iobuf[0] != 1 || (iobuf[6] | iobuf[7]) == 0)
+    return 0;
+  n = iobuf[11];
+  if (n >= cap || (uint16_t) (12 + n) > raw.payload_length)
+    return 0;
+  memcpy(out, iobuf + 12, n);
+  out[n] = 0;
   return 1;
 }
 

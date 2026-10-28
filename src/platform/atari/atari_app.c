@@ -518,9 +518,10 @@ static const char *link_text(void)
 static void draw_setup(void)
 {
   static const char hex[] = "0123456789abcdef";
-  char mac[18];
+  char *mac;
   uint8_t i;
 
+  mac = line;
   draw_frame("RET Join Wi-Fi R Refresh OPT Boot");
   for (i = 0; i < LIST_ROWS; i++)
     scr_fill((uint8_t) (LIST_ROW + i), 0, SCR_COLS, ' ');
@@ -601,21 +602,24 @@ static uint8_t pick_network(char *ssid)
 
 static void join_wifi(void)
 {
-  char ssid[FN_WIFI_MAX_SSID + 1];
-  char pass[FN_WIFI_MAX_PASSWORD + 1];
+  char *ssid;
+  char *pass;
   fn_wifi_config_update_t up;
   uint8_t picked;
 
+  /* The page buffer holds the text being edited (and the scan list). */
+  ssid = (char *) core_scratch() + 700;     /* past the scan records and their wire buffer */
+  pass = ssid + FN_WIFI_MAX_SSID + 1;
   strcpy(ssid, wifi_cfg.ssid);
   pass[0] = 0;
   picked = pick_network(ssid);
   if (picked == 0xFF)
     return;
   if (!picked && !edit_line("Wi-Fi network name (SSID)", "RET Next ESC Cancel",
-                            ssid, sizeof(ssid), 0))
+                            ssid, FN_WIFI_MAX_SSID + 1, 0))
     return;
   if (!edit_line("Password (blank for open)", "RET Join ESC Cancel", pass,
-                 sizeof(pass), 1))
+                 FN_WIFI_MAX_PASSWORD + 1, 1))
     return;
   up.fields = (uint8_t) (FN_WIFI_SET_ENABLED | FN_WIFI_SET_SSID |
                          FN_WIFI_SET_PASSWORD | FN_WIFI_SET_PERSIST);
@@ -664,7 +668,7 @@ static void open_file(const char *name)
 
   if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, name) ||
       strlen(uri_buf) > CORE_URI_MAX) {
-    say("URI is too long", 1);
+    say("URI is longer than 79 characters", 1);
     return;
   }
   if (target_unit != NO_UNIT) {
@@ -769,6 +773,8 @@ static void key_browse(uint8_t k)
   const core_entry_t *e;
   uint8_t len;
   uint8_t nlen;
+  uint8_t isdir;
+  char *fullname;
 
   if (!browse_valid) {
     if (k == K_RET)
@@ -797,22 +803,34 @@ static void key_browse(uint8_t k)
   e = entry_at(cur);
   if (!e)
     return;
+  /* A page keeps only the start of a long name: ask for the whole one. */
+  isdir = (uint8_t) (e->flags & CORE_ENTRY_DIR);
+  fullname = (char *) core_scratch();   /* the page buffer: reloaded afterwards */
   if (e->flags & CORE_ENTRY_TRUNCATED) {
-    say("Name too long for this client", 1);
-  } else if (e->flags & CORE_ENTRY_DIR) {
-    len = (uint8_t) strlen(path);
-    nlen = (uint8_t) strlen(e->name);
-    if ((uint8_t) (len + nlen + 2) > CORE_URI_MAX) {
-      say("Path is too long", 1);
+    if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "") ||
+        !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
+                        fullname, CORE_URI_MAX + 1)) {
+      say("Name is longer than 79 characters", 1);
       return;
     }
-    strcpy(path + len, e->name);
+  } else {
+    memmove(fullname, e->name, strlen(e->name) + 1);
+  }
+  if (isdir) {
+    len = (uint8_t) strlen(path);
+    nlen = (uint8_t) strlen(fullname);
+    if ((uint16_t) (len + nlen + 2) > CORE_URI_MAX) {
+      say("Path is longer than 79 characters", 1);
+      return;
+    }
+    strcpy(path + len, fullname);
     path[len + nlen] = '/';
     path[len + nlen + 1] = 0;
     browse_reset();
   } else {
-    strcpy(line, e->name);
-    open_file(line);
+    open_file(fullname);
+    if (tab == TAB_BROWSE)
+      browse_fix();             /* the page buffer was borrowed */
   }
 }
 

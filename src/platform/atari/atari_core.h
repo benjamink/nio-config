@@ -13,7 +13,7 @@
 #define CORE_URI_MAX   79
 #define CORE_NAME_MAX  31
 #define CORE_UNITS     8
-#define CORE_WINDOW    24
+#define CORE_WINDOW    22
 
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */
@@ -60,6 +60,8 @@ uint8_t core_compose(char *out, uint8_t cap, const char *host,
 /* List `uri` from entry `start`.  Fills entries[]; 1 on success. */
 uint8_t core_list(const char *uri, uint16_t start);
 uint8_t core_list_error(void);
+/* Full name of entry `index` (a page keeps only CORE_NAME_MAX characters). */
+uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap);
 
 /* Mount the drive map (D1 is DiskDevice slot 1); D2-D8 not in the map are unmounted.  Returns the
  * number of drives mounted and sets *failed to the first unit that would
