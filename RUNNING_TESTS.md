@@ -220,6 +220,8 @@ It checks that the app boots with BASIC present and absent and turns BASIC off
 boot disk and an assigned XEX (the firmware's PicoBoot wrapper). It needs `dir2atr`,
 `repos/fujinet-nio/build/atari-fujibus-netsio-debug` built from the current
 firmware, and `proctest.xex` from `repos/nio-core-apps`.
+It also checks the monochrome mount screen and that a failed mount restores the
+normal tab and row-colour interrupts.
 
 Not covered: the display-interrupt/SIO failure that only showed on real hardware
 (the emulator's serial timing is too forgiving); a hardware run is still needed

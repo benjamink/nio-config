@@ -79,6 +79,8 @@ void scr_scrollbar(uint8_t first_row, uint8_t rows, uint16_t top,
 void scr_vectors_set(void);
 void scr_vectors_off(void);
 void scr_sio_hook(void);   /* after fn_init(): keep DLIs off during SIO */
+void scr_flat_on(void);    /* keep DLIs off across SIO, retain vertical blank */
+void scr_flat_off(void);   /* restore normal row colours after a failed mount */
 
 extern uint8_t row_bg[SCR_ROWS];
 extern uint8_t row_fg[SCR_ROWS];

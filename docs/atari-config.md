@@ -50,6 +50,8 @@ OPTION (or START) mounts every assigned drive, unmounts D2-D8 that are not
 assigned (D1 keeps the config disk until it is assigned), and cold starts the
 Atari. The FujiNet keeps its mounts across the reset, so the Atari boots from
 whatever is now in D1. DiskDevice slots are numbered from 1: D1 is slot 1.
+During mounting, a monochrome screen stays visible with row-colour interrupts
+off. If a mount fails, the normal tab and its error message return.
 
 XEX/COM programs are mounted like any image; the firmware presents them as a
 boot disk (MyPicoDOS PicoBoot wrapper) so the same drive-assignment flow boots

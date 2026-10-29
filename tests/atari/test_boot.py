@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -114,6 +115,39 @@ class BootTests(unittest.TestCase):
         xex = Path(self.tmp.name) / "proctest.xex"
         shutil.copy(PROCTEST, xex)
         self.option_boot(xex, "PROCTEST")
+
+    def test_mount_screen_and_error_restore(self):
+        bad = Path(self.tmp.name) / "bad.atr"
+        bad.write_bytes(b"not an atr")
+
+        def scenario(v):
+            from atari_ui import symbols
+            v.wait_for("Hosts", row=1, timeout=240)
+            v.key("A"); v.type("host:/"); v.key("RETURN")
+            v.wait_for("host:/", row=2, timeout=10)
+            v.key("RETURN")
+            v.wait_for(bad.name, timeout=60)
+            v.select(bad.name); v.key("RETURN")
+            v.wait_for("Assign to a drive", timeout=30)
+            v.key("1"); v.wait_for("D1 <-", row=23, timeout=30)
+            v.bridge.consol(option=True)
+            end = time.monotonic() + 15
+            while time.monotonic() < end:
+                rows = v.screen()
+                if "Mounting disks" in rows[11]:
+                    break
+                time.sleep(.02)
+            else:
+                self.fail("mount screen did not appear")
+            v.bridge.consol()
+            self.assertTrue(all(not line.strip() for i, line in enumerate(rows) if i != 11), rows)
+            sym = symbols(Path(v.xex).with_suffix(".lbl"))
+            self.assertEqual(v.bridge.peek(sym["_scr_nmi_mode"], 1)[0], 0x40)
+            self.assertEqual(list(v.bridge.peek(sym["_row_bg"], 24)), [0] * 24)
+            v.wait_for("Mount:", row=23, timeout=60)
+            self.assertIn("Browse", v.screen()[1])
+            self.assertEqual(v.bridge.peek(sym["_scr_nmi_mode"], 1)[0], 0xC0)
+        boot(self.config_atr, scenario, data=[(bad.name, bad)], basic=False)
 
 
 if __name__ == "__main__":

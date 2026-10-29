@@ -4,6 +4,8 @@
 ; (title bar, selection bar, status bar, dialog) can be a different colour.
 
         .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
+        .export _scr_flat_on, _scr_flat_off
+        .export _scr_nmi_mode
         .import _row_bg, _row_fg, _nxt_bg, _nxt_fg, _lms_lo, _lms_hi, _scr_swap
         .import _scr_sio_bg, _scr_sio_fg
         .import fn_sio_vec
@@ -51,6 +53,19 @@ _scr_vectors_set:
         lda     #>DLIST
         sta     SDLSTL+1
         lda     #NMI_ON
+        sta     _scr_nmi_mode
+        sta     NMIEN
+        rts
+
+_scr_flat_on:
+        lda     #$40
+        sta     _scr_nmi_mode
+        sta     NMIEN
+        rts
+
+_scr_flat_off:
+        lda     #NMI_ON
+        sta     _scr_nmi_mode
         sta     NMIEN
         rts
 
@@ -70,11 +85,15 @@ _scr_sio_hook:
 sio_nodli:
         lda     #$40
         sta     NMIEN
+        lda     _scr_nmi_mode
+        cmp     #$40
+        beq     @transfer       ; flat screen already has its permanent colours
         lda     _scr_sio_bg     ; with the row colours stopped the screen would
         sta     COLOR2          ; show whatever colour was loaded last (grey):
         sta     COLOR4          ; make it the body blue for the transfer
         lda     _scr_sio_fg
         sta     COLOR1
+@transfer:
         jsr     SIOV
         sty     siotmp
         lda     _row_bg         ; back to the first row's colours
@@ -82,7 +101,7 @@ sio_nodli:
         sta     COLOR4
         lda     _row_fg
         sta     COLOR1
-        lda     #NMI_ON
+        lda     _scr_nmi_mode
         sta     NMIEN
         ldy     siotmp
         rts
@@ -168,3 +187,4 @@ dli:    pha
         .segment "BSS"
 dlirow: .res    1
 siotmp: .res    1
+_scr_nmi_mode: .res 1

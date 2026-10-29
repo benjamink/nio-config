@@ -862,14 +862,19 @@ static void boot_now(void)
     say("Assign an image to a drive first", 1);
     return;
   }
-  scr_theme(ROW_STATUS, T_STATUS);
-  scr_text(ROW_STATUS, 1, "Mounting drives...", 38);
+  for (u = 0; u < SCR_ROWS; u++) {
+    scr_theme(u, T_FIELD);
+    scr_fill(u, 0, SCR_COLS, ' ');
+  }
+  scr_text(11, 2, "Mounting disks...", 36);
   scr_present();
+  scr_flat_on();
   if (!core_mount_all(&failed) || failed != 0xFF) {
+    scr_flat_off();
     say(core_mount_error(), 1);
     return;
   }
-  scr_text(ROW_STATUS, 1, "Booting...", 38);
+  scr_text(11, 2, "Booting...", 36);
   scr_present();
   scr_coldstart();
 }
