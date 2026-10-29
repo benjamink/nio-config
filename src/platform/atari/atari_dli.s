@@ -5,6 +5,7 @@
 
         .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
         .import _row_bg, _row_fg, _nxt_bg, _nxt_fg, _lms_lo, _lms_hi, _scr_swap
+        .import _scr_sio_bg, _scr_sio_fg
         .import fn_sio_vec
 
 VDSLST  = $0200
@@ -69,8 +70,18 @@ _scr_sio_hook:
 sio_nodli:
         lda     #$40
         sta     NMIEN
+        lda     _scr_sio_bg     ; with the row colours stopped the screen would
+        sta     COLOR2          ; show whatever colour was loaded last (grey):
+        sta     COLOR4          ; make it the body blue for the transfer
+        lda     _scr_sio_fg
+        sta     COLOR1
         jsr     SIOV
         sty     siotmp
+        lda     _row_bg         ; back to the first row's colours
+        sta     COLOR2
+        sta     COLOR4
+        lda     _row_fg
+        sta     COLOR1
         lda     #NMI_ON
         sta     NMIEN
         ldy     siotmp

@@ -159,6 +159,74 @@ class BigDirectory(Session):
         self.assertEqual(s.screen()[3:21], scrolled)
 
 
+class Paging(Session):
+    SPEC = dict({"pg/f%03d.atr" % i: 600 for i in range(100)}, **{"pg/sub/x.atr": 10})
+
+    def info(self):
+        return " ".join(self.s.screen()[21].split())
+
+    def names(self):
+        return [r[1:9].strip() for r in self.s.screen()[3:21] if r.strip()]
+
+    def joy(self, direction):
+        self.s.bridge.joy(0, direction); time.sleep(.03); self.s.bridge.joy(0, "centre"); time.sleep(.3)
+
+    def test_pages_follow_the_cursor_and_the_page_keys(self):
+        s = self.s
+        browse_host(s, "host:/pg/")
+        s.wait_for("Page", row=21, timeout=15)
+        self.assertEqual(self.info(), "Page 1 of 6 101 entries")
+        first = self.names()
+        self.assertEqual(first[0], "sub")                    # directories come first
+        self.assertEqual(len(first), 18)
+        # down off the bottom of the page goes on to the next page, cursor on its first row
+        for _ in range(18):
+            s.key("DOWN")
+        s.wait_for("Page    2", row=21, timeout=15)
+        second = self.names()
+        self.assertEqual(second[0], "f017.atr")
+        self.assertEqual(s.selected_row(), 3)
+        # and up off the top goes back, cursor on the last row
+        s.key("UP")
+        s.wait_for("Page    1", row=21, timeout=15)
+        self.assertEqual(s.selected_row(), 20)
+        self.assertEqual(self.names(), first)
+        # page keys: SPACE and the joystick go forward, B and the stick go back
+        s.key("SPACE"); s.wait_for("Page    2", row=21, timeout=15)
+        self.joy("right"); s.wait_for("Page    3", row=21, timeout=15)
+        self.assertEqual(self.names()[0], "f035.atr")
+        s.key("B"); s.wait_for("Page    2", row=21, timeout=15)
+        self.joy("left"); s.wait_for("Page    1", row=21, timeout=15)
+        # the last page is short and stops there
+        for _ in range(5):
+            s.key("SPACE"); time.sleep(.5)
+        s.wait_for("Page    6", row=21, timeout=15)
+        self.assertEqual(len(self.names()), 101 - 5 * 18)
+        s.key("SPACE"); time.sleep(.8)
+        self.assertIn("Page 6 of 6", self.info())
+        # R makes the device read the folder again and stays on the page
+        s.key("R"); time.sleep(1.5)
+        self.assertIn("Page 6 of 6", self.info())
+
+
+class PagingUp(Session):
+    SPEC = {"pg/f%03d.atr" % i: 600 for i in range(30)}
+
+    def joy(self, direction):
+        self.s.bridge.joy(0, direction); time.sleep(.03); self.s.bridge.joy(0, "centre"); time.sleep(.3)
+
+    def test_left_on_the_first_page_goes_up_a_folder(self):
+        s = self.s
+        browse_host(s, "host:/")
+        enter(s, "pg")
+        s.wait_for("Page", row=21, timeout=15)
+        self.joy("left")
+        end = time.monotonic() + 15
+        while s.screen()[2].strip() != "host:/" and time.monotonic() < end:
+            time.sleep(.3)
+        self.assertEqual(s.screen()[2].strip(), "host:/")
+
+
 class LongUri(Session):
     DIRS = ["d%02d_" % i + "x" * 20 for i in range(6)]
     NAME = "file_with_a_long_name_" + "y" * 10 + ".atr"

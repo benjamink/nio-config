@@ -38,10 +38,15 @@
 
 #define SHFLOK (*(volatile uint8_t *) 0x02BE)
 
+/* The long buffers live in low memory (see makefiles/cc65-atari-nio.cfg), which
+ * nothing clears: path is set in main(), the others are written before read. */
+#pragma bss-name (push, "LOWMEM")
 static char uri_buf[CORE_URI_MAX + 1];
+static char path[CORE_URI_MAX + 1];
+static char marq[CORE_URI_MAX + 1];
+#pragma bss-name (pop)
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
-static char path[CORE_URI_MAX + 1];
 
 static uint8_t tab;
 #ifdef DRAW_TIMING
@@ -55,12 +60,12 @@ static uint8_t list_gen;        /* bumped when the directory page is reloaded */
 static uint8_t host_sel;
 static uint8_t drive_sel;
 
-/* Browse: cursor and first visible row, counted over the ".." row (when
- * path is not the root) and then the directory entries. */
+/* Browse: the directory is shown a page (LIST_ROWS entries) at a time. */
 static uint8_t browse_host;
 static uint8_t browse_valid;
-static uint8_t has_parent;
-static uint16_t cur;
+static uint16_t bpage;          /* screen page of the directory being shown (0-based) */
+static uint16_t npages;         /* screen pages in the directory */
+static uint8_t brow;            /* cursor row within the page */
 static uint16_t top;
 static uint8_t target_unit = NO_UNIT;
 
@@ -256,8 +261,6 @@ static uint8_t confirm(const char *question)
   return k == 'y' || k == 'Y' || k == K_RET;
 }
 
-static const core_entry_t *entry_at(uint16_t idx);
-
 /* ---- Long-name animation ------------------------------------------------------------ */
 
 /* When nothing has been pressed for a couple of seconds, the selected row's
@@ -267,7 +270,6 @@ static const core_entry_t *entry_at(uint16_t idx);
 #define MARQ_STEP  7            /* jiffies per step */
 #define MARQ_HOLD  3            /* steps to rest at each end */
 
-static char marq[CORE_URI_MAX + 1];
 static uint8_t marq_state;      /* 0 not tried, 1 animating, 2 fits / nothing to do */
 static uint8_t marq_len;
 static uint8_t marq_off;
@@ -309,16 +311,17 @@ static void marq_start(void)
     marq_row = (uint8_t) (LIST_ROW + drive_sel);
     marq_col = 5;
     marq_w = 28;
-  } else if (tab == TAB_BROWSE && browse_valid && (e = entry_at(cur)) != 0) {
+  } else if (tab == TAB_BROWSE && browse_valid && brow < entry_count) {
+    e = &entries[brow];
     strcpy(marq, e->name);
     if (e->flags & CORE_ENTRY_TRUNCATED) {
       /* the page keeps only the start of the name: fetch all of it */
       if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
-          !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
+          !core_full_name(uri_buf, (uint16_t) (bpage * LIST_ROWS + brow),
                           marq, sizeof(marq)))
         return;
     }
-    marq_row = (uint8_t) (LIST_ROW + cur - top);
+    marq_row = (uint8_t) (LIST_ROW + brow);
     marq_col = 1;
     marq_w = 29;
   } else {
@@ -444,9 +447,9 @@ static void browse_detail(void)
   if (status[0] || tab != TAB_BROWSE || !browse_valid)
     return;
   scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
-  e = entry_at(cur);
-  if (!e)
+  if (brow >= entry_count)
     return;
+  e = &entries[brow];
   /* size (or <DIR>) flush left, date flush right so it never shifts */
   p = line;
   if (e->flags & CORE_ENTRY_DIR) {
@@ -505,60 +508,62 @@ static void draw_hosts(void)
 
 /* ---- Browse tab ------------------------------------------------------------------- */
 
-static uint16_t browse_known(void)
+/* What went wrong with a directory request, in words. */
+static void say_list_error(void)
 {
-  return (uint16_t) (has_parent + entry_start + entry_count + entry_more);
+  switch (core_list_error()) {
+  case FN_ERR_TIMEOUT:   say("The server took too long to answer", 1); break;
+  case FN_ERR_NOT_FOUND: say("Folder not found", 1); break;
+  case FN_ERR_IO:        say("Could not read the folder", 1); break;
+  default:               say_num("Browse failed, error ", core_list_error()); break;
+  }
 }
 
-static uint8_t browse_load(uint16_t first)
+/* Show screen page `sp` of the directory with the cursor on row `row`.  Only a
+ * page the device has not sent yet costs a request (and a "Reading" message);
+ * on failure the page on screen is left as it was. */
+static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
 {
-  list_gen++;
-  entry_count = 0;
-  entry_more = 0;
-  entry_start = first;
+  uint8_t tries;
+
   if (!browse_valid)
     return 0;
   if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "")) {
     say("Path is too long", 1);
     return 0;
   }
-  if (!core_list(uri_buf, first)) {
-    say_num("Browse failed, error ", core_list_error());
-    return 0;
+  for (tries = 0; tries < 2; tries++) {
+    list_gen++;
+    if (!core_dir_have(sp) || refresh) {
+      scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
+      scr_theme(ROW_STATUS, T_STATUS);
+      scr_text(ROW_STATUS, 1, "Reading directory...", 38);
+      scr_present();
+    }
+    if (!core_dir_page(uri_buf, sp, refresh)) {
+      say_list_error();
+      return 0;
+    }
+    refresh = 0;
+    if (entry_count || !sp || dir_total == 0xFFFFFFFFUL || !dir_total)
+      break;
+    sp = (uint16_t) ((dir_total - 1) / LIST_ROWS);   /* the directory got shorter */
   }
+  bpage = sp;
+  npages = dir_total == 0xFFFFFFFFUL ? 1 :
+           (uint16_t) ((dir_total + LIST_ROWS - 1) / LIST_ROWS);
+  brow = row < entry_count ? row : (uint8_t) (entry_count ? entry_count - 1 : 0);
   return 1;
 }
 
-/* Make sure the rows on screen are in the loaded page of entries. */
-static void browse_cover(void)
-{
-  uint16_t a;
-
-  a = top > has_parent ? (uint16_t) (top - has_parent) : 0;
-  if (!list_stale && a >= entry_start &&
-      (!entry_more || (uint16_t) (a + LIST_ROWS) <= (uint16_t) (entry_start + entry_count)))
-    return;
-  (void) browse_load(a > 4 ? (uint16_t) (a - 4) : 0);
-}
-
-static void browse_fix(void)
-{
-  uint16_t known;
-
-  known = browse_known();
-  keep_in_view(&cur, &top, known);
-  browse_cover();
-  known = browse_known();
-  keep_in_view(&cur, &top, known);
-}
-
+/* A new directory: forget everything the device sent for the last one. */
 static void browse_reset(void)
 {
-  has_parent = path[0] ? 1 : 0;
-  cur = 0;
-  top = 0;
-  (void) browse_load(0);
-  browse_fix();
+  core_dir_reset();
+  bpage = 0;
+  npages = 0;
+  brow = 0;
+  (void) browse_goto(0, 0, 0);
 }
 
 static void browse_enter_host(uint8_t host)
@@ -566,7 +571,6 @@ static void browse_enter_host(uint8_t host)
   browse_host = host;
   browse_valid = 1;
   path[0] = 0;
-  has_parent = 0;
   browse_reset();
   if (!status_error)
     say("", 0);
@@ -583,16 +587,6 @@ static void parent_path(void)
     path[--len] = 0;
 }
 
-static const core_entry_t *entry_at(uint16_t idx)
-{
-  if (idx < has_parent)
-    return 0;
-  idx = (uint16_t) (idx - has_parent);
-  if (idx < entry_start || idx >= (uint16_t) (entry_start + entry_count))
-    return 0;
-  return &entries[idx - entry_start];
-}
-
 static void draw_size(uint8_t row, const core_entry_t *e)
 {
   if (e->flags & CORE_ENTRY_DIR) {
@@ -605,44 +599,37 @@ static void draw_size(uint8_t row, const core_entry_t *e)
 
 static void browse_info(void)
 {
-  uint16_t known;
+  unsigned total;
 
-  known = browse_known();
   scr_fill(ROW_INFO, 0, SCR_COLS, ' ');
   if (target_unit != NO_UNIT) {
     scr_text(ROW_INFO, 1, "Choose an image for drive D", 27);
     scr_putc(ROW_INFO, 28, (char) ('1' + target_unit));
-  } else if (!known) {
+  } else if (!entry_count) {
     scr_text(ROW_INFO, 1, "Empty directory", 20);
   } else {
-    scr_uint(ROW_INFO, 1, cur + 1, 5);
-    scr_text(ROW_INFO, 7, "of", 2);
-    scr_uint(ROW_INFO, 10, known, 5);
-    scr_text(ROW_INFO, 16, entry_more ? "+" : "", 1);
+    total = dir_total > 65535UL ? 65535U : (unsigned) dir_total;
+    scr_text(ROW_INFO, 1, "Page", 4);
+    scr_uint(ROW_INFO, 6, (unsigned) (bpage + 1), 4);
+    scr_text(ROW_INFO, 11, "of", 2);
+    scr_uint(ROW_INFO, 14, npages, 4);
+    scr_uint(ROW_INFO, 24, total, 5);
+    scr_text(ROW_INFO, 30, total == 1 ? "entry" : "entries", 7);
   }
 }
 
-/* List row r of the Browse tab, for the current `top`. */
+/* List row r of the Browse tab. */
 static void browse_row(uint8_t r)
 {
-  uint16_t idx;
   uint8_t row;
   const core_entry_t *e;
 
-  idx = (uint16_t) (top + r);
   row = (uint8_t) (LIST_ROW + r);
   scr_fill(row, 0, SCR_COLS, ' ');
-  if (idx >= browse_known())
+  if (r >= entry_count)
     return;
-  list_row(row, idx == cur);
-  if (has_parent && idx == 0) {
-    scr_text(row, 1, "..", 28);
-    scr_text(row, 31, " <DIR>", 6);
-    return;
-  }
-  e = entry_at(idx);
-  if (!e)
-    return;
+  list_row(row, r == brow);
+  e = &entries[r];
   scr_text(row, 1, e->name, 29);
   draw_size(row, e);
 }
@@ -650,21 +637,20 @@ static void browse_row(uint8_t r)
 static void draw_browse(void)
 {
   uint8_t r;
-  uint16_t known;
 
-  draw_frame("RET Open BS Up R Reload OPT Boot");
+  draw_frame("RET Open </> BS Up R Reload OPT Boot");
   if (!browse_valid) {
     for (r = 0; r < LIST_ROWS; r++)
       scr_fill((uint8_t) (LIST_ROW + r), 0, SCR_COLS, ' ');
     scr_text(LIST_ROW + 1, 3, "Pick a host on the Hosts tab", 36);
     return;
   }
-  known = browse_known();
+  if (list_stale)               /* the page buffer was borrowed: rebuild from what was sent */
+    (void) browse_goto(bpage, brow, 0);
   if (core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, ""))
     tail_text(ROW_FIELD, uri_buf);
   for (r = 0; r < LIST_ROWS; r++)
     browse_row(r);
-  scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, known);
   browse_info();
   browse_detail();
 }
@@ -786,7 +772,7 @@ static void draw_setup(void)
 }
 
 /* Scan for networks and let the user pick one; 0 if none was chosen. */
-#define SCAN_MAX 8
+#define SCAN_MAX 6
 
 static uint8_t pick_network(char *ssid)
 {
@@ -848,7 +834,7 @@ static void join_wifi(void)
   uint8_t picked;
 
   /* The page buffer holds the text being edited (and the scan list). */
-  ssid = (char *) core_scratch() + 700;     /* past the scan records and their wire buffer */
+  ssid = (char *) core_scratch() + 520;     /* past the scan records and their wire buffer */
   pass = ssid + FN_WIFI_MAX_SSID + 1;
   strcpy(ssid, wifi_cfg.ssid);
   pass[0] = 0;
@@ -1012,6 +998,12 @@ static void key_hosts(uint8_t k)
   }
 }
 
+/* Page forward or back, keeping the cursor on the same row where it can. */
+static void browse_page(uint16_t sp, uint8_t row)
+{
+  (void) browse_goto(sp, row, 0);
+}
+
 static void key_browse(uint8_t k)
 {
   const core_entry_t *e;
@@ -1025,34 +1017,58 @@ static void key_browse(uint8_t k)
       tab = TAB_HOSTS;
     return;
   }
-  if (move_cursor(k, &cur, browse_known())) {
-    browse_fix();
-    cursor_only = 1;
+  if (k == K_UP || k == '-') {
+    if (brow) {
+      brow--;
+      cursor_only = 1;
+    } else if (bpage) {                         /* off the top: the page before */
+      browse_page((uint16_t) (bpage - 1), LIST_ROWS - 1);
+    }
     return;
   }
-  if (k == K_BS || k == 'u' || (k == K_RET && has_parent && cur == 0)) {
+  if (k == K_DOWN || k == '=') {
+    if ((uint8_t) (brow + 1) < entry_count) {
+      brow++;
+      cursor_only = 1;
+    } else if ((uint16_t) (bpage + 1) < npages) { /* off the bottom: the next page */
+      browse_page((uint16_t) (bpage + 1), 0);
+    }
+    return;
+  }
+  if (k == K_RIGHT || k == ' ' || k == '>') {
+    if ((uint16_t) (bpage + 1) < npages)
+      browse_page((uint16_t) (bpage + 1), brow);
+    return;
+  }
+  if (k == K_LEFT || k == 'b' || k == '<') {
+    if (bpage)
+      browse_page((uint16_t) (bpage - 1), brow);
+    else
+      k = K_BS;                                 /* already on the first page: up a level */
+    if (k != K_BS)
+      return;
+  }
+  if (k == K_BS || k == 'u') {
     if (path[0]) {
       parent_path();
       browse_reset();
     }
     return;
   }
-  if (k == 'r') {
-    (void) browse_load(entry_start);
-    browse_fix();
+  if (k == 'r') {                               /* have the device read the folder again */
+    core_dir_reset();
+    (void) browse_goto(bpage, brow, 1);
     return;
   }
-  if (k != K_RET)
+  if (k != K_RET || brow >= entry_count)
     return;
-  e = entry_at(cur);
-  if (!e)
-    return;
+  e = &entries[brow];
   /* A page keeps only the start of a long name: ask for the whole one. */
   isdir = (uint8_t) (e->flags & CORE_ENTRY_DIR);
-  fullname = (char *) core_scratch();   /* the page buffer: reloaded afterwards */
+  fullname = (char *) core_scratch();   /* the page buffer: rebuilt afterwards */
   if (e->flags & CORE_ENTRY_TRUNCATED) {
     if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
-        !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
+        !core_full_name(uri_buf, (uint16_t) (bpage * LIST_ROWS + brow),
                         fullname, CORE_URI_MAX + 1)) {
       say("Name is longer than 196 characters", 1);
       return;
@@ -1073,8 +1089,6 @@ static void key_browse(uint8_t k)
     browse_reset();
   } else {
     open_file(fullname);
-    if (tab == TAB_BROWSE)
-      browse_fix();             /* the page buffer was borrowed */
   }
 }
 
@@ -1128,8 +1142,8 @@ static void update_selection(void)
   /* move the bar: the old row back to body colour, the new row orange */
   if (sel_row != 0xFF)
     scr_theme(sel_row, T_BODY);
-  at = tab == TAB_HOSTS ? host_sel : tab == TAB_BROWSE ? cur : drive_sel;
-  list_row((uint8_t) (LIST_ROW + at - top), 1);
+  at = tab == TAB_HOSTS ? host_sel : tab == TAB_BROWSE ? brow : drive_sel;
+  list_row((uint8_t) (LIST_ROW + at - (tab == TAB_BROWSE ? 0 : top)), 1);
   if (tab == TAB_HOSTS) {
     scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
     scr_text(ROW_FIELD, 1, host_count ? host_ptr[host_sel] : "", 38);
@@ -1143,8 +1157,8 @@ static void update_selection(void)
   }
 }
 
-/* The page moved by one row: slide the rows already on screen and draw only
- * the one that came into view. */
+/* The Hosts list moved by one row: slide the rows already on screen and draw
+ * only the one that came into view. */
 static void scroll_one(uint16_t old_top)
 {
   uint8_t r;
@@ -1166,13 +1180,8 @@ static void scroll_one(uint16_t old_top)
     }
     r = 0;
   }
-  if (tab == TAB_HOSTS) {
-    hosts_row(r);
-    scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, host_count);
-  } else {
-    browse_row(r);
-    scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, browse_known());
-  }
+  hosts_row(r);
+  scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, host_count);
 }
 
 static void set_tab(uint8_t t)
@@ -1181,8 +1190,6 @@ static void set_tab(uint8_t t)
   top = 0;
   if (t == TAB_SETUP && !setup_loaded)
     setup_refresh();
-  if (t == TAB_BROWSE && browse_valid)
-    browse_fix();
 }
 
 static void run(void)
@@ -1227,12 +1234,12 @@ static void run(void)
     }
     /* In a list, right opens the item and left goes up a level (so the
      * joystick can browse); the tabs change with TAB or SELECT. */
-    if (k == K_RIGHT && tab != TAB_SETUP)
-      k = K_RET;
-    else if (k == K_LEFT && tab == TAB_BROWSE)
-      k = K_BS;
-    else if (k == K_LEFT || k == K_RIGHT)
-      continue;
+    if (tab != TAB_BROWSE) {            /* Browse uses left/right to change page */
+      if (k == K_RIGHT && tab != TAB_SETUP)
+        k = K_RET;
+      else if (k == K_LEFT || k == K_RIGHT)
+        continue;
+    }
     if (k >= 'A' && k <= 'Z')
       k = (uint8_t) (k + 32);
     status_error = 0;
@@ -1248,8 +1255,7 @@ static void run(void)
     }
     if (cursor_only && tab == old_tab && list_gen == old_gen &&
         (top == old_top ||
-         ((tab == TAB_HOSTS || tab == TAB_BROWSE) &&
-          (top == old_top + 1 || top + 1 == old_top)))) {
+         (tab == TAB_HOSTS && (top == old_top + 1 || top + 1 == old_top)))) {
 #ifdef DRAW_TIMING
       {
         uint8_t t1 = *(volatile uint8_t *) 0x14;
@@ -1275,6 +1281,7 @@ int main(void)
 {
   uint8_t failed;
 
+  path[0] = 0;
   SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);

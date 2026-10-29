@@ -10,12 +10,14 @@
 
 #define CORE_NS        "config-nio"
 #define CORE_MAX_HOSTS 24
-#define CORE_HOST_POOL 1200  /* bytes for all saved hosts together */
+#define CORE_HOST_POOL 1000  /* bytes for all saved hosts together */
 #define CORE_URI_MAX   196   /* a whole URI: host + path + name */
 #define CORE_HOST_MAX  100   /* one saved host */
 #define CORE_NAME_MAX  31
 #define CORE_UNITS     8
-#define CORE_WINDOW    22
+#define CORE_PAGE_ROWS  18    /* entries on a screen page */
+#define CORE_PROTO_PAGE 9     /* entries per page the device sends; two per screen page */
+#define CORE_PCACHE     800   /* bytes of received pages kept */
 
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */
@@ -38,17 +40,17 @@ extern uint8_t drive_ro[CORE_UNITS];
 extern uint8_t drive_slot[CORE_UNITS];
 /* The end of each drive's URI (the part that shows: the name); the whole URI is
  * kept in the slot catalogue and read back when mounting. */
-#define CORE_DRIVE_URI 100
+#define CORE_DRIVE_URI 80
 extern char drive_uri[CORE_UNITS][CORE_DRIVE_URI + 1];
 /* Set drive_uri[unit] from a URI of any length: its last CORE_DRIVE_URI chars. */
 void core_drive_tail(uint8_t unit, const char *uri, uint16_t len);
 
-/* One page of a directory listing. */
-extern core_entry_t entries[CORE_WINDOW];
+/* The screen page being shown: entries[0..entry_count-1].  dir_total is the
+ * number of entries in the directory (0xFFFFFFFF until the first reply). */
+extern core_entry_t entries[CORE_PAGE_ROWS];
 extern uint8_t entry_count;
-extern uint8_t entry_more;
-extern uint16_t entry_start;
-extern uint8_t list_stale;   /* the page no longer matches the directory */
+extern uint32_t dir_total;
+extern uint8_t list_stale;   /* entries[] was borrowed: rebuild it with core_dir_page */
 
 /* FN_* result of the last failed app-store read in core_load(). */
 extern uint8_t core_error;
@@ -56,7 +58,7 @@ extern uint8_t core_error;
 /* A scratch block (the directory page buffer) for callers that need a few
  * hundred bytes briefly; the directory page is marked stale. */
 void *core_scratch(void);
-#define CORE_SCRATCH_SIZE (CORE_WINDOW * 43)
+#define CORE_SCRATCH_SIZE (CORE_PAGE_ROWS * 43)
 
 uint8_t core_load(void);
 uint8_t core_save_hosts(void);
@@ -70,8 +72,15 @@ uint8_t core_put_slot(uint8_t slot, const char *uri, uint8_t readonly);
 uint8_t core_compose(char *out, uint8_t cap, const char *host,
                      const char *path, const char *leaf);
 
-/* List `uri` from entry `start`.  Fills entries[]; 1 on success. */
-uint8_t core_list(const char *uri, uint16_t start);
+/* Forget the cached pages (a different directory, or a refresh). */
+void core_dir_reset(void);
+/* 1 if every protocol page of screen page `screen_page` is already held. */
+uint8_t core_dir_have(uint16_t screen_page);
+/* Make entries[] the screen page `screen_page` (CORE_PAGE_ROWS entries) of the
+ * directory `uri`, asking the device only for pages not already held.  refresh
+ * (FN_LIST_REFRESH-style) makes the device re-read the directory on its next
+ * reply.  1 on success; on failure entries[] is unchanged. */
+uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh);
 uint8_t core_list_error(void);
 /* Full name of entry `index` (a page keeps only CORE_NAME_MAX characters). */
 uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap);

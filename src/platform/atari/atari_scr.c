@@ -23,6 +23,8 @@ uint8_t row_bg[SCR_ROWS];
 uint8_t row_fg[SCR_ROWS];
 uint8_t nxt_bg[SCR_ROWS];
 uint8_t nxt_fg[SCR_ROWS];
+uint8_t scr_sio_bg;             /* body colours the whole screen takes while SIO runs */
+uint8_t scr_sio_fg;
 volatile uint8_t scr_swap;      /* set by scr_present, cleared by the vblank handler */
 
 /* ANTIC wraps a line's 40 bytes inside a 4K block, so no row may straddle a
@@ -107,6 +109,8 @@ void scr_init(void)
   *dl = 0x06;
   for (r = 0; r < SCR_ROWS; r++)
     scr_theme(r, T_BODY);
+  scr_sio_bg = palette[T_BODY][0];
+  scr_sio_fg = palette[T_BODY][1];
   memcpy(row_bg, nxt_bg, SCR_ROWS);
   memcpy(row_fg, nxt_fg, SCR_ROWS);
   COLOR2 = row_bg[0];

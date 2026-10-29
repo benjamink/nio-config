@@ -89,8 +89,7 @@ class AtariUiSmoke(unittest.TestCase):
         s.key("RETURN")
         rows = s.wait_for("alpha.atr", timeout=15)
         self.assertIn("host:/games/", rows[2])
-        # the cursor starts on ".."; alpha.atr is next
-        s.key("DOWN")
+        s.select("alpha.atr")
         s.key("RETURN")
         rows = s.wait_for("Assign to a drive", timeout=5)
         s.key("2")

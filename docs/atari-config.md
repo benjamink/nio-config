@@ -24,7 +24,7 @@ to D1-D8, press OPTION, and the Atari restarts with those drives mounted.
 | Tab | What it does |
 |-----|--------------|
 | Hosts | Up to 8 filesystems (`sd0:/`, `host:/`, `tnfs://server/path`, `http://...`). RET browses, A adds, E edits, D deletes. |
-| Browse | Directory listing of the chosen host. RET enters a directory (`..` and BS go up) or assigns the image under the cursor: 1-8 picks the drive, R toggles write protect. Opened from the Drives tab, the chosen image goes straight to that drive. |
+| Browse | The chosen host's directory, one page of 18 entries at a time. Up/down move the cursor and carry on into the next or previous page at the edges; left/right (or `b`/SPACE) change page, and left on the first page goes up a level (so does BS). RET enters a directory or assigns the image under the cursor: 1-8 picks the drive, R toggles write protect. `R` makes the FujiNet read the folder again. Opened from the Drives tab, the chosen image goes straight to that drive. |
 | Drives | D1-D8 with their images. RET picks an image for the selected drive, X ejects, R toggles write protect. |
 | Setup | Wi-Fi state, IP/gateway/DNS, MAC and firmware. RET scans for networks (or types an SSID) and joins. |
 
@@ -63,6 +63,9 @@ The Atari is the tightest target: the portable layer (`src/platform/portable`)
 does not fit, so the Atari has a compact core of its own (`atari_core.c`) and
 does not use `fnsvc`, `fnctl` or conio.
 
+* `$0650-$0BFF` (page 6 after the display list, and the pages PicoBoot's loader used)
+  holds the long buffers that need no initial value: the page cache, the current path,
+  the URI buffer and the name animation buffer.
 * `makefiles/cc65-atari-nio.cfg` loads the program at `$0C00` (PicoBoot only needs
   the page below) up to `$BC00`.
 * The first load chunk (`atari_basicoff.s`) switches the BASIC ROM off with
@@ -85,6 +88,24 @@ does not use `fnsvc`, `fnctl` or conio.
   host text and Wi-Fi scan results borrow the directory page buffer.
 
 `ld65` fails the build if the program no longer fits, which is the memory check.
+
+## Browsing large folders
+
+A directory can have thousands of entries and live on a slow TNFS server, so the
+Atari never asks for all of it. The FujiNet lists and sorts the folder once
+(directories first, then by name), remembers it, and answers `ListPages`
+requests (see `fujinet-nio`'s `docs/file_device_protocol.md`): whole pages of
+entries with the total count, as many as fit the 512 byte transport. A screen
+page is two protocol pages of nine entries, so a reply always carries whole pages
+whatever the names are like. Replies are kept as received in an 800 byte cache
+(`atari_core.c`), so going back to a page costs nothing; only a page not seen yet
+causes a request, and "Reading directory..." is shown while it is made. Entering
+a directory or pressing R forgets the cache; R also tells the FujiNet to re-read
+the folder. Names longer than 31 characters are cut in the page; the full name
+is fetched when the entry is opened or animated.
+
+While a request is on the wire the row-colour interrupt is stopped (it upsets the
+serial timing), so the screen takes the body colour for that moment.
 
 ## Drawing speed
 

@@ -31,11 +31,6 @@ void core_drive_tail(uint8_t unit, const char *uri, uint16_t len)
   memcpy(drive_uri[unit], uri, len);
   drive_uri[unit][len] = 0;
 }
-core_entry_t entries[CORE_WINDOW];
-uint8_t entry_count;
-uint8_t entry_more;
-uint16_t entry_start;
-uint8_t list_stale;
 
 /* One buffer serves the app store, the slot catalogue and directory pages. */
 static uint8_t iobuf[512];
@@ -338,166 +333,216 @@ uint8_t core_compose(char *out, uint8_t cap, const char *host,
   return 1;
 }
 
-/* ---- directory listing -------------------------------------------------------------- */
+/* ---- directory pages ----------------------------------------------------------------- */
+
+/* The device lists, sorts and remembers a directory and hands out whole pages
+ * of it (fn_file_list_pages).  A screen page (CORE_PAGE_ROWS entries) is made
+ * of two protocol pages of CORE_PROTO_PAGE entries, so that one reply, which is
+ * limited to what fits the 512 byte transport, can carry whole pages whatever
+ * the names look like.  Replies are kept as received in a small cache, so
+ * going back to a page is instant; only reaching a page not seen yet touches
+ * the network. */
+#define LISTING_FLAGS (FN_LIST_SORT | FN_LIST_DIRS_FIRST)
+/* The whole encoded reply (the 12 byte page header, the pages and the FujiBus
+ * framing) must fit the 512 byte transport, or the device answers with an error. */
+#define LIST_BUDGET   (sizeof(iobuf) - 12 - 32)
+#define PAGE_HEADER   5         /* cache record: u16 page, u8 count, u16 len */
+
+uint32_t dir_total;
+core_entry_t entries[CORE_PAGE_ROWS];
+uint8_t entry_count;
+uint8_t list_stale;
+
+#pragma bss-name (push, "LOWMEM")
+static uint8_t pc[CORE_PCACHE];       /* in low memory: see makefiles/cc65-atari-nio.cfg */
+#pragma bss-name (pop)
+static uint16_t pc_used;
+static fn_file_io_t file_io = { iobuf, sizeof(iobuf) };
+static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX };
 
 uint8_t core_list_error(void)
 {
   return list_error;
 }
 
-/* the longest URI asked about is one composed in atari_app.c's uri_buf */
-#define LIST_URI_MAX CORE_URI_MAX
-#define LIST_REQ_MAX (6 + LIST_URI_MAX + 8)
-
-static uint8_t req[LIST_REQ_MAX];   /* shared by every list request */
-
-/* Build a ListDirectory request into req; the length, or 0 if uri is too long.
- * name_max caps each name in the reply (0 = the device's 220). */
-static uint16_t list_request(const char *uri, uint16_t start,
-                             uint8_t name_max)
+void core_dir_reset(void)
 {
-  uint16_t ulen;
-  uint16_t off;
-
-  ulen = (uint16_t) strlen(uri);
-  if (ulen > LIST_URI_MAX)
-    return 0;
-  off = 0;
-  req[off++] = 1;
-  req[off++] = (uint8_t) ulen;
-  req[off++] = 0;
-  memcpy(req + off, uri, ulen);
-  off = (uint16_t) (off + ulen);
-  req[off++] = (uint8_t) start;
-  req[off++] = (uint8_t) (start >> 8);
-  req[off++] = (uint8_t) LIST_PAYLOAD;
-  req[off++] = (uint8_t) (LIST_PAYLOAD >> 8);
-  req[off++] = LIST_SORT;
-  req[off++] = name_max;
-  return off;
+  pc_used = 0;
+  dir_total = 0xFFFFFFFFUL;
+  entry_count = 0;
 }
 
-/* One ListDirectory request from entry `start`, appended to entries[].  The
- * device returns as many whole entries as fit in LIST_PAYLOAD bytes, which is
- * fewer than a window with long names.  Sets entry_more if the directory has
- * more after what was taken. */
-static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
+static uint8_t *pc_find(uint16_t page)
 {
-  fn_raw_response_t raw;
-  uint16_t off;
-  uint16_t count;
-  uint16_t pos;
-  uint16_t i;
+  uint16_t at;
 
-  *taken = 0;
-  off = list_request(uri, start, CORE_NAME_MAX);
-  if (!off) {
-    list_error = 1;
+  for (at = 0; at < pc_used;) {
+    if ((uint16_t) (pc[at] | (pc[at + 1] << 8)) == page)
+      return pc + at;
+    at = (uint16_t) (at + PAGE_HEADER + (pc[at + 3] | (pc[at + 4] << 8)));
+  }
+  return 0;
+}
+
+/* Keep a received page, dropping the oldest ones if there is no room. */
+static void pc_put(uint16_t page, uint8_t count, uint16_t len, const uint8_t *data)
+{
+  uint16_t need;
+  uint16_t first;
+
+  need = (uint16_t) (PAGE_HEADER + len);
+  if (need > CORE_PCACHE || pc_find(page))
+    return;
+  while ((uint16_t) (pc_used + need) > CORE_PCACHE) {
+    first = (uint16_t) (PAGE_HEADER + (pc[3] | (pc[4] << 8)));
+    memmove(pc, pc + first, (uint16_t) (pc_used - first));
+    pc_used = (uint16_t) (pc_used - first);
+  }
+  pc[pc_used] = (uint8_t) page;
+  pc[pc_used + 1] = (uint8_t) (page >> 8);
+  pc[pc_used + 2] = count;
+  pc[pc_used + 3] = (uint8_t) len;
+  pc[pc_used + 4] = (uint8_t) (len >> 8);
+  memcpy(pc + pc_used + PAGE_HEADER, data, len);
+  pc_used = (uint16_t) (pc_used + need);
+}
+
+/* Ask the device for protocol pages from `page` and keep what comes back. */
+static uint8_t fetch(const char *uri, uint16_t page, uint8_t flags)
+{
+  fn_list_pages_t r;
+  const uint8_t *p;
+  uint8_t k;
+  uint8_t res;
+
+  rq.start_page = page;
+  rq.page_size = CORE_PROTO_PAGE;
+  rq.flags = (uint8_t) (LISTING_FLAGS | flags);
+  rq.max_name = CORE_NAME_MAX;
+  res = fn_file_list_pages(&file_io, uri, &rq, &r);
+  if (res != FN_OK) {
+    list_error = res;
     return 0;
   }
-  if (fn_raw_call(FILE_DEVICE, FILE_LIST, req, off, iobuf, sizeof(iobuf),
-                  &raw) != FN_OK) {
-    list_error = 2;
-    return 0;
+  dir_total = r.total;
+  p = r.pages;
+  for (k = 0; k < r.page_count; k++) {
+    uint16_t len;
+
+    len = (uint16_t) (p[1] | (p[2] << 8));
+    pc_put((uint16_t) (r.start_page + k), p[0], len, p + 3);
+    p = p + 3 + len;
   }
-  if (raw.status != 0 || raw.payload_length < 10 || iobuf[0] != 1) {
-    list_error = 3;
-    return 0;
-  }
-  entry_more = (uint8_t) (iobuf[1] & 1);
-  count = (uint16_t) (iobuf[6] | (iobuf[7] << 8));
-  pos = 10;
-  for (i = 0; i < count; i++) {
+  return 1;
+}
+
+/* Unpack one cached protocol page onto entries[]. */
+static void unpack(const uint8_t *rec)
+{
+  const uint8_t *d;
+  uint8_t count;
+
+  count = rec[2];
+  d = rec + PAGE_HEADER;
+  while (count-- && entry_count < CORE_PAGE_ROWS) {
     core_entry_t *e;
     uint8_t n;
+    uint32_t kb;
 
-    if (entry_count >= CORE_WINDOW) {
-      entry_more = 1;           /* a page entry did not fit the window */
-      break;
-    }
-    if ((uint16_t) (pos + 2) > raw.payload_length)
-      break;
-    e = &entries[entry_count];
-    e->flags = iobuf[pos++];
-    n = iobuf[pos++];
-    if ((uint16_t) (pos + n) > raw.payload_length)
-      break;
-    if (n > CORE_NAME_MAX) {
-      memcpy(e->name, iobuf + pos, CORE_NAME_MAX);
-      e->name[CORE_NAME_MAX] = 0;
-      e->flags |= CORE_ENTRY_TRUNCATED;
+    e = &entries[entry_count++];
+    e->flags = (uint8_t) (d[0] & (CORE_ENTRY_DIR | CORE_ENTRY_TRUNCATED));
+    n = d[1];
+    if (n > CORE_NAME_MAX)
+      n = CORE_NAME_MAX;
+    memcpy(e->name, d + 2, n);
+    e->name[n] = 0;
+    d = d + 2 + d[1];
+    memcpy(&e->size, d, 4);
+    memcpy(&e->mtime, d + 4, 4);
+    d += 8;
+    kb = (e->size + 1023UL) >> 10;     /* what the list shows, worked out once */
+    if (kb >= 10000UL) {
+      e->disp = (uint16_t) ((e->size + 0xFFFFFUL) >> 20);
+      e->flags |= CORE_ENTRY_MB;
     } else {
-      memcpy(e->name, iobuf + pos, n);
-      e->name[n] = 0;
+      e->disp = (uint16_t) kb;
     }
-    pos = (uint16_t) (pos + n);
-    if (iobuf[1] & 2) {
-      e->size = 0;
-      e->mtime = 0;
-    } else {
-      if ((uint16_t) (pos + 16) > raw.payload_length)
-        break;
-      memcpy(&e->size, iobuf + pos, 4);
-      memcpy(&e->mtime, iobuf + pos + 8, 4);
-      pos = (uint16_t) (pos + 16);
-    }
-    {
-      uint32_t kb;
+  }
+}
 
-      kb = (e->size + 1023UL) >> 10;       /* what the list shows, worked out once */
-      if (kb >= 10000UL) {
-        e->disp = (uint16_t) ((e->size + 0xFFFFFUL) >> 20);
-        e->flags |= CORE_ENTRY_MB;
-      } else {
-        e->disp = (uint16_t) kb;
+uint8_t core_dir_have(uint16_t screen_page)
+{
+  uint16_t first;
+  uint8_t k;
+
+  first = (uint16_t) (screen_page * (CORE_PAGE_ROWS / CORE_PROTO_PAGE));
+  for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
+    if (dir_total != 0xFFFFFFFFUL && (uint32_t) (first + k) * CORE_PROTO_PAGE >= dir_total)
+      break;
+    if (!pc_find((uint16_t) (first + k)))
+      return 0;
+  }
+  return 1;
+}
+
+uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh)
+{
+  uint16_t first;
+  uint8_t k;
+  uint8_t *rec;
+
+  list_error = 0;
+  first = (uint16_t) (screen_page * (CORE_PAGE_ROWS / CORE_PROTO_PAGE));
+  /* make sure the pages are here before touching entries[] */
+  for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
+    uint16_t page;
+
+    page = (uint16_t) (first + k);
+    if (dir_total != 0xFFFFFFFFUL && (uint32_t) page * CORE_PROTO_PAGE >= dir_total)
+      break;                    /* past the end of the directory */
+    if (!pc_find(page)) {
+      if (!fetch(uri, page, refresh ? FN_LIST_REFRESH : 0))
+        return 0;
+      refresh = 0;
+      if (!pc_find(page)) {     /* asked for a page that does not exist */
+        list_error = FN_ERR_NOT_FOUND;
+        return 0;
       }
     }
-    entry_count++;
-    (*taken)++;
   }
-  if (*taken < count)
-    entry_more = 1;
-  return 1;
-}
-
-uint8_t core_list(const char *uri, uint16_t start)
-{
-  uint8_t taken;
-
   entry_count = 0;
-  entry_more = 0;
-  entry_start = start;
-  list_error = 0;
+  for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
+    rec = pc_find((uint16_t) (first + k));
+    if (rec)
+      unpack(rec);
+  }
   list_stale = 0;
-  /* Keep asking until the window is full or the directory ends. */
-  do {
-    if (!list_once(uri, (uint16_t) (start + entry_count), &taken))
-      return 0;
-  } while (entry_more && entry_count < CORE_WINDOW && taken);
   return 1;
 }
 
-/* The whole name of entry `index` of directory `uri`: a list page keeps only
- * CORE_NAME_MAX characters of each name, which is enough to show but not to
- * open an entry with a longer one.  0 if it cannot be fetched or does not fit
- * in cap bytes. */
+/* The whole name of entry `index` (in listing order) of directory `uri`: a page
+ * keeps only CORE_NAME_MAX characters of each name, which is enough to show but
+ * not to open an entry with a longer one.  0 if it cannot be fetched or does not
+ * fit in cap bytes. */
 uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap)
 {
-  fn_raw_response_t raw;
-  uint16_t off;
+  fn_list_pages_t r;
   uint8_t n;
+  uint8_t res;
 
-  off = list_request(uri, index, 0);
-  if (!off)
+  rq.start_page = index;                /* one entry per page: page `index` is entry `index` */
+  rq.page_size = 1;
+  rq.flags = LISTING_FLAGS;
+  rq.max_name = 0;
+  res = fn_file_list_pages(&file_io, uri, &rq, &r);
+  rq.page_size = CORE_PROTO_PAGE;       /* back to what fetch() asks for */
+  rq.max_name = CORE_NAME_MAX;
+  if (res != FN_OK || r.page_count == 0 || r.pages[0] == 0)
     return 0;
-  if (fn_raw_call(FILE_DEVICE, FILE_LIST, req, off, iobuf, sizeof(iobuf),
-                  &raw) != FN_OK || raw.status != 0 || raw.payload_length < 12 ||
-      iobuf[0] != 1 || (iobuf[6] | iobuf[7]) == 0)
+  n = r.pages[4];                       /* page: count, len; entry: flags, nameLen */
+  if (n >= cap)
     return 0;
-  n = iobuf[11];
-  if (n >= cap || (uint16_t) (12 + n) > raw.payload_length)
-    return 0;
-  memcpy(out, iobuf + 12, n);
+  memcpy(out, r.pages + 5, n);
   out[n] = 0;
   return 1;
 }
