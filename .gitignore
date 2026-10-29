@@ -2,3 +2,4 @@ build/
 __pycache__/
 *.pyc
 test-evidence/
+tests/atari/golden/_actual/

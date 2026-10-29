@@ -47,6 +47,27 @@ def screen_code_to_char(code):
     return chr(c)
 
 
+def symbols(lbl):
+    """Global symbols from an ld65 -Ln label file: {name: address}."""
+    out = {}
+    for line in Path(lbl).read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == "al" and parts[2].startswith("."):
+            out[parts[2][1:]] = int(parts[1], 16)
+    return out
+
+
+SELECT_BG = 0x2A     # row colour of the selection bar (atari_scr.c palette)
+
+
+def read_os_screen(bridge):
+    """The OS text screen (E:, as used by ftestnio etc.): 24 rows from SAVMSC."""
+    base = bridge.peek16(0x58)
+    raw = bridge.peek(base, COLS * ROWS)
+    return ["".join(screen_code_to_char(c) for c in raw[r * COLS:(r + 1) * COLS])
+            for r in range(ROWS)]
+
+
 def read_screen(bridge):
     """The 24 rows of text on the app's screen, from its screen memory."""
     dl = bridge.peek(DL, 3 + ROWS * 3)
@@ -74,7 +95,89 @@ def wait_screen(bridge, text, timeout=60, row=None):
     raise TimeoutError(f"{text!r} not on screen")
 
 
-class EmbeddedSession:
+class View:
+    """Keys, screen text and waits on a running app, given `self.bridge` (an
+    AltirraBridge) and `self.xex` (the build whose .lbl names the row table)."""
+
+    # -- input ------------------------------------------------------------
+    def key(self, name, ctrl=False):
+        if name in KEYS_CTRL:
+            name, ctrl = KEYS_CTRL[name], True
+        self.bridge.key(name, ctrl=ctrl); time.sleep(.2)
+
+    def type(self, text):
+        self.bridge.type(text); time.sleep(.3)
+
+    def option(self):
+        self.bridge.consol(option=True); time.sleep(.3); self.bridge.consol(); time.sleep(.3)
+
+    # -- output -----------------------------------------------------------
+    def screenshot(self, path=None):
+        data = self.bridge.screenshot()
+        if path:
+            Path(path).write_bytes(data)
+        return data
+
+    def screen(self):
+        return read_screen(self.bridge)
+
+    def selected_row(self):
+        """Screen row of the selection bar (read from the app's row colours)."""
+        if not hasattr(self, "_sym"):
+            lbl = Path(self.xex).with_suffix(".lbl")
+            self._sym = symbols(lbl)
+        bg = self.bridge.peek(self._sym["_row_bg"], ROWS)
+        rows = [r for r in range(3, 21) if bg[r] == SELECT_BG]
+        return rows[0] if rows else None
+
+    def select(self, text, limit=80):
+        """Move the cursor to the first visible row containing `text`, paging
+        through a long list (down first, then up from the end) if needed;
+        returns that screen row."""
+        paging = "SPACE"
+        last = None
+        for _ in range(limit):
+            rows = self.screen()
+            hit = next((r for r in range(3, 21) if text in rows[r]), None)
+            if hit is None:
+                if rows == last:                     # at the end: go the other way
+                    paging = "B" if paging == "SPACE" else "SPACE"
+                last = rows
+                self.key(paging); time.sleep(.3)
+                continue
+            sel = self.selected_row()
+            while sel != hit:
+                self.key("DOWN" if hit > sel else "UP")
+                sel = self.selected_row()
+            return hit
+        raise AssertionError(f"{text!r} not found; screen was:\n" + "\n".join(self.screen()))
+
+
+    def wait_for(self, text, timeout=10, row=None):
+        """Wait until `text` appears on the screen (or on one row)."""
+        try:
+            return wait_screen(self.bridge, text, timeout, row)
+        except TimeoutError:
+            raise TimeoutError(f"{text!r} not on screen; screen was:\n" + "\n".join(self.screen()))
+
+    def os_screen(self):
+        return read_os_screen(self.bridge)
+
+    def wait_os(self, text, timeout=30):
+        """Wait for `text` on the OS text screen (programs that use E:)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                rows = read_os_screen(self.bridge)
+            except Exception:
+                rows = []
+            if any(text in r for r in rows):
+                return rows
+            time.sleep(.5)
+        raise TimeoutError(f"{text!r} not on the OS screen")
+
+
+class EmbeddedSession(View):
     """One headless AltirraSDL run of an XEX with a private FujiNet data dir."""
 
     def __init__(self, xex, data=(), keep=None, extra=(), log=None):
@@ -85,7 +188,12 @@ class EmbeddedSession:
             (self.cfg / "fujinet.yaml").write_text(YAML)
         for dest, src in data:
             (self.cfg / dest).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(src, self.cfg / dest)
+            shutil.copy2(src, self.cfg / dest)
+            # directories keep their source times too (tests pin them)
+            d, s_ = (self.cfg / dest).parent, Path(src).parent
+            while d != self.cfg and s_.name != "src":
+                shutil.copystat(s_, d)
+                d, s_ = d.parent, s_.parent
         self.extra = list(extra)
         self.log = log
         self.proc = None
@@ -137,36 +245,6 @@ class EmbeddedSession:
 
     def __enter__(self): return self.start()
     def __exit__(self, *a): self.stop()
-
-    # -- input ------------------------------------------------------------
-    def key(self, name, ctrl=False):
-        if name in KEYS_CTRL:
-            name, ctrl = KEYS_CTRL[name], True
-        self.bridge.key(name, ctrl=ctrl); time.sleep(.2)
-
-    def type(self, text):
-        self.bridge.type(text); time.sleep(.3)
-
-    def option(self):
-        self.bridge.consol(option=True); time.sleep(.3); self.bridge.consol(); time.sleep(.3)
-
-    # -- output -----------------------------------------------------------
-    def screenshot(self, path=None):
-        data = self.bridge.screenshot()
-        if path:
-            Path(path).write_bytes(data)
-        return data
-
-    def screen(self):
-        return read_screen(self.bridge)
-
-    def wait_for(self, text, timeout=10, row=None):
-        """Wait until `text` appears on the screen (or on one row)."""
-        try:
-            return wait_screen(self.bridge, text, timeout, row)
-        except TimeoutError:
-            raise TimeoutError(f"{text!r} not on screen; screen was:\n" + "\n".join(self.screen()))
-
 
 def run_script(b, script, out, xex=False):
     """Replay a key script on a connected AltirraBridge `b` (shared with the

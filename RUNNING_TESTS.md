@@ -53,7 +53,7 @@ Build the DOS target (the usual workspace setup provides a helper script for
 the OpenWatcom environment):
 
 ```sh
-source ~/.local/bin/add_watcom.sh
+# you must ensure watcom is on your path
 make TARGET=msdos FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
@@ -174,15 +174,50 @@ The guest acceptance scripts in `tests/amiga/guest/` are run by the workspace
 Amiberry suite (`integration-tests/amiberry/test_config_nio.py`); see
 [docs/amiga-config.md](docs/amiga-config.md).
 
-## Atari UI smoke tests
+## Atari UI tests
 
-Needs the workspace environment, the Atari XEX built, and the AltirraSDL build
-that embeds FujiNet-NIO (`repos/AltirraSDL`). No window opens.
+Headless AltirraSDL (no window opens), in three layers under `tests/atari/`.
+All need the workspace environment and the XEX built; each skips itself when a
+prerequisite is missing:
 
 ```sh
 source ../../scripts/env.sh
 make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
+```
+
+**Fast** (about 4 minutes; the embedded FujiNet-NIO device in AltirraSDL, the
+XEX loaded directly, assertions on the app's screen memory and its row colours):
+
+```sh
 python3 -m unittest discover -s tests/atari -v
 ```
 
-The tests skip themselves when the XEX or the emulator is missing.
+* `test_ui_smoke.py`, `test_ui_features.py`: tabs, hosts add/edit/delete, browsing,
+  drive assignment/eject/write protect, names longer than a listing page, the name
+  animation, the size/date line, directories of 100 entries, a 192 character URI,
+  joystick and console keys, and state surviving a restart.
+* `test_screenshots.py`: pixel comparison of the Hosts, Browse, assign dialog, Drives
+  and host-prompt screens with `tests/atari/golden/*.png`, so offset or overlapping
+  text and wrong colours fail. When the look changes on purpose, review the new
+  picture and accept it with `UPDATE_GOLDEN=1 python3 -m unittest test_screenshots`
+  (run from `tests/atari`). A failure saves the actual image in `golden/_actual/`.
+
+**Boot** (slow, about 4 minutes; the real firmware over NetSIO, PicoBoot loading
+the default boot disk) only with `NIO_ATARI_BOOT=1`:
+
+```sh
+cd tests/atari && NIO_ATARI_BOOT=1 python3 -m unittest test_boot -v
+```
+
+It checks that the app boots with BASIC present and absent and turns BASIC off
+(PORTB, BASICF, MEMTOP), that RESET restarts it, and that OPTION boots an assigned
+boot disk and an assigned XEX (the firmware's PicoBoot wrapper). It needs `dir2atr`,
+`repos/fujinet-nio/build/atari-fujibus-netsio-debug` built from the current
+firmware, and `proctest.xex` from `repos/nio-core-apps`.
+
+Not covered: the display-interrupt/SIO failure that only showed on real hardware
+(the emulator's serial timing is too forgiving); a hardware run is still needed
+after changes to the screen code or the SIO path.
+
+`scripts/atari_shot.py` and `scripts/atari_shot_netsio.py` run the same harness
+from the command line with a key script and screenshots (see `docs/atari-config.md`).

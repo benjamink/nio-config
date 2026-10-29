@@ -109,9 +109,9 @@ python3 scripts/atari_shot_netsio.py --atr boot.atr --out /tmp/shots --data demo
     --script "wait:22 shot:first"
 ```
 
-`tests/atari/test_ui_smoke.py` is an automated check of the tabs, host adding,
-browsing, drive assignment, eject and write protect through the screen memory
-(see `RUNNING_TESTS.md`).
+The automated suite (fast embedded tests, screenshot comparison, and the slow boot
+tests for PicoBoot, BASIC, RESET and OPTION-to-boot) is described in
+`RUNNING_TESTS.md`.
 
 ## Boot disk
 
