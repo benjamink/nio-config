@@ -39,7 +39,10 @@ static uint8_t compose_ref(char *dst, uint8_t cap, const char *host,
 
 /* The harness calls test_func directly; main satisfies the cc65 runtime. */
 int main(void) { return 0; }
-uint8_t test_result[5];
+/* The script primes every result byte to 0xff before each run. Record the
+ * actual inputs and completed iteration count; publish success only at the
+ * end, so a skipped or partial run cannot pass on a stale zero. */
+uint8_t test_result[6];
 uint8_t test_host;
 uint8_t test_path;
 uint8_t test_leaf;
@@ -52,24 +55,24 @@ void test_func(void)
     static const char *const leaves[] = { "", "file.atr", "a" };
     uint8_t h, p, l, cap, result, reference;
     h = test_host;
-    test_result[0] = 0;
     p = test_path;
     l = test_leaf;
+    test_result[1] = h;
+    test_result[2] = p;
+    test_result[3] = l;
     for (cap = 1; cap <= 64; ++cap) {
-                    memset(actual, 0x55, (uint16_t)cap + 2);
-                    memset(expected, 0x55, (uint16_t)cap + 2);
-                    result = core_compose(actual + 1, cap, hosts[h], paths[p], leaves[l]);
-                    reference = compose_ref(expected + 1, cap, hosts[h], paths[p], leaves[l]);
-                    if (result != reference || (result && strcmp(actual + 1, expected + 1)) ||
-                        actual[0] != 0x55 || actual[cap + 1] != 0x55) {
-                        test_result[0] = 1;
-                        test_result[1] = h;
-                        test_result[2] = p;
-                        test_result[3] = l;
-                        test_result[4] = cap;
-                        return;
-                    }
-                }
+        memset(actual, 0x55, (uint16_t)cap + 2);
+        memset(expected, 0x55, (uint16_t)cap + 2);
+        result = core_compose(actual + 1, cap, hosts[h], paths[p], leaves[l]);
+        reference = compose_ref(expected + 1, cap, hosts[h], paths[p], leaves[l]);
+        if (result != reference || (result && strcmp(actual + 1, expected + 1)) ||
+            actual[0] != 0x55 || actual[cap + 1] != 0x55) {
+            test_result[0] = 1;
+            test_result[4] = cap;
+            return;
+        }
+    }
+    test_result[4] = (uint8_t)(cap - 1);
     if (h == 7 && p == 3 && l == 2) {
         memset(long_host, 'x', 188);
         long_host[188] = 0;
@@ -78,12 +81,7 @@ void test_func(void)
             test_result[0] = 2;
             return;
         }
+        test_result[5] = 1;
     }
-    if (++test_leaf == 3) {
-        test_leaf = 0;
-        if (++test_path == 4) {
-            test_path = 0;
-            ++test_host;
-        }
-    }
+    test_result[0] = 0;
 }

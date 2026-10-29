@@ -1,201 +1,1160 @@
+; Each run selects one host/path/leaf explicitly, primes every result byte to
+; $ff, then requires the harness to report those inputs, 64 completed
+; capacity checks and success. The last case also tests the 196-byte boundary.
+; Separate runs keep each group below soft65c02's instruction limit.
 memory load atari "${BINARY_PATH}"
 symbols load "${SYMBOLS_PATH}"
 registers flush
+
+; host 0, path 0, leaf 0
 memory write $_test_host 0x(00)
 memory write $_test_path 0x(00)
 memory write $_test_leaf 0x(00)
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 0, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 1, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 2, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 3, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 4, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 5, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 6, path 3, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 0, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 0, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 0, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 1, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 1, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 1, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 2, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 2, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 2, leaf 2: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 3, leaf 0: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 3, leaf 1: all capacities match$$
-run $init_harness until CP = $end_init_harness
-assert $_test_result = 0x00 $$host 7, path 3, leaf 2: all capacities match$$
-assert $_test_host = 0x08 $$all host groups completed$$
-assert $_test_path = 0x00 $$all path groups completed$$
-assert $_test_leaf = 0x00 $$all leaf groups completed$$
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 0, leaf 1
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 0, leaf 2
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 1, leaf 0
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 1, leaf 1
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 1, leaf 2
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 2, leaf 0
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 2, leaf 1
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 2, leaf 2
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 3, leaf 0
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 3, leaf 1
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 0, path 3, leaf 2
+memory write $_test_host 0x(00)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 0, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x00 $$host 0 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 0, leaf 0
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 0, leaf 1
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 0, leaf 2
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 1, leaf 0
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 1, leaf 1
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 1, leaf 2
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 2, leaf 0
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 2, leaf 1
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 2, leaf 2
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 3, leaf 0
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 3, leaf 1
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 1, path 3, leaf 2
+memory write $_test_host 0x(01)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 1, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x01 $$host 1 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 0, leaf 0
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 0, leaf 1
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 0, leaf 2
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 1, leaf 0
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 1, leaf 1
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 1, leaf 2
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 2, leaf 0
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 2, leaf 1
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 2, leaf 2
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 3, leaf 0
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 3, leaf 1
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 2, path 3, leaf 2
+memory write $_test_host 0x(02)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 2, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x02 $$host 2 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 0, leaf 0
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 0, leaf 1
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 0, leaf 2
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 1, leaf 0
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 1, leaf 1
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 1, leaf 2
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 2, leaf 0
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 2, leaf 1
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 2, leaf 2
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 3, leaf 0
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 3, leaf 1
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 3, path 3, leaf 2
+memory write $_test_host 0x(03)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 3, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x03 $$host 3 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 0, leaf 0
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 0, leaf 1
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 0, leaf 2
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 1, leaf 0
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 1, leaf 1
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 1, leaf 2
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 2, leaf 0
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 2, leaf 1
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 2, leaf 2
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 3, leaf 0
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 3, leaf 1
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 4, path 3, leaf 2
+memory write $_test_host 0x(04)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 4, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x04 $$host 4 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 0, leaf 0
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 0, leaf 1
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 0, leaf 2
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 1, leaf 0
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 1, leaf 1
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 1, leaf 2
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 2, leaf 0
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 2, leaf 1
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 2, leaf 2
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 3, leaf 0
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 3, leaf 1
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 5, path 3, leaf 2
+memory write $_test_host 0x(05)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 5, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x05 $$host 5 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 0, leaf 0
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 0, leaf 1
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 0, leaf 2
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 1, leaf 0
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 1, leaf 1
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 1, leaf 2
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 2, leaf 0
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 2, leaf 1
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 2, leaf 2
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 3, leaf 0
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 3, leaf 1
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 6, path 3, leaf 2
+memory write $_test_host 0x(06)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 6, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x06 $$host 6 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 0, leaf 0
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 0, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 0, leaf 1
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 0, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 0, leaf 2
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(00)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 0, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x00 $$path 0 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 1, leaf 0
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 1, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 1, leaf 1
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 1, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 1, leaf 2
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(01)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 1, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x01 $$path 1 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 2, leaf 0
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 2, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 2, leaf 1
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 2, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 2, leaf 2
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(02)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 2, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x02 $$path 2 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 3, leaf 0
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(00)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 3, leaf 0: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x00 $$leaf 0 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 3, leaf 1
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(01)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 3, leaf 1: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x01 $$leaf 1 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+
+; host 7, path 3, leaf 2
+memory write $_test_host 0x(07)
+memory write $_test_path 0x(03)
+memory write $_test_leaf 0x(02)
+memory write $_test_result 0x(FF,FF,FF,FF,FF,FF)
+run $init_harness until CP = $end_init_harness
+assert $_test_result = 0x00 $$host 7, path 3, leaf 2: comparison succeeded$$
+assert $_test_result + 1 = 0x07 $$host 7 executed$$
+assert $_test_result + 2 = 0x03 $$path 3 executed$$
+assert $_test_result + 3 = 0x02 $$leaf 2 executed$$
+assert $_test_result + 4 = 0x40 $$64 capacities completed$$
+assert $_test_result + 5 = 0x01 $$196-character boundary completed$$
