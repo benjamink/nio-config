@@ -44,9 +44,11 @@
 static char uri_buf[CORE_URI_MAX + 1];
 static char path[CORE_URI_MAX + 1];
 static char marq[CORE_URI_MAX + 1];
-#pragma bss-name (pop)
+static char filter[41];       /* no initial value: low memory */
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
+static fn_wifi_status_t wifi;
+#pragma bss-name (pop)
 
 static uint8_t tab;
 #ifdef DRAW_TIMING
@@ -70,11 +72,13 @@ static uint16_t top;
 static uint8_t target_unit = NO_UNIT;
 
 /* Setup */
-static fn_wifi_status_t wifi;
-static fn_wifi_config_t wifi_cfg;
-static fn_wifi_adapter_info_t wifi_info;
-static fn_fuji_info_t fuji_info;
-static uint8_t setup_loaded;
+/* Setup data shares the directory page: the two views are never active at
+ * once. Scanning also borrows it, so setup is refreshed after a join dialog. */
+typedef struct { fn_wifi_config_t cfg; fn_wifi_adapter_info_t info; fn_fuji_info_t fuji; } setup_data_t;
+#define setup_data (*(setup_data_t *) entries)
+#define wifi_cfg setup_data.cfg
+#define wifi_info setup_data.info
+#define fuji_info setup_data.fuji
 
 static const char *const tab_name[TAB_COUNT] = { "Hosts", "Browse", "Drives", "Setup" };
 static const uint8_t tab_col[TAB_COUNT] = { 1, 9, 18, 27 };
@@ -106,17 +110,7 @@ static void say_num(const char *prefix, unsigned n)
   say(line, 1);
 }
 
-static const char *base_name(const char *uri)
-{
-  const char *p;
-  const char *last;
-
-  last = uri;
-  for (p = uri; *p; p++)
-    if (*p == '/' && p[1])
-      last = p + 1;
-  return last;
-}
+const char *__fastcall__ base_name(const char *uri);
 
 /* Show the end of a long string in a field `width` wide. */
 static void tail_text(uint8_t row, const char *s)
@@ -133,24 +127,13 @@ static void tail_text(uint8_t row, const char *s)
 }
 
 /* Keep cursor `pos` inside 0..total-1 and the first row `first` showing it. */
-static void keep_in_view(uint16_t *pos, uint16_t *first, uint16_t total)
-{
-  if (total == 0) {
-    *pos = 0;
-    *first = 0;
-    return;
-  }
-  if (*pos >= total)
-    *pos = (uint16_t) (total - 1);
-  if (*pos < *first)
-    *first = *pos;
-  if (*pos >= *first + LIST_ROWS)
-    *first = (uint16_t) (*pos - LIST_ROWS + 1);
-  if (total <= LIST_ROWS)
-    *first = 0;
-  else if (*first > total - LIST_ROWS)
-    *first = (uint16_t) (total - LIST_ROWS);
-}
+extern uint16_t *view_pos, *view_first;
+extern uint16_t view_total;
+#pragma zpsym("view_pos")
+#pragma zpsym("view_first")
+#pragma zpsym("view_total")
+void view_run(void);
+#define keep_in_view(p, f, t) do { view_pos = (p); view_first = (f); view_total = (t); view_run(); } while (0)
 
 /* ---- chrome --------------------------------------------------------------- */
 
@@ -317,7 +300,7 @@ static void marq_start(void)
     if (e->flags & CORE_ENTRY_TRUNCATED) {
       /* the page keeps only the start of the name: fetch all of it */
       if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
-          !core_full_name(uri_buf, (uint16_t) (bpage * LIST_ROWS + brow),
+          !core_full_name(uri_buf, filter, (uint16_t) (bpage * LIST_ROWS + brow),
                           marq, sizeof(marq)))
         return;
     }
@@ -540,7 +523,7 @@ static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
       scr_text(ROW_STATUS, 1, "Reading directory...", 38);
       scr_present();
     }
-    if (!core_dir_page(uri_buf, sp, refresh)) {
+    if (!core_dir_page(uri_buf, filter, sp, refresh)) {
       say_list_error();
       return 0;
     }
@@ -571,6 +554,8 @@ static void browse_enter_host(uint8_t host)
   browse_host = host;
   browse_valid = 1;
   path[0] = 0;
+  status[0] = 0;
+  filter[0] = 0;
   browse_reset();
   if (!status_error)
     say("", 0);
@@ -606,7 +591,7 @@ static void browse_info(void)
     scr_text(ROW_INFO, 1, "Choose an image for drive D", 27);
     scr_putc(ROW_INFO, 28, (char) ('1' + target_unit));
   } else if (!entry_count) {
-    scr_text(ROW_INFO, 1, "Empty directory", 20);
+    scr_text(ROW_INFO, 1, filter[0] ? "No matching entries" : "Empty directory", 20);
   } else {
     total = dir_total > 65535UL ? 65535U : (unsigned) dir_total;
     scr_text(ROW_INFO, 1, "Page", 4);
@@ -615,6 +600,10 @@ static void browse_info(void)
     scr_uint(ROW_INFO, 14, npages, 4);
     scr_uint(ROW_INFO, 24, total, 5);
     scr_text(ROW_INFO, 30, total == 1 ? "entry" : "entries", 7);
+  }
+  if (filter[0]) {
+    scr_text(ROW_INFO, 1, "Filter:", 7);
+    scr_text(ROW_INFO, 9, filter, 29);
   }
 }
 
@@ -638,7 +627,7 @@ static void draw_browse(void)
 {
   uint8_t r;
 
-  draw_frame("RET Open </> BS Up R Reload OPT Boot");
+  draw_frame("RET Open </> BS Up F Filter H Help");
   if (!browse_valid) {
     for (r = 0; r < LIST_ROWS; r++)
       scr_fill((uint8_t) (LIST_ROW + r), 0, SCR_COLS, ' ');
@@ -710,6 +699,7 @@ static void draw_drives(void)
 
 static void setup_refresh(void)
 {
+  list_stale = 1;
   memset(&wifi, 0, sizeof(wifi));
   memset(&wifi_cfg, 0, sizeof(wifi_cfg));
   memset(&wifi_info, 0, sizeof(wifi_info));
@@ -718,7 +708,6 @@ static void setup_refresh(void)
   (void) fn_wifi_get_config(&wifi_cfg);
   (void) fn_wifi_get_adapter_info(&wifi_info);
   (void) fn_fuji_get_info(&fuji_info);
-  setup_loaded = 1;
 }
 
 static void setup_row(uint8_t n, const char *label, const char *value)
@@ -858,7 +847,6 @@ static void join_wifi(void)
     return;
   }
   say("Wi-Fi saved", 0);
-  setup_refresh();
 }
 
 /* ---- Boot -------------------------------------------------------------------------------- */
@@ -932,26 +920,33 @@ static void open_file(const char *name)
 
 /* ---- Keys ---------------------------------------------------------------------------------- */
 
-static uint8_t move_cursor(uint8_t k, uint16_t *pos, uint16_t total)
+extern uint8_t view_key;
+#pragma zpsym("view_key")
+uint8_t view_move(void);
+#define move_cursor(k, p, t) (view_key = (k), view_pos = (p), view_total = (t), view_move())
+
+/* Packed help text avoids a large cc65 call sequence on this tight target.
+ * | separates display rows and each tab's text ends with a NUL. */
+static const char help_hosts[] = "Hosts|RET browse, A add, E edit, D delete";
+static const char help_browse[] = "Browse|RET open; up/down move; </> page|SPACE/B page; BS up; R reload|F filter (* ?; blank clears)";
+static const char help_drives[] = "Drives|RET pick; X eject; R protect|1-8 select drive";
+static const char help_setup[] = "Setup|RET join Wi-Fi; R refresh";
+static const char *const help_tab[] = { help_hosts, help_browse, help_drives, help_setup };
+static const char help_global[] = "TAB/SELECT change tab|OPTION/START boot|Joystick moves; trigger RET|H or HELP opens this";
+
+void help_rows_run(void);
+#define help_rows(row, p) do { scr_zr = (row); scr_zs = (p); help_rows_run(); } while (0)
+
+/* Called only by the main loop: editors and existing dialogs consume H themselves. */
+static void show_help(void)
 {
-  if (!total)
-    return 0;
-  if (k == K_UP || k == '-') {
-    if (*pos > 0)
-      (*pos)--;
-  } else if (k == K_DOWN || k == '=') {
-    if ((uint16_t) (*pos + 1) < total)
-      (*pos)++;
-  } else if (k == ' ') {
-    *pos = (uint16_t) (*pos + LIST_ROWS);
-    if (*pos >= total)
-      *pos = (uint16_t) (total - 1);
-  } else if (k == 'b') {
-    *pos = *pos > LIST_ROWS ? (uint16_t) (*pos - LIST_ROWS) : 0;
-  } else {
-    return 0;
-  }
-  return 1;
+  uint8_t r;
+  for (r = 5; r < 19; r++) { scr_theme(r, T_DIALOG); scr_fill(r, 0, SCR_COLS, ' '); }
+  scr_text(5, 2, "Help - press any key", 36);
+  help_rows(7, help_tab[tab]);
+  help_rows(13, help_global);
+  (void) input_key();
+  input_settle();
 }
 
 static void key_hosts(uint8_t k)
@@ -1060,6 +1055,16 @@ static void key_browse(uint8_t k)
     (void) browse_goto(bpage, brow, 1);
     return;
   }
+  if (k == 'f' || k == '/') {
+    strcpy(uri_buf, filter);
+    if (edit_line("Name filter", "RET Apply ESC Cancel; blank clears", uri_buf,
+                  sizeof(filter), 0)) {
+      strcpy(filter, uri_buf);
+      browse_reset();
+      say(filter[0] ? "Filter applied" : "Filter cleared", 0);
+    }
+    return;
+  }
   if (k != K_RET || brow >= entry_count)
     return;
   e = &entries[brow];
@@ -1068,7 +1073,7 @@ static void key_browse(uint8_t k)
   fullname = (char *) core_scratch();   /* the page buffer: rebuilt afterwards */
   if (e->flags & CORE_ENTRY_TRUNCATED) {
     if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
-        !core_full_name(uri_buf, (uint16_t) (bpage * LIST_ROWS + brow),
+        !core_full_name(uri_buf, filter, (uint16_t) (bpage * LIST_ROWS + brow),
                         fullname, CORE_URI_MAX + 1)) {
       say("Name is longer than 196 characters", 1);
       return;
@@ -1130,6 +1135,7 @@ static void key_setup(uint8_t k)
     say("Refreshed", 0);
   } else if (k == K_RET) {
     join_wifi();
+    setup_refresh();
   }
 }
 
@@ -1188,7 +1194,7 @@ static void set_tab(uint8_t t)
 {
   tab = t;
   top = 0;
-  if (t == TAB_SETUP && !setup_loaded)
+  if (t == TAB_SETUP)
     setup_refresh();
 }
 
@@ -1230,6 +1236,10 @@ static void run(void)
     }
     if (k == K_TAB) {
       set_tab((uint8_t) ((tab + 1) % TAB_COUNT));
+      continue;
+    }
+    if (k == K_HELP || k == 'h' || k == 'H') {
+      show_help();
       continue;
     }
     /* In a list, right opens the item and left goes up a level (so the

@@ -30,7 +30,12 @@ to D1-D8, press OPTION, and the Atari restarts with those drives mounted.
 
 Keys: Ctrl+up/down (or `-` / `=`) move, SPACE and `b` page, TAB (or SELECT)
 changes tab, **OPTION or START boots**. The joystick works too: stick moves,
-the trigger is RET.
+the trigger is RET. H or HELP shows the current tab's commands; any key closes it.
+In Browse, F or / edits the name filter. Matching ignores ASCII case; `*` matches
+any number of characters and `?` matches one. Without wildcards, text matches
+anywhere in the name. A blank filter clears it. Folders remain visible and the
+filter persists when entering or leaving a folder; selecting another host clears it.
+The FujiNet firmware must support the filter for filtered results to be returned.
 
 Each row has its own colours. A display list interrupt at the end of every row
 (`atari_dli.s`) loads the next row's background and text colour from two 24
@@ -97,8 +102,8 @@ Atari never asks for all of it. The FujiNet lists and sorts the folder once
 requests (see `fujinet-nio`'s `docs/file_device_protocol.md`): whole pages of
 entries with the total count, as many as fit the 512 byte transport. A screen
 page is two protocol pages of nine entries, so a reply always carries whole pages
-whatever the names are like. Replies are kept as received in an 800 byte cache
-(`atari_core.c`), so going back to a page costs nothing; only a page not seen yet
+whatever the names are like. Replies are kept as received in a 560 byte cache
+(`atari_core.c`), so recently visited pages can be reused; only a page not cached
 causes a request, and "Reading directory..." is shown while it is made. Entering
 a directory or pressing R forgets the cache; R also tells the FujiNet to re-read
 the folder. Names longer than 31 characters are cut in the page; the full name

@@ -9,6 +9,7 @@
 #define TRIG0   (*(volatile uint8_t *) 0xD010)
 #define CONSOL  (*(volatile uint8_t *) 0xD01F)
 #define CH      (*(volatile uint8_t *) 0x02FC)
+#define HELPFG  (*(volatile uint8_t *) 0x02DC)
 
 #define REPEAT_DELAY 18
 #define REPEAT_RATE  4
@@ -74,6 +75,7 @@ void input_settle(void)
     ;
   held = 0;
   CH = 0xFF;
+  HELPFG = 0;
 }
 
 uint8_t input_key(void)
@@ -88,6 +90,10 @@ uint8_t input_key(void)
   start = jiffies();
   last_tick = start;
   for (;;) {
+    if (HELPFG) {
+      HELPFG = 0;
+      return K_HELP;
+    }
     if (kbhit())
       return (uint8_t) cgetc();
 

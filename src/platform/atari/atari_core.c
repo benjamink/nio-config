@@ -40,7 +40,9 @@ uint8_t core_error;
 static uint8_t list_error;
 static uint8_t mount_error;
 static uint8_t mount_result;
+#pragma bss-name (push, "LOWMEM")
 static char mount_text[32];
+#pragma bss-name (pop)
 
 /* ---- hosts ------------------------------------------------------------------ */
 
@@ -50,7 +52,9 @@ static char mount_text[32];
  * ones.  host_ptr[] indexes the pool (host_ptr[host_count] is its end). */
 static char host_pool[CORE_HOST_POOL];
 static uint16_t pool_len;
+#pragma bss-name (push, "LOWMEM")
 char *host_ptr[CORE_MAX_HOSTS + 1];
+#pragma bss-name (pop)
 uint8_t host_count;
 
 static void hosts_index(void)
@@ -358,7 +362,7 @@ static uint8_t pc[CORE_PCACHE];       /* in low memory: see makefiles/cc65-atari
 #pragma bss-name (pop)
 static uint16_t pc_used;
 static fn_file_io_t file_io = { iobuf, sizeof(iobuf) };
-static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX };
+static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX, 0 };
 
 uint8_t core_list_error(void)
 {
@@ -408,7 +412,7 @@ static void pc_put(uint16_t page, uint8_t count, uint16_t len, const uint8_t *da
 }
 
 /* Ask the device for protocol pages from `page` and keep what comes back. */
-static uint8_t fetch(const char *uri, uint16_t page, uint8_t flags)
+static uint8_t fetch(const char *uri, const char *filter, uint16_t page, uint8_t flags)
 {
   fn_list_pages_t r;
   const uint8_t *p;
@@ -419,6 +423,7 @@ static uint8_t fetch(const char *uri, uint16_t page, uint8_t flags)
   rq.page_size = CORE_PROTO_PAGE;
   rq.flags = (uint8_t) (LISTING_FLAGS | flags);
   rq.max_name = CORE_NAME_MAX;
+  rq.filter = filter;
   res = fn_file_list_pages(&file_io, uri, &rq, &r);
   if (res != FN_OK) {
     list_error = res;
@@ -485,7 +490,7 @@ uint8_t core_dir_have(uint16_t screen_page)
   return 1;
 }
 
-uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh)
+uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page, uint8_t refresh)
 {
   uint16_t first;
   uint8_t k;
@@ -493,7 +498,9 @@ uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh)
 
   list_error = 0;
   first = (uint16_t) (screen_page * (CORE_PAGE_ROWS / CORE_PROTO_PAGE));
-  /* make sure the pages are here before touching entries[] */
+  /* Unpack each page before fetching the next: the smaller cache need not
+   * hold both maximum-length pages at once. */
+  entry_count = 0;
   for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
     uint16_t page;
 
@@ -501,18 +508,17 @@ uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh)
     if (dir_total != 0xFFFFFFFFUL && (uint32_t) page * CORE_PROTO_PAGE >= dir_total)
       break;                    /* past the end of the directory */
     if (!pc_find(page)) {
-      if (!fetch(uri, page, refresh ? FN_LIST_REFRESH : 0))
+      if (!fetch(uri, filter, page, refresh ? FN_LIST_REFRESH : 0))
         return 0;
       refresh = 0;
       if (!pc_find(page)) {     /* asked for a page that does not exist */
+        if ((uint32_t) page * CORE_PROTO_PAGE >= dir_total)
+          break;
         list_error = FN_ERR_NOT_FOUND;
         return 0;
       }
     }
-  }
-  entry_count = 0;
-  for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
-    rec = pc_find((uint16_t) (first + k));
+    rec = pc_find(page);
     if (rec)
       unpack(rec);
   }
@@ -524,7 +530,7 @@ uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh)
  * keeps only CORE_NAME_MAX characters of each name, which is enough to show but
  * not to open an entry with a longer one.  0 if it cannot be fetched or does not
  * fit in cap bytes. */
-uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap)
+uint8_t core_full_name(const char *uri, const char *filter, uint16_t index, char *out, uint8_t cap)
 {
   fn_list_pages_t r;
   uint8_t n;
@@ -534,9 +540,11 @@ uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap)
   rq.page_size = 1;
   rq.flags = LISTING_FLAGS;
   rq.max_name = 0;
+  rq.filter = filter;
   res = fn_file_list_pages(&file_io, uri, &rq, &r);
   rq.page_size = CORE_PROTO_PAGE;       /* back to what fetch() asks for */
   rq.max_name = CORE_NAME_MAX;
+  rq.filter = 0;
   if (res != FN_OK || r.page_count == 0 || r.pages[0] == 0)
     return 0;
   n = r.pages[4];                       /* page: count, len; entry: flags, nameLen */

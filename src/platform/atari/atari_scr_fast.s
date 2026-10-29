@@ -3,8 +3,11 @@
 ; routine, which writes ANTIC screen codes directly through a row address table.
 
         .export _scr_text_run, _scr_fill_run, _scr_u16_run, _scr_dec16_run
+        .export _scr_theme_run
+        .export _help_rows_run
         .exportzp _scr_zr, _scr_zc, _scr_zw, _scr_zinv, _scr_zch, _scr_zs, _scr_zv
         .import _scr_rowlo, _scr_rowhi
+        .import _palette, _nxt_bg, _nxt_fg
 
         .segment "ZEROPAGE"
 _scr_zr:   .res 1               ; row
@@ -20,6 +23,51 @@ zf:        .res 1
 zn:        .res 1
 
         .segment "CODE"
+
+; Row colour selection uses the same zero-page calling convention as drawing.
+_scr_theme_run:
+        lda     _scr_zch
+        asl     a
+        tax
+        ldy     _scr_zr
+        lda     _palette,x
+        sta     _nxt_bg,y
+        lda     _palette+1,x
+        sta     _nxt_fg,y
+        rts
+
+; Draw packed help rows separated by '|', into the back screen.
+_help_rows_run:
+        lda #2
+        sta _scr_zc
+@row:   jsr setdst
+        ldy #0
+@char:  lda (_scr_zs),y
+        beq @done
+        cmp #'|'
+        beq @next
+        jsr conv
+        sta (zd),y
+        iny
+        cpy #36
+        bcc @char
+        ; Skip any excess text until the next row delimiter.
+@skip:  lda (_scr_zs),y
+        beq @done
+        cmp #'|'
+        beq @next
+        iny
+        bne @skip
+@next:  iny
+        tya
+        clc
+        adc _scr_zs
+        sta _scr_zs
+        bcc :+
+        inc _scr_zs+1
+:       inc _scr_zr
+        jmp @row
+@done:  rts
 
 ; zd = address of (row, column)
 setdst:

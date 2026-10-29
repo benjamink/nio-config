@@ -12,6 +12,7 @@
 #define K_TAB   0x7F
 #define K_BS    0x7E
 #define K_RET   0x9B
+#define K_HELP  0x11            /* input_key maps the OS HELPFG flag to this */
 /* Not a key: START or OPTION held. */
 #define K_BOOT  0x01
 

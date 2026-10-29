@@ -146,10 +146,13 @@ class View:
                 self.key(paging); time.sleep(.3)
                 continue
             sel = self.selected_row()
-            while sel != hit:
+            for _ in range(ROWS):
+                if sel == hit:
+                    return hit
                 self.key("DOWN" if hit > sel else "UP")
                 sel = self.selected_row()
-            return hit
+            raise AssertionError(f"selection did not reach row {hit}; screen was:\n" +
+                                 "\n".join(self.screen()))
         raise AssertionError(f"{text!r} not found; screen was:\n" + "\n".join(self.screen()))
 
 

@@ -29,7 +29,8 @@ enum {
 void scr_init(void);
 void scr_exit(void);
 void scr_coldstart(void);
-void scr_theme(uint8_t row, uint8_t theme);
+void scr_theme_run(void);
+#define scr_theme(row, theme) do { scr_zr = (row); scr_zch = (theme); scr_theme_run(); } while (0)
 /* Show everything drawn since the last call (see atari_scr.c); input_key() does
  * this before it waits, so only code that blocks elsewhere needs to. */
 void scr_present(void);

@@ -17,7 +17,7 @@
 #define CORE_UNITS     8
 #define CORE_PAGE_ROWS  18    /* entries on a screen page */
 #define CORE_PROTO_PAGE 9     /* entries per page the device sends; two per screen page */
-#define CORE_PCACHE     800   /* bytes of received pages kept */
+#define CORE_PCACHE     560   /* keeps at least one maximum-size protocol page */
 
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */
@@ -79,11 +79,11 @@ uint8_t core_dir_have(uint16_t screen_page);
 /* Make entries[] the screen page `screen_page` (CORE_PAGE_ROWS entries) of the
  * directory `uri`, asking the device only for pages not already held.  refresh
  * (FN_LIST_REFRESH-style) makes the device re-read the directory on its next
- * reply.  1 on success; on failure entries[] is unchanged. */
-uint8_t core_dir_page(const char *uri, uint16_t screen_page, uint8_t refresh);
+ * reply.  1 on success; on failure the caller must redraw/reload the page. */
+uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page, uint8_t refresh);
 uint8_t core_list_error(void);
 /* Full name of entry `index` (a page keeps only CORE_NAME_MAX characters). */
-uint8_t core_full_name(const char *uri, uint16_t index, char *out, uint8_t cap);
+uint8_t core_full_name(const char *uri, const char *filter, uint16_t index, char *out, uint8_t cap);
 
 /* Mount the drive map (D1 is DiskDevice slot 1); D2-D8 not in the map are unmounted.  Returns the
  * number of drives mounted and sets *failed to the first unit that would

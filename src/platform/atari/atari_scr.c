@@ -39,7 +39,7 @@ static uint8_t front;           /* 0 or 1: the buffer on display */
 
 /* Background hue/luminance and text luminance.  In ANTIC mode 2 the text
  * takes its hue from the background colour, so each scheme is one hue. */
-static const uint8_t palette[T_COUNT][2] = {
+const uint8_t palette[T_COUNT][2] = {
   { 0x84, 0x0F },   /* title: brighter blue band          */
   { 0x72, 0x0A },   /* tab strip                          */
   { 0x00, 0x0E },   /* URI / path field: black            */
@@ -52,12 +52,6 @@ static const uint8_t palette[T_COUNT][2] = {
   { 0x94, 0x0E },   /* dialog                             */
   { 0xC6, 0x00 }    /* edit field: green                  */
 };
-
-void scr_theme(uint8_t row, uint8_t theme)
-{
-  nxt_bg[row] = palette[theme][0];
-  nxt_fg[row] = palette[theme][1];
-}
 
 static void set_back_rows(void)
 {

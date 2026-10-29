@@ -227,6 +227,45 @@ class PagingUp(Session):
         self.assertEqual(s.screen()[2].strip(), "host:/")
 
 
+class Filters(Session):
+    SPEC = dict({"filter/miner%02d.atr" % i: 100 for i in range(25)},
+                **{"filter/Miner 2049er.atr": 100, "filter/Manic Miner.atr": 100,
+                   "filter/other.atr": 100, "filter/sub/x.atr": 100})
+
+    def test_filter_and_paging(self):
+        s = self.s
+        browse_host(s, "host:/filter/")
+        s.key("F"); s.type("*MiNeR*"); s.key("RETURN")
+        s.wait_for("Filter:", row=21, timeout=15)
+        self.assertIn("sub", "".join(s.screen()[3:21]))
+        self.assertIn("Manic Miner", "".join(s.screen()[3:21]))
+        self.assertNotIn("other.atr", "".join(s.screen()[3:21]))
+        s.key("SPACE"); time.sleep(1)
+        self.assertIn("miner", "".join(s.screen()[3:21]).lower())
+        s.key("B"); s.select("sub"); s.key("RETURN")
+        s.wait_for("host:/filter/sub", row=2, timeout=15)
+        self.assertIn("*MiNeR*".lower(), s.screen()[21].lower())
+        self.assertNotIn("x.atr", "".join(s.screen()[3:21]))
+        s.key("BACKSPACE")
+        s.wait_for("Manic Miner", timeout=15)
+        s.key("F")
+        for _ in range(7): s.key("BACKSPACE")
+        s.type("nomatch"); s.key("RETURN")
+        s.wait_for("nomatch", row=21, timeout=15)
+        self.assertIn("sub", "".join(s.screen()[3:21]))
+        self.assertNotIn("miner", "".join(s.screen()[3:21]).lower())
+        s.key("F")
+        for _ in range(7): s.key("BACKSPACE")
+        s.key("RETURN")
+        s.select("other.atr")
+
+        s.select("sub"); s.key("RETURN")
+        s.wait_for("host:/filter/sub", row=2, timeout=15)
+        s.key("F"); s.type("missing"); s.key("RETURN")
+        s.wait_for("missing", row=21, timeout=15)
+        self.assertNotIn("x.atr", "".join(s.screen()[3:21]))
+
+
 class LongUri(Session):
     DIRS = ["d%02d_" % i + "x" * 20 for i in range(6)]
     NAME = "file_with_a_long_name_" + "y" * 10 + ".atr"
@@ -249,6 +288,24 @@ class LongUri(Session):
 
 class Input(Session):
     SPEC = {"x/a.atr": 100}
+
+    def test_help_on_each_tab_and_text_entry(self):
+        s = self.s
+        for tab in ("Hosts", "Browse", "Drives", "Setup"):
+            s.key("H")
+            s.wait_for("Help - press any key", timeout=10)
+            self.assertIn(tab, s.screen()[7])
+            s.key("RETURN")
+            s.wait_for("FujiNet NIO Config", row=0, timeout=10)
+            s.key("TAB")
+        s.key("HELP")
+        s.wait_for("Help - press any key", timeout=10)
+        s.key("RETURN")
+        s.key("A")
+        s.type("host:/h")
+        s.wait_for("host:/h", row=2, timeout=5)
+        self.assertNotIn("Help - press any key", "".join(s.screen()))
+        s.key("ESC")
 
     def test_joystick_moves_and_opens(self):
         s = self.s
