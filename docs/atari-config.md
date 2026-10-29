@@ -93,7 +93,7 @@ does not use `fnsvc`, `fnctl` or conio.
   host text and Wi-Fi scan results borrow the directory page buffer.
 * URI composition is in `atari_compose.s`, with zero-page arguments to avoid
   cc65's parameter-passing overhead. `tests/atari/test_compose.py` compares it
-  with the original C rules and checks output limits under `sim65`.
+  with the original C rules and checks output limits under `soft65c02`.
 
 `ld65` fails the build if the program no longer fits, which is the memory check.
 

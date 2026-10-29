@@ -196,6 +196,9 @@ python3 -m unittest discover -s tests/atari -v
   drive assignment/eject/write protect, names longer than a listing page, the name
   animation, the size/date line, directories of 100 entries, a 192 character URI,
   joystick and console keys, and state surviving a restart.
+* `test_compose.py`: uses `soft65c02_unit` and the shared cc65-clib harness to
+  compare the Atari 6502 URI composer against its C reference, including buffer
+  limits and the 196-character boundary. It skips if the emulator or cc65 is missing.
 * `test_screenshots.py`: pixel comparison of the Hosts, Browse, assign dialog, Drives
   and host-prompt screens with `tests/atari/golden/*.png`, so offset or overlapping
   text and wrong colours fail. When the look changes on purpose, review the new

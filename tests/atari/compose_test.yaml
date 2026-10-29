@@ -1,0 +1,11 @@
+name: Atari URI composer differential and bounds checks
+configs:
+  - ../../../cc65-clib/tests/harness/harness.yaml
+config_file: compose_test.cfg
+src_files:
+  - compose_test.c
+  - ../../src/platform/atari/atari_compose.s
+ld_flags:
+  - -t
+  - none
+test_script: compose_test.txt

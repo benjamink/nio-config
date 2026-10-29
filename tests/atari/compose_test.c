@@ -1,8 +1,7 @@
-/* Differential test of the Atari assembly URI composer, run under sim65. */
+/* Differential test of the Atari assembly URI composer under soft65c02. */
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
-#include "atari_core.h"
+#include "../../src/platform/atari/atari_core.h"
 
 static char actual[202], expected[202];
 static char long_host[189];
@@ -38,34 +37,53 @@ static uint8_t compose_ref(char *dst, uint8_t cap, const char *host,
     return 1;
 }
 
-int main(void)
+/* The harness calls test_func directly; main satisfies the cc65 runtime. */
+int main(void) { return 0; }
+uint8_t test_result[5];
+uint8_t test_host;
+uint8_t test_path;
+uint8_t test_leaf;
+
+void test_func(void)
 {
     static const char *const hosts[] = { "", "host", "host:/", "tnfs://server/root",
         "example.org", "abc/def:ghi", "abc\\def:ghi", "x:" };
     static const char *const paths[] = { "", "games/", "games", "nested/folder/" };
     static const char *const leaves[] = { "", "file.atr", "a" };
     uint8_t h, p, l, cap, result, reference;
-    for (h = 0; h < sizeof(hosts) / sizeof(hosts[0]); ++h)
-        for (p = 0; p < sizeof(paths) / sizeof(paths[0]); ++p)
-            for (l = 0; l < sizeof(leaves) / sizeof(leaves[0]); ++l)
-                for (cap = 1; cap <= 64; ++cap) {
-                    memset(actual, 0x55, sizeof(actual));
-                    memset(expected, 0x55, sizeof(expected));
+    h = test_host;
+    test_result[0] = 0;
+    p = test_path;
+    l = test_leaf;
+    for (cap = 1; cap <= 64; ++cap) {
+                    memset(actual, 0x55, (uint16_t)cap + 2);
+                    memset(expected, 0x55, (uint16_t)cap + 2);
                     result = core_compose(actual + 1, cap, hosts[h], paths[p], leaves[l]);
                     reference = compose_ref(expected + 1, cap, hosts[h], paths[p], leaves[l]);
                     if (result != reference || (result && strcmp(actual + 1, expected + 1)) ||
                         actual[0] != 0x55 || actual[cap + 1] != 0x55) {
-                        printf("compose mismatch h=%u p=%u l=%u cap=%u\n", h, p, l, cap);
-                        return 1;
+                        test_result[0] = 1;
+                        test_result[1] = h;
+                        test_result[2] = p;
+                        test_result[3] = l;
+                        test_result[4] = cap;
+                        return;
                     }
                 }
-    memset(long_host, 'x', 188);
-    long_host[188] = 0;
-    if (!core_compose(actual, 197, long_host, "", "") || strlen(actual) != 196 ||
-        core_compose(actual, 196, long_host, "", "")) {
-        puts("196-character URI boundary failed");
-        return 1;
+    if (h == 7 && p == 3 && l == 2) {
+        memset(long_host, 'x', 188);
+        long_host[188] = 0;
+        if (!core_compose(actual, 197, long_host, "", "") || strlen(actual) != 196 ||
+            core_compose(actual, 196, long_host, "", "")) {
+            test_result[0] = 2;
+            return;
+        }
     }
-    puts("Atari URI composer: differential and bounds checks passed");
-    return 0;
+    if (++test_leaf == 3) {
+        test_leaf = 0;
+        if (++test_path == 4) {
+            test_path = 0;
+            ++test_host;
+        }
+    }
 }
