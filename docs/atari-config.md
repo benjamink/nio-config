@@ -91,6 +91,9 @@ does not use `fnsvc`, `fnctl` or conio.
   rest. Two 1000 byte screens make up the double buffer.
 * One 512 byte buffer serves the app store, slot catalogue and directory pages;
   host text and Wi-Fi scan results borrow the directory page buffer.
+* URI composition is in `atari_compose.s`, with zero-page arguments to avoid
+  cc65's parameter-passing overhead. `tests/atari/test_compose.py` compares it
+  with the original C rules and checks output limits under `sim65`.
 
 `ld65` fails the build if the program no longer fits, which is the memory check.
 
@@ -102,7 +105,7 @@ Atari never asks for all of it. The FujiNet lists and sorts the folder once
 requests (see `fujinet-nio`'s `docs/file_device_protocol.md`): whole pages of
 entries with the total count, as many as fit the 512 byte transport. A screen
 page is two protocol pages of nine entries, so a reply always carries whole pages
-whatever the names are like. Replies are kept as received in a 560 byte cache
+whatever the names are like. Replies are kept as received in an 800 byte cache
 (`atari_core.c`), so recently visited pages can be reused; only a page not cached
 causes a request, and "Reading directory..." is shown while it is made. Entering
 a directory or pressing R forgets the cache; R also tells the FujiNet to re-read

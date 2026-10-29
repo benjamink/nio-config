@@ -17,7 +17,7 @@
 #define CORE_UNITS     8
 #define CORE_PAGE_ROWS  18    /* entries on a screen page */
 #define CORE_PROTO_PAGE 9     /* entries per page the device sends; two per screen page */
-#define CORE_PCACHE     560   /* keeps at least one maximum-size protocol page */
+#define CORE_PCACHE     800   /* bytes of received pages kept */
 
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */
@@ -69,8 +69,18 @@ uint8_t core_save_drives(void);
 uint8_t core_put_slot(uint8_t slot, const char *uri, uint8_t readonly);
 
 /* Compose host + path + leaf into a URI; 1 on success. */
-uint8_t core_compose(char *out, uint8_t cap, const char *host,
-                     const char *path, const char *leaf);
+extern char *compose_out;
+extern const char *compose_host, *compose_path, *compose_leaf;
+extern uint8_t compose_cap;
+#pragma zpsym("compose_out")
+#pragma zpsym("compose_host")
+#pragma zpsym("compose_path")
+#pragma zpsym("compose_leaf")
+#pragma zpsym("compose_cap")
+uint8_t compose_run(void);
+#define core_compose(out, cap, host, path, leaf) \
+  (compose_out = (out), compose_cap = (cap), compose_host = (host), \
+   compose_path = (path), compose_leaf = (leaf), compose_run())
 
 /* Forget the cached pages (a different directory, or a refresh). */
 void core_dir_reset(void);
@@ -79,7 +89,7 @@ uint8_t core_dir_have(uint16_t screen_page);
 /* Make entries[] the screen page `screen_page` (CORE_PAGE_ROWS entries) of the
  * directory `uri`, asking the device only for pages not already held.  refresh
  * (FN_LIST_REFRESH-style) makes the device re-read the directory on its next
- * reply.  1 on success; on failure the caller must redraw/reload the page. */
+ * reply.  1 on success; on failure entries[] is unchanged. */
 uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page, uint8_t refresh);
 uint8_t core_list_error(void);
 /* Full name of entry `index` (a page keeps only CORE_NAME_MAX characters). */

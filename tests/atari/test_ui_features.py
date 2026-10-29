@@ -227,6 +227,22 @@ class PagingUp(Session):
         self.assertEqual(s.screen()[2].strip(), "host:/")
 
 
+class PageCache(Session):
+    # Both nine-entry protocol pages exceed 560 bytes together.  All names
+    # are deliberately longer than the 31-byte per-entry page cap.
+    SPEC = {"cache/%02d_" % i + "x" * 36 + ".atr": 100 for i in range(18)}
+
+    def test_two_full_name_pages_stay_cached(self):
+        from atari_ui import symbols
+        s = self.s
+        browse_host(s, "host:/cache/")
+        s.wait_for("18 entries", row=21, timeout=15)
+        self.assertEqual(sum(bool(r.strip()) for r in s.screen()[3:21]), 18)
+        used = s.bridge.peek16(symbols(s.xex.replace(".xex", ".lbl"))["_pc_used"])
+        self.assertGreater(used, 560)
+        self.assertLessEqual(used, 800)
+
+
 class Filters(Session):
     SPEC = dict({"filter/miner%02d.atr" % i: 100 for i in range(25)},
                 **{"filter/Miner 2049er.atr": 100, "filter/Manic Miner.atr": 100,

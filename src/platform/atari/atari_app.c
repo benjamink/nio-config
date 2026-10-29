@@ -45,10 +45,10 @@ static char uri_buf[CORE_URI_MAX + 1];
 static char path[CORE_URI_MAX + 1];
 static char marq[CORE_URI_MAX + 1];
 static char filter[41];       /* no initial value: low memory */
+#pragma bss-name (pop)
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
 static fn_wifi_status_t wifi;
-#pragma bss-name (pop)
 
 static uint8_t tab;
 #ifdef DRAW_TIMING

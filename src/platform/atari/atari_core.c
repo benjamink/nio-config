@@ -40,9 +40,7 @@ uint8_t core_error;
 static uint8_t list_error;
 static uint8_t mount_error;
 static uint8_t mount_result;
-#pragma bss-name (push, "LOWMEM")
 static char mount_text[32];
-#pragma bss-name (pop)
 
 /* ---- hosts ------------------------------------------------------------------ */
 
@@ -52,9 +50,7 @@ static char mount_text[32];
  * ones.  host_ptr[] indexes the pool (host_ptr[host_count] is its end). */
 static char host_pool[CORE_HOST_POOL];
 static uint16_t pool_len;
-#pragma bss-name (push, "LOWMEM")
 char *host_ptr[CORE_MAX_HOSTS + 1];
-#pragma bss-name (pop)
 uint8_t host_count;
 
 static void hosts_index(void)
@@ -290,53 +286,6 @@ uint8_t core_load(void)
 
 /* ---- URIs ------------------------------------------------------------------------ */
 
-static uint8_t has_scheme(const char *s)
-{
-  while (*s && *s != '/' && *s != '\\') {
-    if (*s == ':')
-      return 1;
-    s++;
-  }
-  return 0;
-}
-
-static uint8_t append(char *out, uint8_t cap, uint8_t *pos, const char *s)
-{
-  while (*s) {
-    if ((uint8_t) (*pos + 1) >= cap)
-      return 0;
-    out[(*pos)++] = *s++;
-  }
-  out[*pos] = 0;
-  return 1;
-}
-
-uint8_t core_compose(char *out, uint8_t cap, const char *host,
-                     const char *path, const char *leaf)
-{
-  uint8_t pos;
-
-  pos = 0;
-  out[0] = 0;
-  if (!*host)
-    return 0;
-  if (!has_scheme(host) && !append(out, cap, &pos, "tnfs://"))
-    return 0;
-  if (!append(out, cap, &pos, host))
-    return 0;
-  if (pos && out[pos - 1] != '/' && !append(out, cap, &pos, "/"))
-    return 0;
-  if (!append(out, cap, &pos, path))
-    return 0;
-  if (*leaf) {
-    if (pos && out[pos - 1] != '/' && !append(out, cap, &pos, "/"))
-      return 0;
-    if (!append(out, cap, &pos, leaf))
-      return 0;
-  }
-  return 1;
-}
-
 /* ---- directory pages ----------------------------------------------------------------- */
 
 /* The device lists, sorts and remembers a directory and hands out whole pages
@@ -360,7 +309,7 @@ uint8_t list_stale;
 #pragma bss-name (push, "LOWMEM")
 static uint8_t pc[CORE_PCACHE];       /* in low memory: see makefiles/cc65-atari-nio.cfg */
 #pragma bss-name (pop)
-static uint16_t pc_used;
+uint16_t pc_used;             /* exposed for the headless cache regression test */
 static fn_file_io_t file_io = { iobuf, sizeof(iobuf) };
 static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX, 0 };
 
@@ -498,9 +447,7 @@ uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page,
 
   list_error = 0;
   first = (uint16_t) (screen_page * (CORE_PAGE_ROWS / CORE_PROTO_PAGE));
-  /* Unpack each page before fetching the next: the smaller cache need not
-   * hold both maximum-length pages at once. */
-  entry_count = 0;
+  /* Fetch both protocol pages before changing the visible entries. */
   for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
     uint16_t page;
 
@@ -518,7 +465,10 @@ uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page,
         return 0;
       }
     }
-    rec = pc_find(page);
+  }
+  entry_count = 0;
+  for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
+    rec = pc_find((uint16_t) (first + k));
     if (rec)
       unpack(rec);
   }
