@@ -4,7 +4,7 @@
 ; (title bar, selection bar, status bar, dialog) can be a different colour.
 
         .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
-        .import _row_bg, _row_fg
+        .import _row_bg, _row_fg, _nxt_bg, _nxt_fg, _lms_lo, _lms_hi, _scr_swap
         .import fn_sio_vec
 
 VDSLST  = $0200
@@ -16,6 +16,9 @@ COLPF2  = $D018
 COLBK   = $D01A
 DLIST   = $0600
 COLDST  = $0244
+COLOR1  = $02C5
+COLOR2  = $02C6
+COLOR4  = $02C8
 SIOV    = $E459
         .ifdef  NO_DLI
 NMI_ON  = $40
@@ -90,10 +93,40 @@ _scr_coldstart:
 
 ; Deferred vertical blank: every frame starts the row count again, so a frame
 ; that lost an interrupt (or started with the interrupt just enabled) cannot
-; leave the colours out of step with the rows.
+; leave the colours out of step with the rows.  When scr_present() has asked
+; (scr_swap), it also switches the display list to the freshly drawn screen and
+; its row colours, so a redraw appears in one frame.
 vbi:    lda     #0
         sta     dlirow
-        jmp     XITVBV
+        lda     _scr_swap
+        beq     @done
+        ldx     #0              ; new screen rows into the display list
+        ldy     #4
+@lms:   lda     _lms_lo,x
+        sta     DLIST,y
+        iny
+        lda     _lms_hi,x
+        sta     DLIST,y
+        iny
+        iny
+        inx
+        cpx     #24
+        bne     @lms
+        ldx     #23             ; and the row colours with them
+@col:   lda     _nxt_bg,x
+        sta     _row_bg,x
+        lda     _nxt_fg,x
+        sta     _row_fg,x
+        dex
+        bpl     @col
+        lda     _row_bg
+        sta     COLOR2
+        sta     COLOR4
+        lda     _row_fg
+        sta     COLOR1
+        lda     #0
+        sta     _scr_swap
+@done:  jmp     XITVBV
 
 dli:    pha
         txa

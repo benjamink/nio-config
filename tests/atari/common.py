@@ -27,10 +27,13 @@ def make_files(root, spec):
     (dest, src) list EmbeddedSession wants."""
     out = []
     for rel, size in spec.items():
+        mtime = FIXED_MTIME
+        if isinstance(size, tuple):          # (size, mtime)
+            size, mtime = size
         path = Path(root) / "src" / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"\x96\x02" + bytes(max(size - 2, 0)))
-        os.utime(path, (FIXED_MTIME, FIXED_MTIME))
+        os.utime(path, (mtime, mtime))
         out.append((rel, path))
     # directories get the same time (deepest first, after their files exist)
     for d in sorted((p for p in (Path(root) / "src").rglob("*") if p.is_dir()), reverse=True):

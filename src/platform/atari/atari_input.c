@@ -1,4 +1,5 @@
 #include "atari_input.h"
+#include "atari_scr.h"
 
 #include <conio.h>
 #include <stdint.h>
@@ -83,6 +84,7 @@ uint8_t input_key(void)
   uint16_t last_tick;
   uint16_t t;
 
+  scr_present();                /* show what was drawn before waiting */
   start = jiffies();
   last_tick = start;
   for (;;) {
@@ -99,6 +101,7 @@ uint8_t input_key(void)
             (uint16_t) (t - last_tick) >= idle_step) {
           last_tick = t;
           idle_fn();
+          scr_present();
         }
       }
       continue;

@@ -78,10 +78,34 @@ does not use `fnsvc`, `fnctl` or conio.
   RESET) and points `DOSVEC` at the program start, so RESET restarts the app.
 * URIs may be 196 characters (host + path + name); a saved host 100. The buffers
   that hold them are shared by design; atari_app.c lists who may use each.
+* Saved hosts live packed in one 1200 byte pool (up to 24); a drive keeps only
+  the last 100 characters of its URI for display and the catalogue holds the
+  rest. Two 1000 byte screens make up the double buffer.
 * One 512 byte buffer serves the app store, slot catalogue and directory pages;
   host text and Wi-Fi scan results borrow the directory page buffer.
 
 `ld65` fails the build if the program no longer fits, which is the memory check.
+
+## Drawing speed
+
+The text routines are in assembly (`atari_scr_fast.s`): the C macros in
+`atari_scr.h` store their arguments in zero page and call a routine that writes
+screen codes straight to a row address table, with no C argument stack.
+Numbers are formatted by subtraction against a power-of-ten table, not by
+division. Directory sizes are turned into kilobytes once, when a page is
+loaded, and dates use 16-bit day counts.
+
+Everything is drawn into a back screen and shown with `scr_present()` during
+vertical blank (the vblank handler swaps the display list's row addresses and
+the row colours together), so a redraw appears in one frame instead of wiping
+down the screen. `input_key()` presents before it waits. Moving the cursor
+within a page recolours two rows; moving past the edge slides the screen rows
+and draws the one new row.
+
+Measured in the emulator (jiffies, 1 jiffy = 20 ms PAL): a full Browse page
+34 to 6, Hosts 9 to 2, Drives 10 to 2; a cursor move 3. Build with
+`EXTRA_DEFS=-DDRAW_TIMING` to read the last draw time from `dbg_draw` and
+`dbg_move` (symbols in the `.lbl` file).
 
 ## Running it
 

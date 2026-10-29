@@ -99,7 +99,9 @@ class Screenshots(unittest.TestCase):
 
     def test_4_host_edit_prompt(self):
         s = self.s
-        s.key("TAB"); s.key("TAB")                       # Setup, Hosts
+        s.key("TAB")                                         # Setup (queries the FujiNet)
+        s.wait_for("RET Join", row=22, timeout=15)
+        s.key("TAB")                                         # Hosts
         s.wait_for("RET Browse A Add", row=22, timeout=10)
         s.key("A")
         s.type("tnfs://example.org/atari")

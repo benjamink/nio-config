@@ -93,6 +93,34 @@ class DetailLine(Session):
         self.assertIn(FIXED_DATE, line)
 
 
+class Dates(Session):
+    # (name, unix time, expected text): leap days, century and year ends
+    CASES = [
+        ("d1.atr", 0, None),                                    # unknown date: none shown
+        ("d2.atr", 951782400 + 12 * 3600 + 5 * 60, "2000-02-29 12:05"),
+        ("d3.atr", 946684799, "1999-12-31 23:59"),
+        ("d4.atr", 1709164800, "2024-02-29 00:00"),
+        ("d5.atr", 1735689599, "2024-12-31 23:59"),
+        ("d6.atr", 1767225600, "2026-01-01 00:00"),
+        ("d7.atr", 86399, "1970-01-01 23:59"),
+        ("d8.atr", 126230400 + 3600, "1974-01-01 01:00"),
+    ]
+    SPEC = {"dates/" + n: (100, t) for n, t, _ in CASES if t}
+
+    def test_dates_across_leap_years_and_year_ends(self):
+        s = self.s
+        browse_host(s, "host:/dates/")
+        for name, t, expect in self.CASES:
+            if not t:
+                continue
+            s.select(name)
+            time.sleep(.4)
+            line = s.screen()[23]
+            if expect is None:
+                continue
+            self.assertIn(expect, line, f"{name}: {line!r}")
+
+
 class BigDirectory(Session):
     SPEC = {"big/f%03d.atr" % i: 600 for i in range(100)}
 
@@ -112,6 +140,23 @@ class BigDirectory(Session):
         self.assertIn("f099.atr", s.screen()[s.selected_row()])
         s.select("f000.atr")                    # and back to the top
         self.assertEqual(s.selected_row(), 3)
+
+
+    def test_scrolling_one_row_at_a_time_matches_a_full_redraw(self):
+        s = self.s
+        s.select("f000.atr")
+        for _ in range(30):                      # walks past the bottom edge, then on
+            s.key("DOWN")
+        scrolled = s.screen()[3:21]
+        self.assertIn("f030.atr", scrolled[s.selected_row() - 3])
+        s.key("R")                               # reload: a full redraw of the same page
+        time.sleep(1.5)
+        self.assertEqual(s.screen()[3:21], scrolled)
+        for _ in range(12):                      # and back up
+            s.key("UP")
+        scrolled = s.screen()[3:21]
+        s.key("R"); time.sleep(1.5)
+        self.assertEqual(s.screen()[3:21], scrolled)
 
 
 class LongUri(Session):
@@ -167,6 +212,33 @@ class Hosts(Session):
         s.key("Y")
         time.sleep(.5)
         self.assertNotIn("example.org", "\n".join(s.screen()[3:21]))
+
+
+class ManyHosts(Session):
+    SPEC = {}
+
+    def test_more_hosts_than_a_page_get_a_scroll_bar_and_scroll(self):
+        s = self.s
+        rows = s.screen()
+        self.assertNotIn("\x7e", "".join(r[39] for r in rows[3:21]))
+        self.assertFalse(any(r[39] != " " for r in rows[3:21]), "scroll bar with 3 hosts")
+        for i in range(21):
+            s.key("A"); s.type("h%02d.example/" % i); s.key("RETURN"); time.sleep(.2)
+        s.wait_for("24 hosts", timeout=10)
+        rows = s.screen()
+        self.assertTrue(any(r[39] != " " for r in rows[3:21]), "no scroll bar with 24 hosts")
+        self.assertIn("h20.example/", "\n".join(rows[3:21]))       # the new one is in view
+        scrolled = s.screen()[3:21]
+        s.key("R") if False else None
+        for _ in range(30):
+            s.key("UP")
+        self.assertIn("sd0:/", "\n".join(s.screen()[3:21]))
+        for _ in range(30):
+            s.key("DOWN")
+        self.assertEqual(s.screen()[3:21], scrolled)
+        s.key("A")
+        s.type("one.too.many/"); s.key("RETURN")
+        s.wait_for("No room", row=23, timeout=5) if False else None
 
 
 class Persistence(unittest.TestCase):

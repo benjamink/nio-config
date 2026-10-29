@@ -44,6 +44,10 @@ static char status[SCR_COLS];
 static char path[CORE_URI_MAX + 1];
 
 static uint8_t tab;
+#ifdef DRAW_TIMING
+uint8_t dbg_draw;               /* jiffies the last full draw took (dev builds) */
+uint8_t dbg_move;               /* jiffies the last cursor-move update took */
+#endif
 static uint8_t status_error;
 static uint8_t cursor_only;     /* the key only moved the cursor within the page */
 static uint8_t list_gen;        /* bumped when the directory page is reloaded */
@@ -194,9 +198,13 @@ static void draw_frame(const char *hint)
   scr_text(ROW_STATUS, 1, status, 38);
 }
 
+static uint8_t sel_row = 0xFF;  /* screen row currently drawn as the selection bar */
+
 static void list_row(uint8_t row, uint8_t selected)
 {
   scr_theme(row, selected ? T_SEL : T_BODY);
+  if (selected)
+    sel_row = row;
 }
 
 /* ---- text entry ------------------------------------------------------------- */
@@ -292,7 +300,7 @@ static void marq_start(void)
   marq_state = 2;
   marq_off = 0;
   if (tab == TAB_HOSTS && host_count) {
-    strcpy(marq, hosts[host_sel]);
+    strcpy(marq, host_ptr[host_sel]);
     marq_row = (uint8_t) (LIST_ROW + host_sel - top);
     marq_col = 3;
     marq_w = 35;
@@ -305,7 +313,7 @@ static void marq_start(void)
     strcpy(marq, e->name);
     if (e->flags & CORE_ENTRY_TRUNCATED) {
       /* the page keeps only the start of the name: fetch all of it */
-      if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "") ||
+      if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
           !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
                           marq, sizeof(marq)))
         return;
@@ -354,58 +362,76 @@ static void idle_tick(void)
 
 /* ---- Entry details (size and date) -------------------------------------------------- */
 
-static void put_dec(char **p, uint32_t v, uint8_t width)
+/* Decimal text.  32-bit division is slow on a 6502, so numbers are split into
+ * 16-bit pieces and the 32-bit division happens at most a couple of times. */
+static void put_dec16(char **p, uint16_t v, uint8_t width)
 {
-  char tmp[11];
-  uint8_t n;
+  char *q;
 
-  n = 0;
-  do {
-    tmp[n++] = (char) ('0' + (uint8_t) (v % 10));
-    v /= 10;
-  } while (v);
-  while (n < width) {
-    tmp[n++] = '0';
-  }
-  while (n)
-    *(*p)++ = tmp[--n];
+  q = *p;
+  scr_dec16(q, v, width);
+  *p = q;
 }
 
-/* "2026-10-28 14:07" from Unix seconds (UTC), civil-from-days. */
+static void put_dec32(char **p, uint32_t v)
+{
+  if (v < 65536UL) {
+    put_dec16(p, (uint16_t) v, 0);
+  } else {
+    put_dec32(p, v / 10000UL);
+    put_dec16(p, (uint16_t) (v % 10000UL), 4);
+  }
+}
+
+/* "2026-10-28 14:07" (UTC) from Unix seconds.  Whole days since 1970 fit 16
+ * bits, so only the split into days and minutes uses 32-bit division. */
 static void put_date(char **p, uint32_t t)
 {
-  uint32_t z;
-  uint32_t era;
-  uint32_t doe;
-  uint32_t yoe;
-  uint32_t doy;
-  uint32_t mp;
-  uint32_t y;
+  static const uint8_t mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  uint16_t days;
+  uint16_t mins;
+  uint16_t y;
   uint8_t m;
-  uint8_t d;
-  uint32_t secs;
+  uint8_t leap;
+  uint8_t dim;
 
-  secs = t % 86400UL;
-  z = t / 86400UL + 719468UL;
-  era = z / 146097UL;
-  doe = z % 146097UL;
-  yoe = (doe - doe / 1460UL + doe / 36524UL - doe / 146096UL) / 365UL;
-  y = yoe + era * 400UL;
-  doy = doe - (365UL * yoe + yoe / 4UL - yoe / 100UL);
-  mp = (5UL * doy + 2UL) / 153UL;
-  d = (uint8_t) (doy - (153UL * mp + 2UL) / 5UL + 1UL);
-  m = (uint8_t) (mp < 10 ? mp + 3 : mp - 9);
-  if (m <= 2)
+  days = (uint16_t) (t / 86400UL);
+  mins = (uint16_t) ((t - (uint32_t) days * 86400UL) / 60UL);
+  /* 1970-2099: every fourth year is a leap year, so count whole 4-year blocks
+   * (1461 days) and then at most three single years: 1970, 71 (365 days), 72
+   * (366), 73 (365). */
+  y = (uint16_t) (1970 + 4 * (days / 1461));
+  days = (uint16_t) (days % 1461);
+  leap = 0;
+  if (days >= 365) {
+    days = (uint16_t) (days - 365);
     y++;
-  put_dec(p, y, 4);
+    if (days >= 365) {
+      days = (uint16_t) (days - 365);
+      y++;
+      leap = 1;                 /* the year 1972 + 4k */
+      if (days >= 366) {
+        days = (uint16_t) (days - 366);
+        y++;
+        leap = 0;
+      }
+    }
+  }
+  for (m = 0; m < 12; m++) {
+    dim = (uint8_t) (mdays[m] + (m == 1 && leap));
+    if (days < dim)
+      break;
+    days = (uint16_t) (days - dim);
+  }
+  put_dec16(p, y, 4);
   *(*p)++ = '-';
-  put_dec(p, m, 2);
+  put_dec16(p, (uint16_t) (m + 1), 2);
   *(*p)++ = '-';
-  put_dec(p, d, 2);
+  put_dec16(p, (uint16_t) (days + 1), 2);
   *(*p)++ = ' ';
-  put_dec(p, secs / 3600UL, 2);
+  put_dec16(p, (uint16_t) (mins / 60), 2);
   *(*p)++ = ':';
-  put_dec(p, secs / 60UL % 60UL, 2);
+  put_dec16(p, (uint16_t) (mins % 60), 2);
 }
 
 /* Show the size and date of the entry under the cursor on the status row,
@@ -427,7 +453,7 @@ static void browse_detail(void)
     strcpy(p, "<DIR>");
     p += 5;
   } else {
-    put_dec(&p, e->size, 0);
+    put_dec32(&p, e->size);
     strcpy(p, " bytes");
     p += 6;
   }
@@ -443,6 +469,22 @@ static void browse_detail(void)
 
 /* ---- Hosts tab ------------------------------------------------------------------ */
 
+/* List row r (0..LIST_ROWS-1) of the Hosts tab, for the current `top`. */
+static void hosts_row(uint8_t r)
+{
+  uint16_t idx;
+  uint8_t row;
+
+  idx = (uint16_t) (top + r);
+  row = (uint8_t) (LIST_ROW + r);
+  scr_fill(row, 0, SCR_COLS, ' ');
+  if (idx >= host_count)
+    return;
+  list_row(row, idx == host_sel);
+  scr_uint(row, 0, (unsigned) (idx + 1), 2);
+  scr_text(row, 3, host_ptr[idx], 35);
+}
+
 static void draw_hosts(void)
 {
   uint8_t r;
@@ -451,25 +493,14 @@ static void draw_hosts(void)
   draw_frame("RET Browse A Add E Edit D Del OPT Boot");
   pos = host_sel;
   keep_in_view(&pos, &top, host_count);
-  scr_text(ROW_FIELD, 1, host_count ? hosts[host_sel] : "", 38);
-  for (r = 0; r < LIST_ROWS; r++) {
-    uint16_t idx;
-    uint8_t row;
-
-    idx = (uint16_t) (top + r);
-    row = (uint8_t) (LIST_ROW + r);
-    scr_fill(row, 0, SCR_COLS, ' ');
-    if (idx >= host_count)
-      continue;
-    list_row(row, idx == host_sel);
-    scr_uint(row, 0, idx + 1, 2);
-    scr_text(row, 3, hosts[idx], 35);
-  }
+  scr_text(ROW_FIELD, 1, host_count ? host_ptr[host_sel] : "", 38);
+  for (r = 0; r < LIST_ROWS; r++)
+    hosts_row(r);
   if (!host_count)
     scr_text(LIST_ROW + 1, 3, "No hosts: press A to add one", 36);
   scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, host_count);
   scr_uint(ROW_INFO, 1, host_count, 2);
-  scr_text(ROW_INFO, 4, "of 8 hosts", 12);
+  scr_text(ROW_INFO, 4, host_count == 1 ? "host" : "hosts", 5);
 }
 
 /* ---- Browse tab ------------------------------------------------------------------- */
@@ -487,7 +518,7 @@ static uint8_t browse_load(uint16_t first)
   entry_start = first;
   if (!browse_valid)
     return 0;
-  if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "")) {
+  if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "")) {
     say("Path is too long", 1);
     return 0;
   }
@@ -566,13 +597,10 @@ static void draw_size(uint8_t row, const core_entry_t *e)
 {
   if (e->flags & CORE_ENTRY_DIR) {
     scr_text(row, 31, " <DIR>", 6);
-  } else if (e->size >= 0x100000UL) {
-    scr_uint(row, 31, (e->size + 0xFFFFFUL) >> 20, 5);
-    scr_text(row, 36, "M", 1);
-  } else {
-    scr_uint(row, 31, (e->size + 1023UL) >> 10, 5);
-    scr_text(row, 36, "K", 1);
+    return;
   }
+  scr_uint(row, 31, e->disp, 5);
+  scr_text(row, 36, (e->flags & CORE_ENTRY_MB) ? "M" : "K", 1);
 }
 
 static void browse_info(void)
@@ -594,6 +622,31 @@ static void browse_info(void)
   }
 }
 
+/* List row r of the Browse tab, for the current `top`. */
+static void browse_row(uint8_t r)
+{
+  uint16_t idx;
+  uint8_t row;
+  const core_entry_t *e;
+
+  idx = (uint16_t) (top + r);
+  row = (uint8_t) (LIST_ROW + r);
+  scr_fill(row, 0, SCR_COLS, ' ');
+  if (idx >= browse_known())
+    return;
+  list_row(row, idx == cur);
+  if (has_parent && idx == 0) {
+    scr_text(row, 1, "..", 28);
+    scr_text(row, 31, " <DIR>", 6);
+    return;
+  }
+  e = entry_at(idx);
+  if (!e)
+    return;
+  scr_text(row, 1, e->name, 29);
+  draw_size(row, e);
+}
+
 static void draw_browse(void)
 {
   uint8_t r;
@@ -607,30 +660,10 @@ static void draw_browse(void)
     return;
   }
   known = browse_known();
-  if (core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, ""))
+  if (core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, ""))
     tail_text(ROW_FIELD, uri_buf);
-  for (r = 0; r < LIST_ROWS; r++) {
-    uint16_t idx;
-    uint8_t row;
-    const core_entry_t *e;
-
-    idx = (uint16_t) (top + r);
-    row = (uint8_t) (LIST_ROW + r);
-    scr_fill(row, 0, SCR_COLS, ' ');
-    if (idx >= known)
-      continue;
-    list_row(row, idx == cur);
-    if (has_parent && idx == 0) {
-      scr_text(row, 1, "..", 28);
-      scr_text(row, 31, " <DIR>", 6);
-      continue;
-    }
-    e = entry_at(idx);
-    if (!e)
-      continue;
-    scr_text(row, 1, e->name, 29);
-    draw_size(row, e);
-  }
+  for (r = 0; r < LIST_ROWS; r++)
+    browse_row(r);
   scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, known);
   browse_info();
   browse_detail();
@@ -644,8 +677,7 @@ static void assign_drive(uint8_t unit, const char *uri, uint8_t readonly)
     say("Unable to save drive slot", 1);
     return;
   }
-  strncpy(drive_uri[unit], uri, CORE_URI_MAX);
-  drive_uri[unit][CORE_URI_MAX] = 0;
+  core_drive_tail(unit, uri, (uint16_t) strlen(uri));
   drive_on[unit] = 1;
   drive_ro[unit] = readonly;
   drive_slot[unit] = unit;
@@ -770,6 +802,7 @@ static uint8_t pick_network(char *ssid)
   wire = (uint8_t *) (recs + SCAN_MAX);
   draw_frame("");
   scr_text(ROW_STATUS, 1, "Scanning for networks...", 38);
+  scr_present();
   count = 0;
   if (fn_wifi_scan(0, SCAN_MAX, recs, SCAN_MAX, &count, &more, wire,
                    FN_WIFI_SCAN_RESPONSE_HEADER_SIZE +
@@ -857,11 +890,13 @@ static void boot_now(void)
   }
   scr_theme(ROW_STATUS, T_STATUS);
   scr_text(ROW_STATUS, 1, "Mounting drives...", 38);
+  scr_present();
   if (!core_mount_all(&failed) || failed != 0xFF) {
     say(core_mount_error(), 1);
     return;
   }
   scr_text(ROW_STATUS, 1, "Booting...", 38);
+  scr_present();
   scr_coldstart();
 }
 
@@ -873,7 +908,7 @@ static void open_file(const char *name)
   uint8_t r;
   uint8_t k;
 
-  if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, name) ||
+  if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, name) ||
       strlen(uri_buf) > CORE_URI_MAX) {
     say("URI is longer than 196 characters", 1);
     return;
@@ -940,6 +975,7 @@ static void key_hosts(uint8_t k)
   pos = host_sel;
   if (move_cursor(k, &pos, host_count)) {
     host_sel = (uint8_t) pos;
+    keep_in_view(&pos, &top, host_count);   /* scroll if the bar left the page */
     cursor_only = 1;
     return;
   }
@@ -950,24 +986,25 @@ static void key_hosts(uint8_t k)
     uri_buf[0] = 0;
     if (edit_line("New host or URI", "RET Add ESC Cancel", uri_buf,
                   CORE_HOST_MAX + 1, 0) && uri_buf[0]) {
-      strcpy(hosts[host_count], uri_buf);
-      host_sel = host_count++;
-      say(core_save_hosts() ? "Host added" : "Unable to save hosts", 0);
+      if (!core_host_set(host_count, uri_buf)) {
+        say("No room for another host", 1);
+      } else {
+        host_sel = (uint8_t) (host_count - 1);
+        say(core_save_hosts() ? "Host added" : "Unable to save hosts", 0);
+      }
     }
   } else if (k == 'e' && host_count) {
-    strcpy(uri_buf, hosts[host_sel]);
+    strcpy(uri_buf, host_ptr[host_sel]);
     if (edit_line("Edit host or URI", "RET Save ESC Cancel", uri_buf,
                   CORE_HOST_MAX + 1, 0) && uri_buf[0]) {
-      strcpy(hosts[host_sel], uri_buf);
-      say(core_save_hosts() ? "Host saved" : "Unable to save hosts", 0);
+      if (!core_host_set(host_sel, uri_buf))
+        say("No room for a longer host", 1);
+      else
+        say(core_save_hosts() ? "Host saved" : "Unable to save hosts", 0);
     }
   } else if (k == 'd' && host_count) {
     if (confirm("Delete this host? Y/N")) {
-      uint8_t i;
-
-      for (i = host_sel; (uint8_t) (i + 1) < host_count; i++)
-        strcpy(hosts[i], hosts[i + 1]);
-      host_count--;
+      core_host_delete(host_sel);
       if (host_sel >= host_count && host_sel)
         host_sel--;
       say(core_save_hosts() ? "Host deleted" : "Unable to save hosts", 0);
@@ -1014,7 +1051,7 @@ static void key_browse(uint8_t k)
   isdir = (uint8_t) (e->flags & CORE_ENTRY_DIR);
   fullname = (char *) core_scratch();   /* the page buffer: reloaded afterwards */
   if (e->flags & CORE_ENTRY_TRUNCATED) {
-    if (!core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, "") ||
+    if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
         !core_full_name(uri_buf, (uint16_t) (entry_start + (e - entries)),
                         fullname, CORE_URI_MAX + 1)) {
       say("Name is longer than 196 characters", 1);
@@ -1086,29 +1123,55 @@ static void key_setup(uint8_t k)
  * field and the info line change, so redraw just those. */
 static void update_selection(void)
 {
-  uint8_t r;
-  uint16_t idx;
+  uint16_t at;
 
-  for (r = 0; r < LIST_ROWS; r++) {
-    idx = (uint16_t) (top + r);
-    if (tab == TAB_HOSTS && idx < host_count)
-      list_row((uint8_t) (LIST_ROW + r), idx == host_sel);
-    else if (tab == TAB_BROWSE && idx < browse_known())
-      list_row((uint8_t) (LIST_ROW + r), idx == cur);
-    else if (tab == TAB_DRIVES && idx < CORE_UNITS)
-      list_row((uint8_t) (LIST_ROW + r), idx == drive_sel);
-  }
-  scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
+  /* move the bar: the old row back to body colour, the new row orange */
+  if (sel_row != 0xFF)
+    scr_theme(sel_row, T_BODY);
+  at = tab == TAB_HOSTS ? host_sel : tab == TAB_BROWSE ? cur : drive_sel;
+  list_row((uint8_t) (LIST_ROW + at - top), 1);
   if (tab == TAB_HOSTS) {
-    scr_text(ROW_FIELD, 1, host_count ? hosts[host_sel] : "", 38);
+    scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
+    scr_text(ROW_FIELD, 1, host_count ? host_ptr[host_sel] : "", 38);
   } else if (tab == TAB_DRIVES) {
+    scr_fill(ROW_FIELD, 0, SCR_COLS, ' ');
     if (drive_on[drive_sel])
       tail_text(ROW_FIELD, drive_uri[drive_sel]);
-  } else {
-    if (core_compose(uri_buf, sizeof(uri_buf), hosts[browse_host], path, ""))
-      tail_text(ROW_FIELD, uri_buf);
+  } else {                      /* the path above the list has not changed */
     browse_info();
     browse_detail();
+  }
+}
+
+/* The page moved by one row: slide the rows already on screen and draw only
+ * the one that came into view. */
+static void scroll_one(uint16_t old_top)
+{
+  uint8_t r;
+  uint8_t *dst;
+  uint8_t *src;
+
+  if (top > old_top) {                  /* rows move up */
+    for (r = LIST_ROW; r < LIST_ROW + LIST_ROWS - 1; r++) {
+      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
+      src = (uint8_t *) (scr_rowlo[r + 1] | (scr_rowhi[r + 1] << 8));
+      memcpy(dst, src, SCR_COLS);
+    }
+    r = LIST_ROWS - 1;
+  } else {                              /* rows move down */
+    for (r = LIST_ROW + LIST_ROWS - 1; r > LIST_ROW; r--) {
+      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
+      src = (uint8_t *) (scr_rowlo[r - 1] | (scr_rowhi[r - 1] << 8));
+      memcpy(dst, src, SCR_COLS);
+    }
+    r = 0;
+  }
+  if (tab == TAB_HOSTS) {
+    hosts_row(r);
+    scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, host_count);
+  } else {
+    browse_row(r);
+    scr_scrollbar(LIST_ROW, LIST_ROWS, top, LIST_ROWS, browse_known());
   }
 }
 
@@ -1136,12 +1199,18 @@ static void run(void)
   redraw = 1;
   for (;;) {
     if (redraw) {
+#ifdef DRAW_TIMING
+      uint8_t t0 = *(volatile uint8_t *) 0x14;
+#endif
       switch (tab) {
       case TAB_HOSTS:  draw_hosts();  break;
       case TAB_BROWSE: draw_browse(); break;
       case TAB_DRIVES: draw_drives(); break;
       default:         draw_setup();  break;
       }
+#ifdef DRAW_TIMING
+      dbg_draw = (uint8_t) (*(volatile uint8_t *) 0x14 - t0);
+#endif
     }
     redraw = 1;
     idle_ok = 1;
@@ -1177,13 +1246,26 @@ static void run(void)
     case TAB_DRIVES: key_drives(k); break;
     default:         key_setup(k);  break;
     }
-    if (cursor_only && tab == old_tab && top == old_top && list_gen == old_gen) {
+    if (cursor_only && tab == old_tab && list_gen == old_gen &&
+        (top == old_top ||
+         ((tab == TAB_HOSTS || tab == TAB_BROWSE) &&
+          (top == old_top + 1 || top + 1 == old_top)))) {
+#ifdef DRAW_TIMING
+      {
+        uint8_t t1 = *(volatile uint8_t *) 0x14;
+#endif
+      if (top != old_top)
+        scroll_one(old_top);
       /* keep_in_view may still scroll on the next draw; here it did not */
       status[0] = 0;            /* the size/date of the new entry replaces it */
       status_error = 0;
       scr_theme(ROW_STATUS, T_STATUS);
       scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
       update_selection();
+#ifdef DRAW_TIMING
+      dbg_move = (uint8_t) (*(volatile uint8_t *) 0x14 - t1);
+      }
+#endif
       redraw = 0;
     }
   }
@@ -1197,6 +1279,7 @@ int main(void)
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);
   scr_text(ROW_STATUS, 1, "Starting FujiNet...", 38);
+  scr_present();
 
   failed = 0;
   if (fn_init() != FN_OK)
@@ -1213,6 +1296,7 @@ int main(void)
     scr_uint(ROW_STATUS, 30, core_error, 3);
     scr_text(ROW_STATUS, 34, "sio", 3);
     scr_uint(ROW_STATUS, 36, fn_atari_last_sio_status(), 3);
+    scr_present();
     for (;;)
       ;
   }

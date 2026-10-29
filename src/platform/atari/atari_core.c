@@ -11,19 +11,26 @@
 #define MAPPING_VALID    0x01
 #define MAPPING_READONLY 0x02
 #define MAPPINGS_SIZE (1 + CORE_UNITS * 2)
-#define TEXT_MAX ((CORE_HOST_MAX + 1) * CORE_MAX_HOSTS)
 
 #define FILE_DEVICE 0xFE
 #define FILE_LIST   0x02
 #define LIST_SORT   0x02
 #define LIST_PAYLOAD 420
 
-char hosts[CORE_MAX_HOSTS][CORE_HOST_MAX + 1];
-uint8_t host_count;
 uint8_t drive_on[CORE_UNITS];
 uint8_t drive_ro[CORE_UNITS];
 uint8_t drive_slot[CORE_UNITS];
-char drive_uri[CORE_UNITS][CORE_URI_MAX + 1];
+char drive_uri[CORE_UNITS][CORE_DRIVE_URI + 1];
+
+void core_drive_tail(uint8_t unit, const char *uri, uint16_t len)
+{
+  if (len > CORE_DRIVE_URI) {
+    uri += len - CORE_DRIVE_URI;
+    len = CORE_DRIVE_URI;
+  }
+  memcpy(drive_uri[unit], uri, len);
+  drive_uri[unit][len] = 0;
+}
 core_entry_t entries[CORE_WINDOW];
 uint8_t entry_count;
 uint8_t entry_more;
@@ -34,8 +41,6 @@ uint8_t list_stale;
 static uint8_t iobuf[512];
 static fn_appstore_io_t app_io = { iobuf, sizeof(iobuf) };
 static fn_slot_catalog_io_t slot_io = { iobuf, sizeof(iobuf) };
-/* Host text is built in the directory page buffer, which is idle then. */
-#define text ((char *) entries)
 uint8_t core_error;
 static uint8_t list_error;
 static uint8_t mount_error;
@@ -44,58 +49,115 @@ static char mount_text[32];
 
 /* ---- hosts ------------------------------------------------------------------ */
 
-static uint8_t read_text(const char *key)
+/* The saved hosts are one app-store record: text, a host per line.  In RAM they
+ * are packed, NUL-separated, in one pool, so the count is limited by their
+ * total length rather than by a fixed slot each: many short hosts or a few long
+ * ones.  host_ptr[] indexes the pool (host_ptr[host_count] is its end). */
+static char host_pool[CORE_HOST_POOL];
+static uint16_t pool_len;
+char *host_ptr[CORE_MAX_HOSTS + 1];
+uint8_t host_count;
+
+static void hosts_index(void)
+{
+  char *p;
+  uint8_t i;
+
+  p = host_pool;
+  for (i = 0; i < host_count; i++) {
+    host_ptr[i] = p;
+    p += strlen(p) + 1;
+  }
+  host_ptr[host_count] = p;
+}
+
+uint8_t core_host_set(uint8_t i, const char *s)
+{
+  uint16_t len;
+  uint16_t old;
+  char *at;
+
+  if (i > host_count || (i == host_count && host_count >= CORE_MAX_HOSTS))
+    return 0;
+  len = (uint16_t) (strlen(s) + 1);
+  at = host_ptr[i];
+  old = i < host_count ? (uint16_t) (strlen(at) + 1) : 0;
+  if ((uint16_t) (pool_len - old + len) > CORE_HOST_POOL)
+    return 0;
+  memmove(at + len, at + old, (uint16_t) (pool_len - (at + old - host_pool)));
+  memcpy(at, s, len);
+  pool_len = (uint16_t) (pool_len - old + len);
+  if (i == host_count)
+    host_count++;
+  hosts_index();
+  return 1;
+}
+
+void core_host_delete(uint8_t i)
+{
+  uint16_t old;
+  char *at;
+
+  at = host_ptr[i];
+  old = (uint16_t) (strlen(at) + 1);
+  memmove(at, at + old, (uint16_t) (pool_len - (at + old - host_pool)));
+  pool_len = (uint16_t) (pool_len - old);
+  host_count--;
+  hosts_index();
+}
+
+/* Take the saved hosts text a chunk at a time (it can be longer than any
+ * buffer here), adding each line to the pool. */
+static uint8_t feed_len;
+
+static void host_feed(const uint8_t *p, uint16_t n)
+{
+  while (n--) {
+    uint8_t c;
+
+    c = *p++;
+    if (c == '\n' || c == '\r') {
+      if (feed_len) {
+        host_pool[pool_len++] = 0;
+        host_count++;
+        feed_len = 0;
+      }
+    } else if (feed_len < CORE_HOST_MAX && host_count < CORE_MAX_HOSTS &&
+               pool_len + 2 < CORE_HOST_POOL) {
+      host_pool[pool_len++] = (char) c;
+      feed_len++;
+    }
+  }
+}
+
+static uint8_t read_hosts(void)
 {
   fn_appstore_read_t rr;
   uint16_t total;
 
   total = 0;
-  text[0] = 0;
+  pool_len = 0;
+  host_count = 0;
+  feed_len = 0;
   for (;;) {
-    uint16_t want;
-
-    want = (uint16_t) (TEXT_MAX - total);
-    if (want > sizeof(iobuf) - 16)
-      want = (uint16_t) (sizeof(iobuf) - 16);
-    if (!want)
-      break;
-    core_error = fn_appstore_read(&app_io, CORE_NS, key, total, iobuf, want, &rr);
+    core_error = fn_appstore_read(&app_io, CORE_NS, KEY_HOSTS, total, iobuf,
+                                  (uint16_t) (sizeof(iobuf) - 16), &rr);
     if (core_error != FN_OK)
       return 0;
     if (!(rr.flags & FN_APPSTORE_READ_EXISTS) || !rr.bytes_read)
       break;
-    memcpy(text + total, iobuf, rr.bytes_read);
+    host_feed(iobuf, rr.bytes_read);
     total = (uint16_t) (total + rr.bytes_read);
-    text[total] = 0;
     if (rr.flags & FN_APPSTORE_READ_EOF)
       break;
   }
-  return 1;
-}
-
-static void parse_hosts(void)
-{
-  const char *p;
-
-  host_count = 0;
-  p = text;
-  while (*p && host_count < CORE_MAX_HOSTS) {
-    char *d;
-    uint8_t n;
-
-    d = hosts[host_count];
-    n = 0;
-    while (*p && *p != '\n' && *p != '\r') {
-      if (n < CORE_HOST_MAX)
-        d[n++] = *p;
-      p++;
-    }
-    d[n] = 0;
-    while (*p == '\n' || *p == '\r')
-      p++;
-    if (n)
-      host_count++;
+  if (feed_len) {                 /* last line had no newline */
+    host_pool[pool_len++] = 0;
+    host_count++;
+    feed_len = 0;
   }
+  hosts_index();
+  return 1;
 }
 
 void *core_scratch(void)
@@ -107,35 +169,36 @@ void *core_scratch(void)
 uint8_t core_save_hosts(void)
 {
   fn_appstore_write_t wr;
-  uint16_t off;
-  uint16_t chunk;
+  char *t;
+  uint16_t fill;
+  uint16_t sent;
   uint8_t i;
 
   list_stale = 1;
-  off = 0;
-  for (i = 0; i < host_count; i++) {
-    uint8_t n;
-
-    n = (uint8_t) strlen(hosts[i]);
-    memcpy(text + off, hosts[i], n);
-    off = (uint16_t) (off + n);
-    text[off++] = '\n';
-  }
-  if (!off)
+  t = (char *) entries;           /* the page buffer: a 400 byte chunk at a time */
+  fill = 0;
+  sent = 0;
+  if (!host_count)
     return fn_appstore_write(&app_io, CORE_NS, KEY_HOSTS, 0, iobuf, 0, &wr) == FN_OK;
-  for (chunk = 0; chunk < off;) {
+  for (i = 0; i < host_count; i++) {
     uint16_t n;
 
-    n = (uint16_t) (off - chunk);
-    if (n > 400)
-      n = 400;
-    if (fn_appstore_write(&app_io, CORE_NS, KEY_HOSTS, chunk,
-                          (const uint8_t *) text + chunk, n, &wr) != FN_OK ||
-        wr.bytes_written != n)
-      return 0;
-    chunk = (uint16_t) (chunk + n);
+    n = (uint16_t) (strlen(host_ptr[i]) + 1);
+    if ((uint16_t) (fill + n) > 400) {
+      if (fn_appstore_write(&app_io, CORE_NS, KEY_HOSTS, sent,
+                            (const uint8_t *) t, fill, &wr) != FN_OK ||
+          wr.bytes_written != fill)
+        return 0;
+      sent = (uint16_t) (sent + fill);
+      fill = 0;
+    }
+    memcpy(t + fill, host_ptr[i], n - 1);
+    t[fill + n - 1] = '\n';
+    fill = (uint16_t) (fill + n);
   }
-  return 1;
+  return fn_appstore_write(&app_io, CORE_NS, KEY_HOSTS, sent,
+                           (const uint8_t *) t, fill, &wr) == FN_OK &&
+         wr.bytes_written == fill;
 }
 
 /* ---- drive map ---------------------------------------------------------------- */
@@ -143,7 +206,6 @@ uint8_t core_save_hosts(void)
 static void load_slot(uint8_t unit)
 {
   fn_slot_catalog_entry_t e;
-  uint16_t n;
 
   drive_uri[unit][0] = 0;
   if (fn_slot_catalog_get(&slot_io, drive_slot[unit], &e) != FN_OK ||
@@ -151,11 +213,7 @@ static void load_slot(uint8_t unit)
     drive_on[unit] = 0;
     return;
   }
-  n = e.uri_len;
-  if (n > CORE_URI_MAX)
-    n = CORE_URI_MAX;
-  memcpy(drive_uri[unit], e.uri, n);
-  drive_uri[unit][n] = 0;
+  core_drive_tail(unit, (const char *) e.uri, e.uri_len);
   if (e.flags & FN_SLOT_CATALOG_ENTRY_READ_ONLY)
     drive_ro[unit] = 1;
 }
@@ -219,14 +277,12 @@ uint8_t core_put_slot(uint8_t slot, const char *uri, uint8_t readonly)
 
 uint8_t core_load(void)
 {
-  if (!read_text(KEY_HOSTS))
+  if (!read_hosts())
     return 0;
-  parse_hosts();
   if (!host_count) {
-    strcpy(hosts[0], "sd0:/");
-    strcpy(hosts[1], "fujinet.diller.org");
-    strcpy(hosts[2], "fujinet.online");
-    host_count = 3;
+    (void) core_host_set(0, "sd0:/");
+    (void) core_host_set(1, "fujinet.diller.org");
+    (void) core_host_set(2, "fujinet.online");
     (void) core_save_hosts();
   }
   load_drives();
@@ -385,6 +441,17 @@ static uint8_t list_once(const char *uri, uint16_t start, uint8_t *taken)
       memcpy(&e->mtime, iobuf + pos + 8, 4);
       pos = (uint16_t) (pos + 16);
     }
+    {
+      uint32_t kb;
+
+      kb = (e->size + 1023UL) >> 10;       /* what the list shows, worked out once */
+      if (kb >= 10000UL) {
+        e->disp = (uint16_t) ((e->size + 0xFFFFFUL) >> 20);
+        e->flags |= CORE_ENTRY_MB;
+      } else {
+        e->disp = (uint16_t) kb;
+      }
+    }
     entry_count++;
     (*taken)++;
   }
@@ -469,8 +536,28 @@ uint8_t core_mount_all(uint8_t *failed)
         (void) fn_disk_unmount((uint8_t) (u + 1));
       continue;
     }
-    mount_result = fn_disk_mount((uint8_t) (u + 1), drive_uri[u], drive_ro[u], FN_DISK_TYPE_AUTO,
-                                 256, &info);
+    {
+      /* the whole URI comes from the slot catalogue, into the page buffer */
+      fn_slot_catalog_entry_t e;
+      char *full;
+      uint16_t n;
+
+      full = (char *) entries;
+      list_stale = 1;
+      if (fn_slot_catalog_get(&slot_io, drive_slot[u], &e) != FN_OK ||
+          !(e.flags & FN_SLOT_CATALOG_ENTRY_VALID)) {
+        mount_result = FN_ERR_NOT_FOUND;
+        mount_error = FN_DISK_ERR_UNREPORTED;
+        if (*failed == 0xFF)
+          *failed = u;
+        continue;
+      }
+      n = e.uri_len > CORE_URI_MAX ? CORE_URI_MAX : e.uri_len;
+      memcpy(full, e.uri, n);
+      full[n] = 0;
+      mount_result = fn_disk_mount((uint8_t) (u + 1), full, drive_ro[u],
+                                   FN_DISK_TYPE_AUTO, 256, &info);
+    }
     if (mount_result != FN_OK) {
       mount_error = fn_disk_last_error();
       if (*failed == 0xFF)
