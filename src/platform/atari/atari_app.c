@@ -888,13 +888,13 @@ static void open_file(const char *name)
     return;
   }
   if (target_unit != NO_UNIT) {
-    assign_drive(target_unit, uri_buf, 0);
+    assign_drive(target_unit, uri_buf, 1);
     drive_sel = target_unit;
     target_unit = NO_UNIT;
     tab = TAB_DRIVES;
     return;
   }
-  readonly = 0;
+  readonly = 1;
   for (;;) {
     for (r = 7; r < 15; r++) {
       scr_theme(r, T_DIALOG);

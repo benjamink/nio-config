@@ -55,6 +55,9 @@ XEX/COM programs are mounted like any image; the firmware presents them as a
 boot disk (MyPicoDOS PicoBoot wrapper) so the same drive-assignment flow boots
 them.
 
+New drive assignments default to read-only. Use R in the assignment dialog or
+on the Drives tab to permit writes. Existing saved assignments keep their mode.
+
 ## Data
 
 The app reads and writes the same records as the other front ends
