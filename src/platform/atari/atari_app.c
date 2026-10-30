@@ -550,11 +550,12 @@ static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
   for (tries = 0; tries < 2; tries++) {
     marq_cached = 0;
     list_gen++;
-    if (!core_dir_have(sp) || refresh) {
+    if ((!core_dir_have(sp) || refresh) && !scr_reading) {
       scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
       scr_theme(ROW_STATUS, T_STATUS);
       scr_text(ROW_STATUS, 1, "Reading directory...", 38);
       scr_present();
+      scr_reading_on();
     }
     if (!core_dir_page(uri_buf, filter, sp, refresh)) {
       say_list_error();
@@ -674,6 +675,8 @@ static void draw_browse(void)
 {
   uint8_t r;
 
+  if (browse_valid && list_stale) /* rebuild before drawing any of the new frame */
+    (void) browse_goto(bpage, brow, 0);
   draw_frame("RET Open </> BS Up F Filter H Help");
   if (!browse_valid) {
     for (r = 0; r < LIST_ROWS; r++)
@@ -681,8 +684,6 @@ static void draw_browse(void)
     scr_text(LIST_ROW + 1, 3, "Pick a host on the Hosts tab", 36);
     return;
   }
-  if (list_stale)               /* the page buffer was borrowed: rebuild from what was sent */
-    (void) browse_goto(bpage, brow, 0);
   if (core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, ""))
     tail_text(ROW_FIELD, uri_buf);
   for (r = 0; r < LIST_ROWS; r++)
@@ -1082,6 +1083,7 @@ static void key_browse(uint8_t k)
   uint8_t len;
   uint8_t nlen;
   uint8_t isdir;
+  uint32_t old_total;
   char *fullname;
 
   if (!browse_valid) {
@@ -1128,8 +1130,13 @@ static void key_browse(uint8_t k)
     return;
   }
   if (k == 'r') {                               /* have the device read the folder again */
+    len = entry_count;
+    old_total = dir_total;
     core_dir_reset();
-    (void) browse_goto(bpage, brow, 1);
+    if (!browse_goto(bpage, brow, 1)) {
+      entry_count = len;
+      dir_total = old_total;
+    }
     return;
   }
   if (k == 'f' || k == '/') {

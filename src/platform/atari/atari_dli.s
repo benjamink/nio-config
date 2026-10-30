@@ -4,8 +4,8 @@
 ; (title bar, selection bar, status bar, dialog) can be a different colour.
 
         .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
-        .export _scr_flat_on, _scr_flat_off
-        .export _scr_nmi_mode
+        .export _scr_flat_on, _scr_flat_off, _scr_reading_on, _scr_reading
+        .export _scr_nmi_mode, setcursor
         .import _row_bg, _row_fg, _nxt_bg, _nxt_fg, _lms_lo, _lms_hi, _scr_swap
         .import _scr_sio_bg, _scr_sio_fg
         .import fn_sio_vec
@@ -33,11 +33,18 @@ XITVBV  = $E462
 
         .segment "CODE"
 
+; cgetc normally restores and updates the OS text cursor through OLDADR.
+; This app uses its own double-buffered screen; OLDADR may point into the app
+; after loading, so touching the unused OS cursor can corrupt program memory.
+setcursor:
+        rts
+
 ; void scr_vectors_set(void): point ANTIC at the display list built at $0600
 ; and enable the display list interrupt.
 _scr_vectors_set:
         lda     #0
         sta     dlirow
+        sta     _scr_reading
         lda     #<dli
         sta     VDSLST
         lda     #>dli
@@ -69,6 +76,24 @@ _scr_flat_off:
         sta     NMIEN
         rts
 
+; Present the current Browse screen in body colours while the next page is
+; fetched and drawn. VBI reenables row colours with the next buffer swap.
+        .segment "COMMON_HIGH"
+_scr_reading_on:
+        jsr     _scr_flat_on
+        lda     _scr_sio_bg
+        sta     COLOR2
+        sta     COLOR4
+        sta     COLPF2
+        sta     COLBK
+        lda     _scr_sio_fg
+        sta     COLOR1
+        sta     COLPF1
+        lda     #1
+        sta     _scr_reading
+        rts
+        .segment "CODE"
+
 ; void scr_sio_hook(void): route the library's SIO calls through sio_nodli.
 ; Call it after fn_init(), which installs the plain SIOV vector.
 _scr_sio_hook:
@@ -96,12 +121,16 @@ sio_nodli:
 @transfer:
         jsr     SIOV
         sty     siotmp
+        lda     _scr_nmi_mode
+        cmp     #$40
+        beq     @restore_nmi    ; keep the existing flat colours across calls
         lda     _row_bg         ; back to the first row's colours
         sta     COLOR2
         sta     COLOR4
         lda     _row_fg
         sta     COLOR1
         lda     _scr_nmi_mode
+@restore_nmi:
         sta     NMIEN
         ldy     siotmp
         rts
@@ -152,10 +181,20 @@ vbi:    lda     #0
         lda     _row_bg
         sta     COLOR2
         sta     COLOR4
+        sta     COLPF2
+        sta     COLBK
         lda     _row_fg
         sta     COLOR1
+        sta     COLPF1
         lda     #0
         sta     _scr_swap
+        lda     _scr_reading
+        beq     @done
+        lda     #0
+        sta     _scr_reading
+        lda     #NMI_ON
+        sta     _scr_nmi_mode
+        sta     NMIEN
 @done:  jmp     XITVBV
 
 dli:    pha
@@ -188,3 +227,4 @@ dli:    pha
 dlirow: .res    1
 siotmp: .res    1
 _scr_nmi_mode: .res 1
+_scr_reading:  .res 1

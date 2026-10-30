@@ -29,6 +29,89 @@ class Session(unittest.TestCase):
         cls.tmp.cleanup()
 
 
+class BrowseTransitions(Session):
+    SPEC = {"transition/item%03d_" % i + "x" * 16 + ".atr": 100 for i in range(40)}
+
+    def test_page_stays_flat_until_new_page_is_presented_and_error_recovers(self):
+        from atari_ui import symbols, screen_code_to_char
+        s = self.s
+        browse_host(s, "host:/transition/")
+        s.wait_for("item000_", timeout=20)
+        sym = symbols(s.xex.replace(".xex", ".lbl"))
+        reading = sym["_scr_reading"]
+        mode = sym["_scr_nmi_mode"]
+        b = s.bridge
+
+        def line(row, width=40):
+            address = b.peek16(0x0600 + 3 + row * 3 + 1)
+            return "".join(screen_code_to_char(c) for c in b.peek(address, width))
+
+        def first_row():
+            return line(3, 29)
+
+        b.pause()
+        try:
+            self.assertIn("item000_", first_row())
+            b.key("SPACE")
+            saw_reading = False
+            saw_new = False
+            for _ in range(1600):
+                b.cycles(8000)
+                pending = b.peek(reading, 1)[0]
+                nmi = b.peek(mode, 1)[0]
+                if pending:
+                    saw_reading = True
+                    self.assertEqual(nmi, 0x40, "row colours resumed before the new page")
+                    row = first_row()
+                    # During VBI the display list is updated row by row. It is
+                    # still monochrome until that swap has completed.
+                    self.assertTrue("item000_" in row or "item018_" in row, row)
+                    if "item018_" in row:
+                        saw_new = True
+                    elif saw_new:
+                        self.fail("the old page returned during the swap")
+                    if not saw_new:
+                        self.assertIn("Reading directory...", line(23))
+                        self.assertEqual(b.peek(0x02C6, 1)[0], 0x74)
+                        self.assertEqual(b.peek(0x02C8, 1)[0], 0x74)
+                elif saw_reading:
+                    self.assertEqual(nmi, 0xC0)
+                    self.assertIn("item018_", first_row())
+                    break
+            else:
+                self.fail("did not observe a complete monochrome page transition")
+        finally:
+            b.resume()
+        s.wait_for("item018_", timeout=20)
+
+        # Refresh a now-missing directory: the old page must return with its
+        # error and row colours, not remain permanently monochrome.
+        (s.cfg / "transition").rename(s.cfg / "transition-away")
+        s.key("R")
+        s.wait_for("Could not read the folder", row=23, timeout=30)
+        self.assertIn("item018_", "".join(s.screen()[3:21]))
+        self.assertEqual(b.peek(reading, 1)[0], 0)
+        self.assertEqual(b.peek(mode, 1)[0], 0xC0)
+
+        # The unused OS cursor may point into application RAM after boot.
+        # Reading a keyboard key must not write to that stale address.
+        marker = 0x04F0
+        saved_marker = b.peek(marker, 1)[0]
+        saved_char = b.peek(0x5D, 1)[0]
+        saved_addr = b.peek16(0x5E)
+        try:
+            b.poke(marker, 0xA5)
+            b.poke(0x5D, 0x11)
+            b.poke16(0x5E, marker)
+            s.key("DOWN")
+            self.assertEqual(b.peek(marker, 1)[0], 0xA5)
+            self.assertIn("item018_", "".join(s.screen()[3:21]))
+        finally:
+            b.poke(marker, saved_marker)
+            b.poke(0x5D, saved_char)
+            b.poke16(0x5E, saved_addr)
+
+
 class LongNames(Session):
     SPEC = {"long/" + LONG: 1500, "long/short.atr": 300}
 

@@ -160,8 +160,12 @@ and the current screen's pages are gathered again before drawing. Both builds
 invalidate the cache on entering a directory, changing filter or pressing R; R also
 asks the device to re-read the folder. The maximum composed URI remains 196 bytes.
 
-While a request is on the wire the row-colour interrupt is stopped (it upsets the
-serial timing), so the screen takes the body colour for that moment.
+When an uncached page is requested, the current page and “Reading directory...”
+stay visible in the body colour while the device replies and the next page is drawn
+in the back buffer. The next vertical blank presents the completed page and restores
+the row-colour interrupts together. A failed refresh retains the previous page and
+shows the error. The interrupt also stays off during every SIO transfer because it
+otherwise upsets serial timing.
 
 ## Drawing speed
 

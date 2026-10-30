@@ -197,7 +197,10 @@ python3 -m unittest discover -s tests/atari -v
 * `test_ui_smoke.py`, `test_ui_features.py`: tabs, hosts add/edit/delete, browsing,
   drive assignment/eject/write protect, names longer than a listing page, the name
   animation, the size/date line, directories of 100 entries, a 192 character URI,
-  joystick and console keys, and state surviving a restart.
+  joystick and console keys, and state surviving a restart. A cycle-stepped
+  Browse transition checks that the previous page stays monochrome until the
+  new page is presented, that a failed refresh restores colours and entries,
+  and that keyboard input does not write through a stale OS cursor pointer.
 * `test_compose.py`: uses `soft65c02_unit` and the shared cc65-clib harness to
   compare the Atari 6502 URI composer against its C reference, including buffer
   limits and the 196-character boundary. It skips if the emulator or cc65 is missing.
