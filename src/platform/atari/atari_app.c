@@ -69,6 +69,7 @@ static uint8_t tab;
 uint8_t dbg_draw;               /* jiffies the last full draw took (dev builds) */
 uint8_t dbg_move;               /* jiffies the last cursor-move update took */
 #endif
+static uint8_t wifi_watch;     /* retry link status after a slow restoration */
 static uint8_t status_error;
 static uint8_t cursor_only;     /* the key only moved the cursor within the page */
 static uint8_t list_gen;        /* bumped when the directory page is reloaded */
@@ -108,6 +109,8 @@ void key_setup(uint8_t k);
 #else
 #define SETUP_IMPL(name) name
 #define SETUP_SCOPE static
+static void setup_refresh(void);
+static void draw_setup(void);
 #endif
 
 /* ---- helpers ------------------------------------------------------------ */
@@ -353,6 +356,18 @@ static void idle_tick(void)
 {
   if (!idle_ok)
     return;
+  if (tab == TAB_SETUP && wifi_watch) {
+    static uint8_t last;
+    uint8_t now = *(volatile uint8_t *) 0x14;
+    if ((uint8_t) (now - last) >= 200) {
+      last = now;
+      scr_reading_on();
+      setup_refresh();
+      wifi_watch = wifi.link_state == 1;
+      draw_setup();
+    }
+    return;
+  }
   if (marq_state == 0)
     marq_start();
   if (marq_state != 1)
@@ -843,6 +858,8 @@ static uint8_t pick_network(char *ssid)
   uint8_t more;
   uint8_t sel;
   uint8_t i;
+  uint8_t j;
+  uint8_t unique;
   uint8_t k;
 
   recs = (fn_wifi_scan_record_t *) core_scratch();
@@ -857,16 +874,36 @@ static uint8_t pick_network(char *ssid)
     count = 0;
   if (!count)
     return 0;
+  /* A join selects an SSID, not an access point. Keep the strongest of
+   * repeated named networks; hidden entries still permit manual entry. */
+  unique = 0;
+  for (i = 0; i < count; i++) {
+    for (j = 0; j < unique; j++)
+      if (recs[i].ssid[0] && !strcmp(recs[i].ssid, recs[j].ssid))
+        break;
+    if (j == unique)
+      unique++;
+    else if (recs[i].rssi <= recs[j].rssi)
+      continue;
+    if (i != j)
+      memcpy(&recs[j], &recs[i], sizeof(*recs));
+  }
+  count = unique;
   sel = 0;
   for (;;) {
     draw_frame("RET Choose M Type name ESC Cancel");
     scr_text(ROW_STATUS, 1, "Wi-Fi networks in range", 38);
+    scr_text(ROW_INFO, 1, "Signal: dBm", 38);
+    for (i = 0; i < LIST_ROWS; i++)
+      scr_fill((uint8_t) (LIST_ROW + i), 0, SCR_COLS, ' ');
     for (i = 0; i < count; i++) {
       uint8_t row;
 
       row = (uint8_t) (LIST_ROW + i);
       list_row(row, i == sel);
-      scr_text(row, 1, recs[i].ssid, 28);
+      scr_text(row, 1, recs[i].ssid[0] ? recs[i].ssid : "(hidden)", 23);
+      scr_uint(row, 26, (unsigned) (recs[i].rssi < 0 ? -(int) recs[i].rssi : 0), 3);
+      scr_putc(row, recs[i].rssi <= -100 ? 25 : recs[i].rssi <= -10 ? 26 : 27, '-');
       scr_text(row, 31, recs[i].auth ? "secured" : "open", 7);
     }
     k = input_key();
@@ -878,7 +915,7 @@ static uint8_t pick_network(char *ssid)
       return 0;
     if (k == K_RET) {
       strcpy(ssid, recs[sel].ssid);
-      return 1;
+      return ssid[0] ? 1 : 0;
     }
     if ((k == K_UP || k == '-') && sel)
       sel--;
@@ -912,6 +949,17 @@ static void join_wifi(void)
     memset(pass, 0, FN_WIFI_MAX_PASSWORD + 1);
     return;
   }
+  {
+    uint8_t row;
+    for (row = 9; row < 13; row++) {
+      scr_theme(row, T_DIALOG);
+      scr_fill(row, 0, SCR_COLS, ' ');
+    }
+    scr_text(10, 2, "Attempting to connect", 36);
+    scr_text(11, 2, "Please wait...", 36);
+    scr_present();
+    scr_reading_on();
+  }
   result = fn_wifi_try_join(ssid, pass);
   memset(pass, 0, FN_WIFI_MAX_PASSWORD + 1);
   if (result != FN_OK) {
@@ -919,9 +967,6 @@ static void join_wifi(void)
         "Wi-Fi connection was refused", 1);
     return;
   }
-  scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
-  scr_text(ROW_STATUS, 1, "Connecting to Wi-Fi...", 38);
-  scr_present();
   for (tries = 0; tries < 60; ++tries) {
     /* The firmware starts the radio after replying. Allow teardown to finish
      * before the first poll and avoid saturating the SIO bus. */
@@ -1258,6 +1303,7 @@ SETUP_SCOPE void SETUP_IMPL(key_setup)(uint8_t k)
   } else if (k == K_RET) {
     join_wifi();
     SETUP_IMPL(setup_refresh)();
+    wifi_watch = wifi.link_state == 1;
   }
 }
 #pragma code-name(pop)

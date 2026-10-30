@@ -230,7 +230,9 @@ normal tab and row-colour interrupts. The production selector is tested with
 64 KB, 128 KB and 1088 KB memory models. Long-name cases verify traffic-level
 reuse, packed bank-cache eviction, full 220-byte listing names, and drive assignment
 across a switch through Setup. The simulated Wi-Fi test joins a network, rejects a
-second one, checks rollback and persistence, then retries an open network. Both
+second one, checks a delayed restoration and automatic refresh, then retries an
+open network. It also checks hidden and duplicate SSIDs, signal rendering, and
+the flat waiting screen. Both
 Atari builds must exist for these cases.
 
 Not covered: the display-interrupt/SIO failure that only showed on real hardware

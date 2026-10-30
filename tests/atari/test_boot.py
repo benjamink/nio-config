@@ -240,8 +240,11 @@ class BootTests(unittest.TestCase):
         import yaml
         atr = make_selecting_atr(self.tmp.name)
         evidence = Path(self.tmp.name) / ("wifi-trial-evidence-%d" % ram_kb)
-        previous = os.environ.get("FN_POSIX_WIFI_SIM_FAIL_SSID")
-        os.environ["FN_POSIX_WIFI_SIM_FAIL_SSID"] = "FujiNet-Test"
+        variables = {"FN_POSIX_WIFI_SIM_FAIL_SSID": "FujiNet-Test",
+                     "FN_POSIX_WIFI_SIM_RESTORE_DELAY_MS": "6000",
+                     "FN_POSIX_WIFI_SIM_SCAN_EDGE_CASES": "1"}
+        previous = {key: os.environ.get(key) for key in variables}
+        os.environ.update(variables)
         try:
             def scenario(v):
                 v.wait_for("Hosts", row=1, timeout=240)
@@ -249,8 +252,22 @@ class BootTests(unittest.TestCase):
                     v.key("TAB"); v.wait_for(hint, row=22, timeout=30)
                 # Join the first simulated network successfully.
                 v.key("RETURN"); v.wait_for("Wi-Fi networks in range", row=23, timeout=30)
+                rows = v.screen()
+                self.assertIn("-30", rows[3])
+                self.assertEqual(sum("FujiNet-Sim" in row for row in rows[3:21]), 1)
+                self.assertIn("(hidden)", rows[6])
+                self.assertFalse(any(row.strip() for row in rows[7:21]), rows[7:21])
+                self.assertIn("Signal: dBm", rows[21])
+                for _ in range(3): v.key("DOWN")
+                v.key("RETURN"); v.wait_for("Wi-Fi network name (SSID)", row=21, timeout=10)
+                v.key("ESC"); v.wait_for("RET Join Wi-Fi", row=22, timeout=10)
+                v.key("RETURN"); v.wait_for("Wi-Fi networks in range", row=23, timeout=30)
                 v.key("RETURN"); v.wait_for("Password (blank for open)", row=21, timeout=30)
                 v.type("correctpass"); v.key("RETURN")
+                v.wait_for("Attempting to connect", timeout=10)
+                from atari_ui import symbols
+                sym = symbols(Path(v.xex).with_suffix(".lbl"))
+                self.assertEqual(v.bridge.peek(sym["_scr_nmi_mode"], 1)[0], 0x40)
                 v.wait_for("Wi-Fi connected", row=23, timeout=60)
                 v.wait_for("FujiNet-Sim", timeout=30)
                 self.assertIn("Connected", "".join(v.screen()[3:21]))
@@ -261,7 +278,10 @@ class BootTests(unittest.TestCase):
                 v.type("wrongpass"); v.key("RETURN")
                 v.wait_for("Wi-Fi failed; restoring previous", row=23, timeout=60)
                 v.wait_for("FujiNet-Sim", timeout=30)
-                self.assertIn("Connected", "".join(v.screen()[3:21]))
+                self.assertIn("Connecting", "".join(v.screen()[3:21]))
+                v.wait_for("Connected", row=4, timeout=25)
+                self.assertIn("192.0.2.2", "".join(v.screen()[3:21]))
+                self.assertIn("Wi-Fi failed; restoring previous", v.screen()[23])
                 saved = yaml.safe_load((evidence / "netsio/fujinet-data/fujinet.yaml").read_text())
                 self.assertEqual(saved["wifi"]["ssid"], "FujiNet-Sim")
                 self.assertEqual(saved["wifi"]["passphrase"], "correctpass")
@@ -278,10 +298,11 @@ class BootTests(unittest.TestCase):
             config = yaml.safe_load((evidence / "netsio/fujinet-data/fujinet.yaml").read_text())
             self.assertEqual(config["wifi"]["ssid"], "FujiNet-Guest")
         finally:
-            if previous is None:
-                os.environ.pop("FN_POSIX_WIFI_SIM_FAIL_SSID", None)
-            else:
-                os.environ["FN_POSIX_WIFI_SIM_FAIL_SSID"] = previous
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_wifi_join_failure_restores_previous_network_banked(self):
         self.check_wifi_join_failure_restores_previous_network(128)

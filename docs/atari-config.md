@@ -36,6 +36,12 @@ any number of characters and `?` matches one. Without wildcards, text matches
 anywhere in the name. A blank filter clears it. Folders remain visible and the
 filter persists when entering or leaving a folder; selecting another host clears it.
 The FujiNet firmware must support the filter for filtered results to be returned.
+The Wi-Fi picker shows up to six scanned access points, with signal in dBm.
+Repeated named networks are combined using the strongest signal among those
+results. An empty SSID is shown as `(hidden)`; selecting it asks for the name.
+The connection wait remains on a flat screen, and the Setup link state refreshes
+automatically if restoring the previous network is still in progress.
+
 Wi-Fi joining requires firmware with the trial-join command; older firmware is
 reported as needing an update and its saved network is left unchanged.
 
