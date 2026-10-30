@@ -26,7 +26,7 @@ to D1-D8, press OPTION, and the Atari restarts with those drives mounted.
 | Hosts | Up to 8 filesystems (`sd0:/`, `host:/`, `tnfs://server/path`, `http://...`). RET browses, A adds, E edits, D deletes. |
 | Browse | The chosen host's directory, one page of 18 entries at a time. Up/down move the cursor and carry on into the next or previous page at the edges; left/right (or `b`/SPACE) change page, and left on the first page goes up a level (so does BS). RET enters a directory or assigns the image under the cursor: 1-8 picks the drive, R toggles write protect. `R` makes the FujiNet read the folder again. Opened from the Drives tab, the chosen image goes straight to that drive. |
 | Drives | D1-D8 with their images. RET picks an image for the selected drive, X ejects, R toggles write protect. |
-| Setup | Wi-Fi state, IP/gateway/DNS, MAC and firmware. RET scans for networks (or types an SSID) and joins. |
+| Setup | Wi-Fi state, IP/gateway/DNS, MAC and firmware. RET scans for networks (or types an SSID) and attempts to join. The FujiNet saves new credentials only after connecting; if the attempt fails it retains the previous configuration and tries to reconnect it. The screen reports the result so the details can be retried. |
 
 Keys: Ctrl+up/down (or `-` / `=`) move, SPACE and `b` page, TAB (or SELECT)
 changes tab, **OPTION or START boots**. The joystick works too: stick moves,
@@ -36,6 +36,8 @@ any number of characters and `?` matches one. Without wildcards, text matches
 anywhere in the name. A blank filter clears it. Folders remain visible and the
 filter persists when entering or leaving a folder; selecting another host clears it.
 The FujiNet firmware must support the filter for filtered results to be returned.
+Wi-Fi joining requires firmware with the trial-join command; older firmware is
+reported as needing an update and its saved network is left unchanged.
 
 Each row has its own colours. A display list interrupt at the end of every row
 (`atari_dli.s`) loads the next row's background and text colour from two 24

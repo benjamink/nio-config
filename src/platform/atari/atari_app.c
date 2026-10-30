@@ -50,10 +50,19 @@ static char marq[CORE_URI_MAX + 1];
 #endif
 static char filter[41];       /* no initial value: low memory */
 static uint8_t marq_cached, marq_cached_gen, marq_cached_row;
-#pragma bss-name (pop)
+#ifdef CONFIG_NIO_BANKED
+/* These buffers are initialized before use and fit in the banked layout's
+ * reclaimed low-memory space. */
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
 static fn_wifi_status_t wifi;
+#endif
+#pragma bss-name (pop)
+#ifndef CONFIG_NIO_BANKED
+static char line[SCR_COLS + 1];
+static char status[SCR_COLS];
+static fn_wifi_status_t wifi;
+#endif
 
 static uint8_t tab;
 #ifdef DRAW_TIMING
@@ -884,8 +893,8 @@ static void join_wifi(void)
 {
   char *ssid;
   char *pass;
-  fn_wifi_config_update_t up;
   uint8_t picked;
+  uint8_t result, join_state, tries, tick;
 
   /* The page buffer holds the text being edited (and the scan list). */
   ssid = (char *) core_scratch() + 520;     /* past the scan records and their wire buffer */
@@ -899,19 +908,38 @@ static void join_wifi(void)
                             ssid, FN_WIFI_MAX_SSID + 1, 0))
     return;
   if (!edit_line("Password (blank for open)", "RET Join ESC Cancel", pass,
-                 FN_WIFI_MAX_PASSWORD + 1, 1))
-    return;
-  up.fields = (uint8_t) (FN_WIFI_SET_ENABLED | FN_WIFI_SET_SSID |
-                         FN_WIFI_SET_PASSWORD | FN_WIFI_SET_PERSIST);
-  up.enabled = 1;
-  up.ssid = ssid;
-  up.bssid = 0;
-  up.password = pass;
-  if (fn_wifi_set_config(&up) != FN_OK) {
-    say("Wi-Fi settings were refused", 1);
+                 FN_WIFI_MAX_PASSWORD + 1, 1)) {
+    memset(pass, 0, FN_WIFI_MAX_PASSWORD + 1);
     return;
   }
-  say("Wi-Fi saved", 0);
+  result = fn_wifi_try_join(ssid, pass);
+  memset(pass, 0, FN_WIFI_MAX_PASSWORD + 1);
+  if (result != FN_OK) {
+    say(result == FN_ERR_UNSUPPORTED ? "Update FujiNet for Wi-Fi joining" :
+        "Wi-Fi connection was refused", 1);
+    return;
+  }
+  scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
+  scr_text(ROW_STATUS, 1, "Connecting to Wi-Fi...", 38);
+  scr_present();
+  for (tries = 0; tries < 60; ++tries) {
+    /* The firmware starts the radio after replying. Allow teardown to finish
+     * before the first poll and avoid saturating the SIO bus. */
+    tick = *(volatile uint8_t *) 0x14;
+    while ((uint8_t) (*(volatile uint8_t *) 0x14 - tick) < 50)
+      ;
+    result = fn_wifi_get_join_status(&join_state);
+    if (result != FN_OK) continue;
+    if (join_state == FN_WIFI_JOIN_CONNECTED) {
+      say("Wi-Fi connected", 0);
+      return;
+    }
+    if (join_state == FN_WIFI_JOIN_FAILED) {
+      say("Wi-Fi failed; restoring previous", 1);
+      return;
+    }
+  }
+  say("Wi-Fi result unavailable", 1);
 }
 #pragma code-name(pop)
 
@@ -1387,6 +1415,8 @@ int main(void)
   uint8_t failed;
 
   path[0] = 0;
+  status[0] = 0;
+  status[sizeof(status) - 1] = 0;
   marq_cached = 0;
   SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
   scr_init();

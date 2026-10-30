@@ -236,6 +236,59 @@ class BootTests(unittest.TestCase):
             self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
         boot(atr, scenario, data=data, ram_kb=128, xex=BANKED_XEX, out=evidence)
 
+    def check_wifi_join_failure_restores_previous_network(self, ram_kb):
+        import yaml
+        atr = make_selecting_atr(self.tmp.name)
+        evidence = Path(self.tmp.name) / ("wifi-trial-evidence-%d" % ram_kb)
+        previous = os.environ.get("FN_POSIX_WIFI_SIM_FAIL_SSID")
+        os.environ["FN_POSIX_WIFI_SIM_FAIL_SSID"] = "FujiNet-Test"
+        try:
+            def scenario(v):
+                v.wait_for("Hosts", row=1, timeout=240)
+                for hint in ("RET Open", "RET Pick", "RET Join Wi-Fi"):
+                    v.key("TAB"); v.wait_for(hint, row=22, timeout=30)
+                # Join the first simulated network successfully.
+                v.key("RETURN"); v.wait_for("Wi-Fi networks in range", row=23, timeout=30)
+                v.key("RETURN"); v.wait_for("Password (blank for open)", row=21, timeout=30)
+                v.type("correctpass"); v.key("RETURN")
+                v.wait_for("Wi-Fi connected", row=23, timeout=60)
+                v.wait_for("FujiNet-Sim", timeout=30)
+                self.assertIn("Connected", "".join(v.screen()[3:21]))
+                # A failed switch must leave the known-good config and reconnect it.
+                v.key("RETURN"); v.wait_for("Wi-Fi networks in range", row=23, timeout=30)
+                v.key("DOWN"); v.key("RETURN")
+                v.wait_for("Password (blank for open)", row=21, timeout=30)
+                v.type("wrongpass"); v.key("RETURN")
+                v.wait_for("Wi-Fi failed; restoring previous", row=23, timeout=60)
+                v.wait_for("FujiNet-Sim", timeout=30)
+                self.assertIn("Connected", "".join(v.screen()[3:21]))
+                saved = yaml.safe_load((evidence / "netsio/fujinet-data/fujinet.yaml").read_text())
+                self.assertEqual(saved["wifi"]["ssid"], "FujiNet-Sim")
+                self.assertEqual(saved["wifi"]["passphrase"], "correctpass")
+                # The user can immediately choose another network and retry.
+                v.key("RETURN"); v.wait_for("Wi-Fi networks in range", row=23, timeout=30)
+                v.key("DOWN"); v.key("DOWN"); v.key("RETURN")
+                v.wait_for("Password (blank for open)", row=21, timeout=30)
+                v.key("RETURN")
+                v.wait_for("Wi-Fi connected", row=23, timeout=60)
+                v.wait_for("FujiNet-Guest", timeout=30)
+                self.assertIn("Connected", "".join(v.screen()[3:21]))
+            boot(atr, scenario, ram_kb=ram_kb,
+                 xex=BANKED_XEX if ram_kb != 64 else XEX, out=evidence)
+            config = yaml.safe_load((evidence / "netsio/fujinet-data/fujinet.yaml").read_text())
+            self.assertEqual(config["wifi"]["ssid"], "FujiNet-Guest")
+        finally:
+            if previous is None:
+                os.environ.pop("FN_POSIX_WIFI_SIM_FAIL_SSID", None)
+            else:
+                os.environ["FN_POSIX_WIFI_SIM_FAIL_SSID"] = previous
+
+    def test_wifi_join_failure_restores_previous_network_banked(self):
+        self.check_wifi_join_failure_restores_previous_network(128)
+
+    def test_wifi_join_failure_restores_previous_network_64k(self):
+        self.check_wifi_join_failure_restores_previous_network(64)
+
     def option_boot(self, program, expect, atr=None, ram_kb=None, xex=None):
         """Assign `program` (a boot ATR or an XEX) to D1 from the Browse tab,
         press OPTION, and wait for `expect` on the OS screen."""
