@@ -232,7 +232,8 @@ reuse, packed bank-cache eviction, full 220-byte listing names, and drive assign
 across a switch through Setup. The simulated Wi-Fi test joins a network, rejects a
 second one, checks a delayed restoration and automatic refresh, then retries an
 open network. It also checks hidden and duplicate SSIDs, signal rendering, and
-the flat waiting screen. Both
+the flat waiting screen. Setup cache tests inspect NetSIO requests to verify
+that tab changes and browsing do not refetch the information, while R does. Both
 Atari builds must exist for these cases.
 
 Not covered: the display-interrupt/SIO failure that only showed on real hardware

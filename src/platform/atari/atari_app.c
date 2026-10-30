@@ -87,10 +87,9 @@ static uint16_t top;
 static uint8_t target_unit = NO_UNIT;
 
 /* Setup */
-/* Setup data shares the directory page: the two views are never active at
- * once. Scanning also borrows it, so setup is refreshed after a join dialog. */
+/* Setup information survives directory reads and temporary scan buffers. */
 typedef struct { fn_wifi_config_t cfg; fn_wifi_adapter_info_t info; fn_fuji_info_t fuji; } setup_data_t;
-#define setup_data (*(setup_data_t *) entries)
+static setup_data_t setup_data;
 #define wifi_cfg setup_data.cfg
 #define wifi_info setup_data.info
 #define fuji_info setup_data.fuji
@@ -121,24 +120,6 @@ static void say(const char *msg, uint8_t err)
   status_error = err;
 }
 
-static void say_num(const char *prefix, unsigned n)
-{
-  char tmp[6];
-  uint8_t i;
-  uint8_t len;
-
-  len = (uint8_t) strlen(prefix);
-  memcpy(line, prefix, len);
-  i = 0;
-  do {
-    tmp[i++] = (char) ('0' + n % 10);
-    n /= 10;
-  } while (n);
-  while (i)
-    line[len++] = tmp[--i];
-  line[len] = 0;
-  say(line, 1);
-}
 
 const char *__fastcall__ base_name(const char *uri);
 
@@ -552,7 +533,15 @@ static void say_list_error(void)
   case FN_ERR_TIMEOUT:   say("The server took too long to answer", 1); break;
   case FN_ERR_NOT_FOUND: say("Folder not found", 1); break;
   case FN_ERR_IO:        say("Could not read the folder", 1); break;
-  default:               say_num("Browse failed, error ", core_list_error()); break;
+  default: {
+    char *p;
+    strcpy(line, "Browse failed, error ");
+    p = line + sizeof("Browse failed, error ") - 1;
+    scr_dec16(p, core_list_error(), 0);
+    *p = 0;
+    say(line, 1);
+    break;
+  }
   }
 }
 #pragma code-name(pop)
@@ -777,11 +766,8 @@ static void draw_drives(void)
 #pragma code-name(push, "TAB_SETUP")
 SETUP_SCOPE void SETUP_IMPL(setup_refresh)(void)
 {
-  list_stale = 1;
   memset(&wifi, 0, sizeof(wifi));
-  memset(&wifi_cfg, 0, sizeof(wifi_cfg));
-  memset(&wifi_info, 0, sizeof(wifi_info));
-  memset(&fuji_info, 0, sizeof(fuji_info));
+  memset(&setup_data, 0, sizeof(setup_data));
   (void) fn_wifi_get_status(&wifi);
   (void) fn_wifi_get_config(&wifi_cfg);
   (void) fn_wifi_get_adapter_info(&wifi_info);
@@ -1363,8 +1349,6 @@ static void set_tab(uint8_t t)
 {
   tab = t;
   top = 0;
-  if (t == TAB_SETUP)
-    setup_refresh();
 }
 
 static void run(void)

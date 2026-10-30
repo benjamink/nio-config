@@ -40,7 +40,9 @@ The Wi-Fi picker shows up to six scanned access points, with signal in dBm.
 Repeated named networks are combined using the strongest signal among those
 results. An empty SSID is shown as `(hidden)`; selecting it asks for the name.
 The connection wait remains on a flat screen, and the Setup link state refreshes
-automatically if restoring the previous network is still in progress.
+automatically if restoring the previous network is still in progress. Setup
+information is cached across tab changes and browsing; press R to refresh it
+after changes made outside the app. Joining Wi-Fi refreshes it automatically.
 
 Wi-Fi joining requires firmware with the trial-join command; older firmware is
 reported as needing an update and its saved network is left unchanged.

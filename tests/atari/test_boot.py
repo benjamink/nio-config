@@ -236,6 +236,46 @@ class BootTests(unittest.TestCase):
             self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
         boot(atr, scenario, data=data, ram_kb=128, xex=BANKED_XEX, out=evidence)
 
+    def check_setup_cache(self, ram_kb):
+        atr = make_selecting_atr(self.tmp.name)
+        evidence = Path(self.tmp.name) / ("setup-cache-%d" % ram_kb)
+        source = Path(self.tmp.name) / "cache-entry.atr"
+        source.write_bytes(b"fixture")
+        def scenario(v):
+            v.wait_for("Hosts", row=1, timeout=240)
+            log_path = evidence / "netsio/hub.log"
+            def calls():
+                log = log_path.read_text(errors="replace")
+                return sum("ATD -> 02:DATA_BLOCK" in line for line in log.splitlines())
+            initial = calls()
+            self.assertGreater(initial, 0)
+            for hint in ("RET Open", "RET Pick", "RET Join Wi-Fi"):
+                v.key("TAB"); v.wait_for(hint, row=22, timeout=30)
+            self.assertEqual(calls(), initial, "tabbing to Setup made a device request")
+            setup = v.screen()[3:12]
+            v.key("R"); v.wait_for("Refreshed", row=23, timeout=30)
+            after_refresh = calls()
+            self.assertGreater(after_refresh, initial, "R did not refresh Setup")
+            self.assertEqual(v.screen()[3:12], setup)
+            v.key("TAB"); v.wait_for("RET Browse A Add", row=22, timeout=30)
+            v.key("A"); v.type("host:/"); v.key("RETURN")
+            v.wait_for("host:/", row=2, timeout=30)
+            v.key("RETURN"); v.wait_for("cache-entry.atr", timeout=30)
+            v.key("TAB"); v.wait_for("RET Pick", row=22, timeout=30)
+            after_browse = calls()
+            v.key("TAB"); v.wait_for("RET Join Wi-Fi", row=22, timeout=30)
+            self.assertEqual(calls(), after_browse, "Setup re-fetched after browsing")
+            self.assertEqual(v.screen()[3:12], setup, "Browse overwrote cached Setup")
+        boot(atr, scenario, ram_kb=ram_kb,
+             xex=BANKED_XEX if ram_kb != 64 else XEX, out=evidence,
+             data=[("cache-entry.atr", source)])
+
+    def test_setup_cache_64k(self):
+        self.check_setup_cache(64)
+
+    def test_setup_cache_banked(self):
+        self.check_setup_cache(128)
+
     def check_wifi_join_failure_restores_previous_network(self, ram_kb):
         import yaml
         atr = make_selecting_atr(self.tmp.name)
