@@ -5,7 +5,9 @@
 
 #define FNCTL_SIGNATURE "FUJI"
 #define FNCTL_VERSION   1
+#ifndef FNCTL_MAX_DATA
 #define FNCTL_MAX_DATA  512
+#endif
 #define FNCTL_MAX_URI   255
 #define FNCTL_MAX_PATH  127
 #define FNCTL_MAX_UNITS 8

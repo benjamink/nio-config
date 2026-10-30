@@ -25,6 +25,12 @@ unsigned fake_slot_range_calls(void);
 void fake_dir_put(const char *uri, const fake_dir_entry_t *entries,
                   uint8_t count);
 void fake_dir_fail(const char *uri);
+/* fnsvc_list_pages() answers Unsupported (old firmware); the counters cover
+ * the paged and the whole-folder listing commands and are not reset. */
+void fake_dir_pages_unsupported(int unsupported);
+unsigned fake_dir_pages_calls(void);
+unsigned fake_dir_pages_refreshes(void);
+unsigned fake_dir_list_calls(void);
 
 /* Wi-Fi service.  Reset leaves a connected ESP32-style adapter on "home"
  * with a stored passphrase and no scan results; FujiDevice reports firmware

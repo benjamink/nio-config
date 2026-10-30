@@ -41,6 +41,10 @@ static unsigned slot_get_calls;
 static unsigned slot_range_calls;
 static uint8_t range_buf[1024];
 static uint8_t last_error;
+static uint8_t pages_unsupported;
+static unsigned pages_calls;
+static unsigned pages_refreshes;
+static unsigned list_calls;
 static uint8_t last_status;
 
 static void fake_wifi_reset(void);
@@ -54,6 +58,7 @@ void fake_nio_reset(void)
   slot_range_calls = 0;
   last_error = 0;
   last_status = 0;
+  fake_dir_pages_unsupported(0);
   fake_wifi_reset();
 }
 
@@ -264,6 +269,8 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
   fake_dir_t *d = find_dir(uri, 0);
   uint8_t e;
 
+  list_calls++;
+
   if (!d || d->fail) {
     last_error = FNSVC_ERR_STATUS;
     last_status = 5;
@@ -272,6 +279,66 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
   for (e = 0; e < d->count; e++)
     cb(d->entries[e].is_dir, d->entries[e].name, d->entries[e].size,
        d->entries[e].mtime, ctx);
+  last_error = FNSVC_ERR_NONE;
+  last_status = 0;
+  return 1;
+}
+
+void fake_dir_pages_unsupported(int unsupported)
+{
+  pages_unsupported = (uint8_t) unsupported;
+}
+
+unsigned fake_dir_pages_calls(void)
+{
+  return pages_calls;
+}
+
+unsigned fake_dir_pages_refreshes(void)
+{
+  return pages_refreshes;
+}
+
+unsigned fake_dir_list_calls(void)
+{
+  return list_calls;
+}
+
+/* One reply carries up to FAKE_PAGES_PER_REPLY whole pages, like a device
+ * answering with names far shorter than the budget. */
+#define FAKE_PAGES_PER_REPLY 10
+
+int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
+                     fnsvc_list_cb cb, void *ctx, uint32_t *total,
+                     uint16_t *delivered)
+{
+  fake_dir_t *d = find_dir(uri, 0);
+  uint32_t e;
+  uint32_t end;
+
+  pages_calls++;
+  if (refresh)
+    pages_refreshes++;
+  *delivered = 0;
+  if (pages_unsupported) {
+    last_error = FNSVC_ERR_UNSUPPORTED;
+    last_status = 8;
+    return 0;
+  }
+  if (!d || d->fail || (first_entry % FNSVC_PAGE_SIZE) != 0) {
+    last_error = FNSVC_ERR_STATUS;
+    last_status = 5;
+    return 0;
+  }
+  *total = d->count;
+  end = first_entry + FAKE_PAGES_PER_REPLY * FNSVC_PAGE_SIZE;
+  if (end > d->count)
+    end = d->count;
+  for (e = first_entry; e < end; e++) {
+    cb(d->entries[e].is_dir, d->entries[e].name, d->entries[e].size,
+       d->entries[e].mtime, ctx);
+    (*delivered)++;
+  }
   last_error = FNSVC_ERR_NONE;
   last_status = 0;
   return 1;

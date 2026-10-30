@@ -111,6 +111,18 @@ page.
 - **Settings** menu: date and size formats, and **Configure** (the
   Configuration window below).
 
+## Large folders
+
+Browse asks the FujiNet for a folder a page at a time (the `ListPages`
+command, four entries per page). The device sorts the folder once, directories
+first, and config-nio keeps a window of about 200 entries, loading another
+window when you scroll outside it, so a folder can hold far more entries than
+the window (the list shows up to 65535). **Refresh** makes the FujiNet read the
+folder again; other navigation reuses its cached listing. With firmware that
+does not support `ListPages`, config-nio reads the whole folder with the older
+listing command and shows its first 200 entries ("Showing 200 of N entries").
+`dump entries` in a script lists the current window.
+
 ## Configuration
 
 **Settings ▸ Configure** opens the **Configuration** window over the main

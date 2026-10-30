@@ -19,7 +19,8 @@ enum {
   FNSVC_ERR_BAD_VERSION,
   FNSVC_ERR_SHORT_RESPONSE,
   FNSVC_ERR_ENTRIES_BOUNDS,
-  FNSVC_ERR_ENTRY_BOUNDS
+  FNSVC_ERR_ENTRY_BOUNDS,
+  FNSVC_ERR_UNSUPPORTED  /* firmware has no ListPages */
 };
 
 typedef void (*fnsvc_list_cb)(uint8_t is_dir,
@@ -29,6 +30,19 @@ typedef void (*fnsvc_list_cb)(uint8_t is_dir,
                               void *ctx);
 
 int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx);
+/* Paged listing (ListPages): the device sorts the folder once, directories
+ * first, and hands out pages of FNSVC_PAGE_SIZE entries.  The page size must
+ * stay fixed while one folder is browsed, because page numbers depend on it.
+ * first_entry must be a multiple of FNSVC_PAGE_SIZE.  One call delivers whole
+ * pages (as many as fit FNSVC_PAGE_BUDGET bytes) through cb, sets *total to the
+ * folder's entry count and *delivered to the entries passed to cb.  refresh
+ * makes the device re-read the folder.  Returns 0 on failure; fnsvc_last_error()
+ * is FNSVC_ERR_UNSUPPORTED on firmware without ListPages, so callers can fall
+ * back to fnsvc_list_directory(). */
+#define FNSVC_PAGE_SIZE 4
+int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
+                     fnsvc_list_cb cb, void *ctx, uint32_t *total,
+                     uint16_t *delivered);
 int fnsvc_resolve_path(const char *base_uri, const char *arg,
                        char *resolved_uri, uint16_t resolved_cap,
                        char *display_path, uint16_t display_cap,
