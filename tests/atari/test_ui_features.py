@@ -43,6 +43,12 @@ class AttractMode(Session):
 
         normal_lines = scanlines()
         normal = tuple(normal_lines[y] for y in (27, 35, 67))
+        # Each band begins on the first scanline of its text row, including
+        # the inverse tab/selection bars and the body immediately below them.
+        for edge in (32, 40, 48, 56):
+            self.assertEqual(normal_lines[edge - 2], normal_lines[edge - 1], edge)
+            self.assertNotEqual(normal_lines[edge - 1], normal_lines[edge], edge)
+            self.assertEqual(normal_lines[edge], normal_lines[edge + 1], edge)
         b.pause()
         try:
             normal_samples = []

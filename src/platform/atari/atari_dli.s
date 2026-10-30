@@ -220,7 +220,6 @@ dli:    pha
         lda     next_fg
         ldx     next_bg
         sta     WSYNC
-        sta     WSYNC           ; keep the existing band boundary one line later
         sta     COLPF1
         stx     COLPF2
         stx     COLBK
