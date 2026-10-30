@@ -90,7 +90,9 @@ switch to Setup and back, and the XEX load-time initializers load each bank
 in turn. ANTIC stays in main RAM. The standard layout maps the same named tab
 segments into main RAM; it does not switch banks. See the map files under
 `build/atari/bin/` and `build/atari-banked/bin/` for exact sizes and remaining
-space. Both layouts retain the same directory caches.
+space. The banked layout uses the upper 8 KB of the Setup bank as a packed
+page cache. Small resident assembly gates copy records between that bank and
+main RAM; ANTIC and interrupt handlers remain in main RAM.
 
 Headless boot tests exercise the actual selector with 64 KB and 128 KB Altirra
 memory models, including tab changes and warm RESET. They require both builds:
@@ -110,8 +112,8 @@ does not fit, so the Atari has a compact core of its own (`atari_core.c`) and
 does not use `fnsvc`, `fnctl` or conio.
 
 * `$0650-$0BFF` (page 6 after the display list, and the pages PicoBoot's loader used)
-  holds the long buffers that need no initial value: the page cache, the current path,
-  the URI buffer and the name animation buffer.
+  holds buffers that need no initial value. In the standard build this includes the
+  page cache; in the banked build it holds one cache-record staging buffer instead.
 * The standard layout in `makefiles/cc65-atari-nio.cfg` loads at `$0C00` up to
   `$BC00`. The banked layout splits resident code around the bank window.
 * The first load chunk (`atari_basicoff.s`) switches the BASIC ROM off with
@@ -145,13 +147,18 @@ Atari never asks for all of it. The FujiNet lists and sorts the folder once
 (directories first, then by name), remembers it, and answers `ListPages`
 requests (see `fujinet-nio`'s `docs/file_device_protocol.md`): whole pages of
 entries with the total count, as many as fit the 512 byte transport. A screen
-page is two protocol pages of nine entries, so a reply always carries whole pages
-whatever the names are like. Replies are kept as received in an 800 byte cache
-(`atari_core.c`), so recently visited pages can be reused; only a page not cached
-causes a request, and "Reading directory..." is shown while it is made. Entering
-a directory or pressing R forgets the cache; R also tells the FujiNet to re-read
-the folder. Names longer than 31 characters are cut in the page; the full name
-is fetched when the entry is opened or animated.
+page in the standard build is two protocol pages of nine entries. It keeps 31
+bytes of each name in the 800-byte page cache and fetches a full name when needed.
+The selected full name is reused between its animation and opening the entry.
+
+The banked build requests two names per protocol page, each up to the firmware's
+220-byte listing limit. Nine protocol pages fill one 18-row screen. Their packed,
+variable-length records are retained in an 8 KB cache in the Setup bank. The visible
+rows keep short prefixes; scrolling and opening a longer name retrieve its full value
+from that cache without another FujiNet request. When the cache fills it is cleared,
+and the current screen's pages are gathered again before drawing. Both builds
+invalidate the cache on entering a directory, changing filter or pressing R; R also
+asks the device to re-read the folder. The maximum composed URI remains 196 bytes.
 
 While a request is on the wire the row-colour interrupt is stopped (it upsets the
 serial timing), so the screen takes the body colour for that moment.

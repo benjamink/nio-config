@@ -298,11 +298,10 @@ uint8_t core_load(void)
 
 /* The device lists, sorts and remembers a directory and hands out whole pages
  * of it (fn_file_list_pages).  A screen page (CORE_PAGE_ROWS entries) is made
- * of two protocol pages of CORE_PROTO_PAGE entries, so that one reply, which is
- * limited to what fits the 512 byte transport, can carry whole pages whatever
- * the names look like.  Replies are kept as received in a small cache, so
- * going back to a page is instant; only reaching a page not seen yet touches
- * the network. */
+ * of protocol pages of CORE_PROTO_PAGE entries. The standard build uses nine
+ * 31-byte prefixes; the banked build uses two full names, so a whole page fits
+ * the 512-byte transport even when both names reach 220 bytes. Replies are
+ * cached as packed records and decoded into the visible screen. */
 #define LISTING_FLAGS (FN_LIST_SORT | FN_LIST_DIRS_FIRST)
 /* The whole encoded reply (the 12 byte page header, the pages and the FujiBus
  * framing) must fit the 512 byte transport, or the device answers with an error. */
@@ -315,9 +314,39 @@ uint8_t entry_count;
 uint8_t list_stale;
 
 #pragma bss-name (push, "LOWMEM")
-static uint8_t pc[CORE_PCACHE];       /* in low memory: see makefiles/cc65-atari-nio.cfg */
+#ifdef CONFIG_NIO_BANKED
+static uint8_t pc[512];             /* one banked cache record at a time */
+#else
+static uint8_t pc[CORE_PCACHE];
+#endif
 #pragma bss-name (pop)
 uint16_t pc_used;             /* exposed for the headless cache regression test */
+#ifdef CONFIG_NIO_BANKED
+static uint8_t pc_epoch;
+extern uint8_t *bc_addr, *bc_ptr;
+extern uint16_t bc_len;
+#pragma zpsym("bc_addr")
+#pragma zpsym("bc_ptr")
+#pragma zpsym("bc_len")
+void bank_cache_read(void);
+void bank_cache_write(void);
+#pragma code-name(push, "TAB_BROWSE")
+static void pc_read(uint16_t off, uint8_t *p, uint16_t len)
+{
+  bc_addr = (uint8_t *) (0x6000U + off);
+  bc_ptr = p;
+  bc_len = len;
+  bank_cache_read();
+}
+static void pc_write(uint16_t off, const uint8_t *p, uint16_t len)
+{
+  bc_addr = (uint8_t *) (0x6000U + off);
+  bc_ptr = (uint8_t *) p;
+  bc_len = len;
+  bank_cache_write();
+}
+#pragma code-name(pop)
+#endif
 static fn_file_io_t file_io = { iobuf, sizeof(iobuf) };
 static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX, 0 };
 
@@ -330,10 +359,43 @@ uint8_t core_list_error(void)
 void core_dir_reset(void)
 {
   pc_used = 0;
+#ifdef CONFIG_NIO_BANKED
+  ++pc_epoch;
+#endif
   dir_total = 0xFFFFFFFFUL;
   entry_count = 0;
 }
 
+#ifdef CONFIG_NIO_BANKED
+/* Cache records are packed in the Setup bank; copy just one to resident RAM. */
+static uint8_t *pc_find(uint16_t page)
+{
+  uint16_t at, len;
+  for (at = 0; at < pc_used; at = (uint16_t) (at + PAGE_HEADER + len)) {
+    pc_read(at, pc, PAGE_HEADER);
+    len = (uint16_t) (pc[3] | (pc[4] << 8));
+    if ((uint16_t) (pc[0] | (pc[1] << 8)) == page) {
+      pc_read(at, pc, (uint16_t) (PAGE_HEADER + len));
+      return pc;
+    }
+  }
+  return 0;
+}
+static void pc_put(uint16_t page, uint8_t count, uint16_t len, const uint8_t *data)
+{
+  uint16_t need = (uint16_t) (PAGE_HEADER + len);
+  if (need > sizeof(pc) || pc_find(page)) return;
+  if ((uint16_t) (pc_used + need) > CORE_PCACHE) {
+    pc_used = 0;
+    ++pc_epoch;
+  }
+  pc[0] = (uint8_t) page; pc[1] = (uint8_t) (page >> 8);
+  pc[2] = count; pc[3] = (uint8_t) len; pc[4] = (uint8_t) (len >> 8);
+  pc_write(pc_used, pc, PAGE_HEADER);
+  pc_write((uint16_t) (pc_used + PAGE_HEADER), data, len);
+  pc_used = (uint16_t) (pc_used + need);
+}
+#else
 static uint8_t *pc_find(uint16_t page)
 {
   uint16_t at;
@@ -369,6 +431,8 @@ static void pc_put(uint16_t page, uint8_t count, uint16_t len, const uint8_t *da
   pc_used = (uint16_t) (pc_used + need);
 }
 
+#endif
+
 /* Ask the device for protocol pages from `page` and keep what comes back. */
 static uint8_t fetch(const char *uri, const char *filter, uint16_t page, uint8_t flags)
 {
@@ -380,7 +444,11 @@ static uint8_t fetch(const char *uri, const char *filter, uint16_t page, uint8_t
   rq.start_page = page;
   rq.page_size = CORE_PROTO_PAGE;
   rq.flags = (uint8_t) (LISTING_FLAGS | flags);
+#ifdef CONFIG_NIO_BANKED
+  rq.max_name = 0;                 /* full names up to the firmware's 220 bytes */
+#else
   rq.max_name = CORE_NAME_MAX;
+#endif
   rq.filter = filter;
   res = fn_file_list_pages(&file_io, uri, &rq, &r);
   if (res != FN_OK) {
@@ -415,8 +483,10 @@ static void unpack(const uint8_t *rec)
     e = &entries[entry_count++];
     e->flags = (uint8_t) (d[0] & (CORE_ENTRY_DIR | CORE_ENTRY_TRUNCATED));
     n = d[1];
-    if (n > CORE_NAME_MAX)
+    if (n > CORE_NAME_MAX) {
       n = CORE_NAME_MAX;
+      e->flags |= CORE_ENTRY_TRUNCATED;
+    }
     memcpy(e->name, d + 2, n);
     e->name[n] = 0;
     d = d + 2 + d[1];
@@ -456,7 +526,7 @@ uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page,
 
   list_error = 0;
   first = (uint16_t) (screen_page * (CORE_PAGE_ROWS / CORE_PROTO_PAGE));
-  /* Fetch both protocol pages before changing the visible entries. */
+  /* Fetch all protocol pages before changing the visible entries. */
   for (k = 0; k < CORE_PAGE_ROWS / CORE_PROTO_PAGE; k++) {
     uint16_t page;
 
@@ -464,9 +534,17 @@ uint8_t core_dir_page(const char *uri, const char *filter, uint16_t screen_page,
     if (dir_total != 0xFFFFFFFFUL && (uint32_t) page * CORE_PROTO_PAGE >= dir_total)
       break;                    /* past the end of the directory */
     if (!pc_find(page)) {
+#ifdef CONFIG_NIO_BANKED
+      uint8_t epoch = pc_epoch;
+#endif
       if (!fetch(uri, filter, page, refresh ? FN_LIST_REFRESH : 0))
         return 0;
       refresh = 0;
+#ifdef CONFIG_NIO_BANKED
+      /* A full cache is cleared as a unit. Restart this screen so every
+       * constituent page is present before unpacking it. */
+      if (epoch != pc_epoch) { k = 0xFF; continue; }
+#endif
       if (!pc_find(page)) {     /* asked for a page that does not exist */
         if ((uint32_t) page * CORE_PROTO_PAGE >= dir_total)
           break;
@@ -495,6 +573,22 @@ uint8_t core_full_name(const char *uri, const char *filter, uint16_t index, char
   uint8_t n;
   uint8_t res;
 
+#ifdef CONFIG_NIO_BANKED
+  {
+    const uint8_t *rec = pc_find((uint16_t) (index / CORE_PROTO_PAGE));
+    if (rec) {
+      const uint8_t *d = rec + PAGE_HEADER;
+      uint8_t i = (uint8_t) (index % CORE_PROTO_PAGE);
+      if (i < rec[2]) {
+        while (i--) d += (uint16_t) (10 + d[1]);
+        n = d[1];
+        if ((d[0] & CORE_ENTRY_TRUNCATED) || n >= cap) return 0;
+        memcpy(out, d + 2, n); out[n] = 0;
+        return 1;
+      }
+    }
+  }
+#endif
   rq.start_page = index;                /* one entry per page: page `index` is entry `index` */
   rq.page_size = 1;
   rq.flags = LISTING_FLAGS;
@@ -507,7 +601,7 @@ uint8_t core_full_name(const char *uri, const char *filter, uint16_t index, char
   if (res != FN_OK || r.page_count == 0 || r.pages[0] == 0)
     return 0;
   n = r.pages[4];                       /* page: count, len; entry: flags, nameLen */
-  if (n >= cap)
+  if ((r.pages[3] & CORE_ENTRY_TRUNCATED) || n >= cap)
     return 0;
   memcpy(out, r.pages + 5, n);
   out[n] = 0;

@@ -177,12 +177,14 @@ Amiberry suite (`integration-tests/amiberry/test_config_nio.py`); see
 ## Atari UI tests
 
 Headless AltirraSDL (no window opens), in three layers under `tests/atari/`.
-All need the workspace environment and the XEX built; each skips itself when a
-prerequisite is missing:
+All need the workspace environment and the standard XEX built. The boot suite
+also requires the banked build; emulator-dependent tests skip if the emulator is
+unavailable:
 
 ```sh
 source ../../scripts/env.sh
 make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
+make atari-banked FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
 **Fast** (about 4 minutes; the embedded FujiNet-NIO device in AltirraSDL, the
@@ -221,7 +223,10 @@ boot disk and an assigned XEX (the firmware's PicoBoot wrapper). It needs `dir2a
 `repos/fujinet-nio/build/atari-fujibus-netsio-debug` built from the current
 firmware, and `proctest.xex` from `repos/nio-core-apps`.
 It also checks the monochrome mount screen and that a failed mount restores the
-normal tab and row-colour interrupts.
+normal tab and row-colour interrupts. The production selector is tested with
+64 KB, 128 KB and 1088 KB memory models. Long-name cases verify traffic-level
+reuse, packed bank-cache eviction, full 220-byte listing names, and drive assignment
+across a switch through Setup. Both Atari builds must exist for these cases.
 
 Not covered: the display-interrupt/SIO failure that only showed on real hardware
 (the emulator's serial timing is too forgiving); a hardware run is still needed

@@ -16,8 +16,13 @@
 #define CORE_NAME_MAX  31
 #define CORE_UNITS     8
 #define CORE_PAGE_ROWS  18    /* entries on a screen page */
-#define CORE_PROTO_PAGE 9     /* entries per page the device sends; two per screen page */
-#define CORE_PCACHE     800   /* bytes of received pages kept */
+#ifdef CONFIG_NIO_BANKED
+#define CORE_PROTO_PAGE 2     /* 2 full 220-byte names fit in one reply */
+#define CORE_PCACHE     8192  /* upper half of the Setup bank */
+#else
+#define CORE_PROTO_PAGE 9
+#define CORE_PCACHE     800
+#endif
 
 typedef struct {
   uint8_t flags;                /* CORE_ENTRY_* */

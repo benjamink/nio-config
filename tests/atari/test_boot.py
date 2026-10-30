@@ -112,9 +112,10 @@ class BootTests(unittest.TestCase):
             portb = v.bridge.peek(0xD301, 1)[0]
             self.assertEqual(bool(portb & 0x10), not banked,
                              f"wrong memory layout, PORTB={portb:#04x}")
-            for label in ("Browse", "Drives", "Setup", "Hosts"):
+            for label, hint in (("Browse", "RET Open"), ("Drives", "RET Pick"),
+                                ("Setup", "RET Join Wi-Fi"), ("Hosts", "RET Browse A Add")):
                 v.key("TAB")
-                v.wait_for(label, row=1, timeout=30)
+                v.wait_for(hint, row=22, timeout=30)
                 if label == "Setup":
                     v.key("R")
                     v.wait_for("Refreshed", row=23, timeout=30)
@@ -147,6 +148,93 @@ class BootTests(unittest.TestCase):
 
     def test_selector_boots_banked_on_1088k(self):
         self.check_selecting_boot(1088, True)
+
+    def test_standard_reuses_animated_long_name(self):
+        atr = make_selecting_atr(self.tmp.name)
+        evidence = Path(self.tmp.name) / "standard-cache-evidence"
+        name = "f000_" + "x" * 40 + "tail.atr"
+        source = Path(self.tmp.name) / name
+        source.write_bytes(b"fixture")
+        def scenario(v):
+            v.wait_for("Hosts", row=1, timeout=240)
+            v.key("A"); v.type("host:/long/"); v.key("RETURN")
+            v.wait_for("host:/long/", row=2, timeout=20)
+            v.key("RETURN"); v.wait_for("f000_", timeout=30)
+            def page_calls():
+                log = (evidence / "netsio/hub.log").read_text(errors="replace")
+                return sum("ATD -> 02:DATA_BLOCK" in line and " FE 07 " in line
+                           for line in log.splitlines())
+            initial = page_calls()
+            v.wait_for("tail", timeout=30)
+            animated = page_calls()
+            self.assertGreater(animated, initial, "animation did not fetch the full name")
+            v.key("RETURN"); v.wait_for("Assign to a drive", timeout=30)
+            self.assertEqual(page_calls(), animated,
+                             "opening the animated name performed another ListPages request")
+        boot(atr, scenario, data=[("long/" + name, source)], ram_kb=64, out=evidence)
+
+    def test_banked_long_names_cache_and_eviction(self):
+        from atari_ui import symbols
+        atr = make_selecting_atr(self.tmp.name)
+        evidence = Path(self.tmp.name) / "bank-cache-evidence"
+        data = []
+        for i in range(90):
+            # A whole screen of 220-byte names makes each two-entry reply
+            # nearly fill the 468-byte budget, including 256-byte crossings.
+            suffix_len = 167 if 18 <= i < 36 else (155 if i == 0 else 45)
+            name = "f%03d_" % i + "x" * 40 + "tail" + "y" * suffix_len + ".atr"
+            source = Path(self.tmp.name) / name
+            source.write_bytes(b"fixture")
+            data.append(("long/" + name, source))
+
+        def scenario(v):
+            v.wait_for("Hosts", row=1, timeout=240)
+            v.key("A"); v.type("host:/long/"); v.key("RETURN")
+            v.wait_for("host:/long/", row=2, timeout=20)
+            v.key("RETURN"); v.wait_for("f008_", timeout=30)
+            # Restart the selected row's marquee after the full page has drawn.
+            v.key("DOWN"); v.key("UP")
+            used_addr = symbols(str(BANKED_XEX).replace(".xex", ".lbl"))["_pc_used"]
+            used_first = v.bridge.peek16(used_addr)
+            def page_calls():
+                log = (evidence / "netsio/hub.log").read_text(errors="replace")
+                return sum("ATD -> 02:DATA_BLOCK" in line and " FE 07 " in line
+                           for line in log.splitlines())
+            calls_first = page_calls()
+            self.assertGreater(calls_first, 0)
+            self.assertGreater(used_first, 800)
+            self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
+            v.wait_for("tail", timeout=30)
+            v.key("RETURN"); v.wait_for("Name is longer than 196", row=23, timeout=30)
+            v.key("DOWN"); v.wait_for("tail", timeout=30)
+            v.key("RETURN"); v.wait_for("Assign to a drive", timeout=30)
+            self.assertEqual(page_calls(), calls_first,
+                             "animation or opening requested an already cached name")
+            v.key("1"); v.wait_for("D1 <-", row=23, timeout=30)
+            v.key("TAB"); v.wait_for("RET Pick", row=22, timeout=30)
+            self.assertTrue(v.screen()[2].rstrip().endswith("y" * 26 + ".atr"),
+                            v.screen()[2])
+            v.key("TAB"); v.wait_for("RET Join Wi-Fi", row=22, timeout=30)
+            v.key("TAB"); v.wait_for("RET Browse A Add", row=22, timeout=30)
+            v.key("TAB"); v.wait_for("f008_", timeout=30)
+            v.key("SPACE"); v.wait_for("f026_", timeout=45)
+            two_pages = v.bridge.peek16(used_addr)
+            self.assertGreater(two_pages, used_first)
+            v.key("B"); v.wait_for("f008_", timeout=45)
+            self.assertEqual(v.bridge.peek16(used_addr), two_pages,
+                             "returning to a cached screen fetched more pages")
+            used = [two_pages]
+            for page in range(2, 6):
+                v.key("SPACE")
+                v.wait_for("f%03d_" % ((page - 1) * 18 + 8), timeout=45)
+                self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
+                used.append(v.bridge.peek16(used_addr))
+            self.assertTrue(any(after < before for before, after in zip(used, used[1:])),
+                            f"cache never reached its eviction boundary: {used}")
+            self.assertLessEqual(v.bridge.peek16(used_addr), 8192)
+            v.key("B"); v.wait_for("f062_", timeout=45)
+            self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
+        boot(atr, scenario, data=data, ram_kb=128, xex=BANKED_XEX, out=evidence)
 
     def option_boot(self, program, expect, atr=None, ram_kb=None, xex=None):
         """Assign `program` (a boot ATR or an XEX) to D1 from the Browse tab,

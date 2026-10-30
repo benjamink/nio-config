@@ -43,8 +43,13 @@
 #pragma bss-name (push, "LOWMEM")
 static char uri_buf[CORE_URI_MAX + 1];
 static char path[CORE_URI_MAX + 1];
+#ifdef CONFIG_NIO_BANKED
+static char marq[221];        /* firmware's maximum returned name plus NUL */
+#else
 static char marq[CORE_URI_MAX + 1];
+#endif
 static char filter[41];       /* no initial value: low memory */
+static uint8_t marq_cached, marq_cached_gen, marq_cached_row;
 #pragma bss-name (pop)
 static char line[SCR_COLS + 1];
 static char status[SCR_COLS];
@@ -295,6 +300,7 @@ static void marq_start(void)
 {
   const core_entry_t *e;
 
+  marq_cached = 0;
   marq_state = 2;
   marq_off = 0;
   if (tab == TAB_HOSTS && host_count) {
@@ -316,6 +322,9 @@ static void marq_start(void)
           !core_full_name(uri_buf, filter, (uint16_t) (bpage * LIST_ROWS + brow),
                           marq, sizeof(marq)))
         return;
+      marq_cached = 1;
+      marq_cached_gen = list_gen;
+      marq_cached_row = brow;
     }
     marq_row = (uint8_t) (LIST_ROW + brow);
     marq_col = 1;
@@ -539,6 +548,7 @@ static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
     return 0;
   }
   for (tries = 0; tries < 2; tries++) {
+    marq_cached = 0;
     list_gen++;
     if (!core_dir_have(sp) || refresh) {
       scr_fill(ROW_STATUS, 0, SCR_COLS, ' ');
@@ -1139,10 +1149,16 @@ static void key_browse(uint8_t k)
   isdir = (uint8_t) (e->flags & CORE_ENTRY_DIR);
   fullname = (char *) core_scratch();   /* the page buffer: rebuilt afterwards */
   if (e->flags & CORE_ENTRY_TRUNCATED) {
-    if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
-        !core_full_name(uri_buf, filter, (uint16_t) (bpage * LIST_ROWS + brow),
-                        fullname, CORE_URI_MAX + 1)) {
-      say("Name is longer than 196 characters", 1);
+    if (marq_cached && marq_cached_gen == list_gen && marq_cached_row == brow) {
+      if (strlen(marq) > CORE_URI_MAX) {
+        say("Name is longer than 196 characters", 1);
+        return;
+      }
+      strcpy(fullname, marq);
+    } else if (!core_compose(uri_buf, sizeof(uri_buf), host_ptr[browse_host], path, "") ||
+               !core_full_name(uri_buf, filter, (uint16_t) (bpage * LIST_ROWS + brow),
+                               fullname, CORE_URI_MAX + 1)) {
+      say("Unable to read full name", 1);
       return;
     }
   } else {
@@ -1364,6 +1380,7 @@ int main(void)
   uint8_t failed;
 
   path[0] = 0;
+  marq_cached = 0;
   SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);
