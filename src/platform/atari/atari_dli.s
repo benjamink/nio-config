@@ -22,6 +22,8 @@ COLDST  = $0244
 COLOR1  = $02C5
 COLOR2  = $02C6
 COLOR4  = $02C8
+DRKMSK  = $004E
+COLRSH  = $004F
 SIOV    = $E459
         .ifdef  NO_DLI
 NMI_ON  = $40
@@ -181,10 +183,14 @@ vbi:    lda     #0
         lda     _row_bg
         sta     COLOR2
         sta     COLOR4
+        eor     COLRSH
+        and     DRKMSK
         sta     COLPF2
         sta     COLBK
         lda     _row_fg
         sta     COLOR1
+        eor     COLRSH
+        and     DRKMSK
         sta     COLPF1
         lda     #0
         sta     _scr_swap
@@ -210,8 +216,12 @@ dli:    pha
         bne     @set
 @store: stx     dlirow
 @set:   lda     _row_fg,x
+        eor     COLRSH
+        and     DRKMSK
         pha
         lda     _row_bg,x
+        eor     COLRSH
+        and     DRKMSK
         tax
         pla
         sta     WSYNC

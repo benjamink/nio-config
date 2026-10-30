@@ -52,7 +52,8 @@ Each row has its own colours. A display list interrupt at the end of every row
 byte tables, so the title, selection bar, hint line and dialogs are whole-row
 colour bars on a plain ANTIC mode 2 screen. A vertical-blank handler restarts
 the row count every frame so a lost interrupt cannot leave the colours out of
-step.
+step. The OS attract-mode colour shift and dimming mask apply to every row;
+pressing a key restores the normal colours.
 
 ## Booting
 

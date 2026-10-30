@@ -236,6 +236,14 @@ class BootTests(unittest.TestCase):
             self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
         boot(atr, scenario, data=data, ram_kb=128, xex=BANKED_XEX, out=evidence)
 
+    def test_attract_mode_banked(self):
+        from test_ui_features import AttractMode
+        atr = make_selecting_atr(self.tmp.name)
+        def scenario(v):
+            v.wait_for("Hosts", row=1, timeout=240)
+            AttractMode().check_attract(v)
+        boot(atr, scenario, ram_kb=128, xex=BANKED_XEX)
+
     def check_setup_cache(self, ram_kb):
         atr = make_selecting_atr(self.tmp.name)
         evidence = Path(self.tmp.name) / ("setup-cache-%d" % ram_kb)

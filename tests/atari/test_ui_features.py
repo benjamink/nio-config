@@ -29,6 +29,55 @@ class Session(unittest.TestCase):
         cls.tmp.cleanup()
 
 
+class AttractMode(Session):
+    def check_attract(self, s):
+        from io import BytesIO
+        from PIL import Image
+        b = s.bridge
+
+        def colours():
+            image = Image.open(BytesIO(s.screenshot())).convert("RGB")
+            # Background pixels in the title, tab bar and list body.
+            return tuple(image.getpixel((5, y)) for y in (27, 35, 67))
+
+        normal = colours()
+        # The OS sets the colour shift from the middle RTC byte, changing it
+        # every 256 frames. Start at a known value without waiting ten minutes.
+        b.pause()
+        try:
+            b.poke(0x4d, 0x80)  # ATRACT: active
+            b.poke(0x13, 0x30)  # RTCLOK+1
+            b.poke(0x14, 0)
+        finally:
+            b.resume()
+        time.sleep(.2)
+        b.pause()
+        try:
+            # PAL frame: 312 scan lines of 114 CPU cycles. Freeze the
+            # OS colour clock while stepping through regular screen swaps.
+            samples = []
+            for _ in range(12):
+                b.poke(0x13, 0x30)
+                b.cycles(35568)
+                samples.append(colours())
+            active = samples[0]
+            self.assertTrue(all(a != n for a, n in zip(active, normal)), (normal, active))
+            self.assertTrue(all(sample == active for sample in samples), samples)
+            b.poke(0x13, 0x40)
+            b.cycles(35568 * 2)
+            shifted = colours()
+            self.assertTrue(all(a != c for a, c in zip(active, shifted)), (active, shifted))
+        finally:
+            b.resume()
+        s.key("Z")
+        time.sleep(.3)
+        self.assertEqual(b.peek(0x4d, 1)[0] & 0x80, 0)
+        self.assertEqual(colours(), normal)
+
+    def test_all_rows_follow_os_attract_without_flashing(self):
+        self.check_attract(self.s)
+
+
 class BrowseTransitions(Session):
     SPEC = {"transition/item%03d_" % i + "x" * 16 + ".atr": 100 for i in range(40)}
 
