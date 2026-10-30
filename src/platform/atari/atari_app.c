@@ -83,6 +83,19 @@ typedef struct { fn_wifi_config_t cfg; fn_wifi_adapter_info_t info; fn_fuji_info
 static const char *const tab_name[TAB_COUNT] = { "Hosts", "Browse", "Drives", "Setup" };
 static const uint8_t tab_col[TAB_COUNT] = { 1, 9, 18, 27 };
 
+/* Setup lives in its own expanded-memory bank in the banked build.  Calls
+ * from resident code go through assembly gates; calls within Setup stay local. */
+#ifdef CONFIG_NIO_BANKED
+#define SETUP_IMPL(name) name##_impl
+#define SETUP_SCOPE
+void setup_refresh(void);
+void draw_setup(void);
+void key_setup(uint8_t k);
+#else
+#define SETUP_IMPL(name) name
+#define SETUP_SCOPE static
+#endif
+
 /* ---- helpers ------------------------------------------------------------ */
 
 static void say(const char *msg, uint8_t err)
@@ -371,6 +384,7 @@ static void put_dec32(char **p, uint32_t v)
 
 /* "2026-10-28 14:07" (UTC) from Unix seconds.  Whole days since 1970 fit 16
  * bits, so only the split into days and minutes uses 32-bit division. */
+#pragma code-name(push, "TAB_BROWSE")
 static void put_date(char **p, uint32_t t)
 {
   static const uint8_t mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -453,9 +467,12 @@ static void browse_detail(void)
   }
 }
 
+#pragma code-name(pop)
+
 /* ---- Hosts tab ------------------------------------------------------------------ */
 
 /* List row r (0..LIST_ROWS-1) of the Hosts tab, for the current `top`. */
+#pragma code-name(push, "TAB_HOSTS")
 static void hosts_row(uint8_t r)
 {
   uint16_t idx;
@@ -470,7 +487,9 @@ static void hosts_row(uint8_t r)
   scr_uint(row, 0, (unsigned) (idx + 1), 2);
   scr_text(row, 3, host_ptr[idx], 35);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_HOSTS")
 static void draw_hosts(void)
 {
   uint8_t r;
@@ -488,10 +507,12 @@ static void draw_hosts(void)
   scr_uint(ROW_INFO, 1, host_count, 2);
   scr_text(ROW_INFO, 4, host_count == 1 ? "host" : "hosts", 5);
 }
+#pragma code-name(pop)
 
 /* ---- Browse tab ------------------------------------------------------------------- */
 
 /* What went wrong with a directory request, in words. */
+#pragma code-name(push, "TAB_BROWSE")
 static void say_list_error(void)
 {
   switch (core_list_error()) {
@@ -501,10 +522,12 @@ static void say_list_error(void)
   default:               say_num("Browse failed, error ", core_list_error()); break;
   }
 }
+#pragma code-name(pop)
 
 /* Show screen page `sp` of the directory with the cursor on row `row`.  Only a
  * page the device has not sent yet costs a request (and a "Reading" message);
  * on failure the page on screen is left as it was. */
+#pragma code-name(push, "TAB_BROWSE")
 static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
 {
   uint8_t tries;
@@ -538,8 +561,10 @@ static uint8_t browse_goto(uint16_t sp, uint8_t row, uint8_t refresh)
   brow = row < entry_count ? row : (uint8_t) (entry_count ? entry_count - 1 : 0);
   return 1;
 }
+#pragma code-name(pop)
 
 /* A new directory: forget everything the device sent for the last one. */
+#pragma code-name(push, "TAB_BROWSE")
 static void browse_reset(void)
 {
   core_dir_reset();
@@ -548,7 +573,9 @@ static void browse_reset(void)
   brow = 0;
   (void) browse_goto(0, 0, 0);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void browse_enter_host(uint8_t host)
 {
   browse_host = host;
@@ -560,7 +587,9 @@ static void browse_enter_host(uint8_t host)
   if (!status_error)
     say("", 0);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void parent_path(void)
 {
   uint8_t len;
@@ -571,7 +600,9 @@ static void parent_path(void)
   while (len > 0 && path[len - 1] != '/')
     path[--len] = 0;
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void draw_size(uint8_t row, const core_entry_t *e)
 {
   if (e->flags & CORE_ENTRY_DIR) {
@@ -581,7 +612,9 @@ static void draw_size(uint8_t row, const core_entry_t *e)
   scr_uint(row, 31, e->disp, 5);
   scr_text(row, 36, (e->flags & CORE_ENTRY_MB) ? "M" : "K", 1);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void browse_info(void)
 {
   unsigned total;
@@ -606,8 +639,10 @@ static void browse_info(void)
     scr_text(ROW_INFO, 9, filter, 29);
   }
 }
+#pragma code-name(pop)
 
 /* List row r of the Browse tab. */
+#pragma code-name(push, "TAB_BROWSE")
 static void browse_row(uint8_t r)
 {
   uint8_t row;
@@ -622,7 +657,9 @@ static void browse_row(uint8_t r)
   scr_text(row, 1, e->name, 29);
   draw_size(row, e);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void draw_browse(void)
 {
   uint8_t r;
@@ -643,9 +680,11 @@ static void draw_browse(void)
   browse_info();
   browse_detail();
 }
+#pragma code-name(pop)
 
 /* ---- Drives --------------------------------------------------------------------------- */
 
+#pragma code-name(push, "TAB_DRIVES")
 static void assign_drive(uint8_t unit, const char *uri, uint8_t readonly)
 {
   if (!core_put_slot(unit, uri, readonly)) {
@@ -666,7 +705,9 @@ static void assign_drive(uint8_t unit, const char *uri, uint8_t readonly)
   line[36] = 0;
   say(line, 0);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_DRIVES")
 static void draw_drives(void)
 {
   uint8_t u;
@@ -694,10 +735,12 @@ static void draw_drives(void)
     scr_fill((uint8_t) (LIST_ROW + u), 0, SCR_COLS, ' ');
   scr_text(ROW_INFO, 1, "OPTION boots with these drives mounted", 38);
 }
+#pragma code-name(pop)
 
 /* ---- Setup ----------------------------------------------------------------------------- */
 
-static void setup_refresh(void)
+#pragma code-name(push, "TAB_SETUP")
+SETUP_SCOPE void SETUP_IMPL(setup_refresh)(void)
 {
   list_stale = 1;
   memset(&wifi, 0, sizeof(wifi));
@@ -709,7 +752,9 @@ static void setup_refresh(void)
   (void) fn_wifi_get_adapter_info(&wifi_info);
   (void) fn_fuji_get_info(&fuji_info);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_SETUP")
 static void setup_row(uint8_t n, const char *label, const char *value)
 {
   uint8_t row;
@@ -718,7 +763,9 @@ static void setup_row(uint8_t n, const char *label, const char *value)
   scr_text(row, 1, label, 12);
   scr_text(row, 14, value, 24);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_SETUP")
 static const char *link_text(void)
 {
   switch (wifi.link_state) {
@@ -729,7 +776,10 @@ static const char *link_text(void)
   }
 }
 
-static void draw_setup(void)
+#pragma code-name(pop)
+
+#pragma code-name(push, "TAB_SETUP")
+SETUP_SCOPE void SETUP_IMPL(draw_setup)(void)
 {
   static const char hex[] = "0123456789abcdef";
   char *mac;
@@ -759,10 +809,12 @@ static void draw_setup(void)
   setup_row(7, "Firmware", fuji_info.firmware[0] ? fuji_info.firmware : "unknown");
   setup_row(8, "Build", fuji_info.profile[0] ? fuji_info.profile : "unknown");
 }
+#pragma code-name(pop)
 
 /* Scan for networks and let the user pick one; 0 if none was chosen. */
 #define SCAN_MAX 6
 
+#pragma code-name(push, "TAB_SETUP")
 static uint8_t pick_network(char *ssid)
 {
   fn_wifi_scan_record_t *recs;
@@ -814,7 +866,9 @@ static uint8_t pick_network(char *ssid)
       sel++;
   }
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_SETUP")
 static void join_wifi(void)
 {
   char *ssid;
@@ -848,6 +902,7 @@ static void join_wifi(void)
   }
   say("Wi-Fi saved", 0);
 }
+#pragma code-name(pop)
 
 /* ---- Boot -------------------------------------------------------------------------------- */
 
@@ -881,6 +936,7 @@ static void boot_now(void)
 
 /* ---- Mounting a file ---------------------------------------------------------------------- */
 
+#pragma code-name(push, "TAB_BROWSE")
 static void open_file(const char *name)
 {
   uint8_t readonly;
@@ -922,6 +978,7 @@ static void open_file(const char *name)
     }
   }
 }
+#pragma code-name(pop)
 
 /* ---- Keys ---------------------------------------------------------------------------------- */
 
@@ -954,6 +1011,7 @@ static void show_help(void)
   input_settle();
 }
 
+#pragma code-name(push, "TAB_HOSTS")
 static void key_hosts(uint8_t k)
 {
   uint16_t pos;
@@ -997,13 +1055,17 @@ static void key_hosts(uint8_t k)
     }
   }
 }
+#pragma code-name(pop)
 
 /* Page forward or back, keeping the cursor on the same row where it can. */
+#pragma code-name(push, "TAB_BROWSE")
 static void browse_page(uint16_t sp, uint8_t row)
 {
   (void) browse_goto(sp, row, 0);
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_BROWSE")
 static void key_browse(uint8_t k)
 {
   const core_entry_t *e;
@@ -1101,7 +1163,9 @@ static void key_browse(uint8_t k)
     open_file(fullname);
   }
 }
+#pragma code-name(pop)
 
+#pragma code-name(push, "TAB_DRIVES")
 static void key_drives(uint8_t k)
 {
   uint16_t pos;
@@ -1132,17 +1196,20 @@ static void key_drives(uint8_t k)
     drive_sel = (uint8_t) (k - '1');
   }
 }
+#pragma code-name(pop)
 
-static void key_setup(uint8_t k)
+#pragma code-name(push, "TAB_SETUP")
+SETUP_SCOPE void SETUP_IMPL(key_setup)(uint8_t k)
 {
   if (k == 'r') {
-    setup_refresh();
+    SETUP_IMPL(setup_refresh)();
     say("Refreshed", 0);
   } else if (k == K_RET) {
     join_wifi();
-    setup_refresh();
+    SETUP_IMPL(setup_refresh)();
   }
 }
+#pragma code-name(pop)
 
 /* The cursor moved but the page did not scroll: only the selection bar, the
  * field and the info line change, so redraw just those. */

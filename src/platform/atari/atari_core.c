@@ -53,6 +53,7 @@ static uint16_t pool_len;
 char *host_ptr[CORE_MAX_HOSTS + 1];
 uint8_t host_count;
 
+#pragma code-name(push, "TAB_HOSTS")
 static void hosts_index(void)
 {
   char *p;
@@ -155,11 +156,13 @@ static uint8_t read_hosts(void)
   return 1;
 }
 
+#pragma code-name(pop)
 void *core_scratch(void)
 {
   list_stale = 1;
   return entries;
 }
+#pragma code-name(push, "TAB_HOSTS")
 
 uint8_t core_save_hosts(void)
 {
@@ -196,8 +199,11 @@ uint8_t core_save_hosts(void)
          wr.bytes_written == fill;
 }
 
+#pragma code-name(pop)
+
 /* ---- drive map ---------------------------------------------------------------- */
 
+#pragma code-name(push, "TAB_DRIVES")
 static void load_slot(uint8_t unit)
 {
   fn_slot_catalog_entry_t e;
@@ -270,6 +276,8 @@ uint8_t core_put_slot(uint8_t slot, const char *uri, uint8_t readonly)
                              uri, &e) == FN_OK;
 }
 
+#pragma code-name(pop)
+
 uint8_t core_load(void)
 {
   if (!read_hosts())
@@ -313,6 +321,7 @@ uint16_t pc_used;             /* exposed for the headless cache regression test 
 static fn_file_io_t file_io = { iobuf, sizeof(iobuf) };
 static fn_list_pages_req_t rq = { 0, CORE_PROTO_PAGE, LIST_BUDGET, LISTING_FLAGS, CORE_NAME_MAX, 0 };
 
+#pragma code-name(push, "TAB_BROWSE")
 uint8_t core_list_error(void)
 {
   return list_error;
@@ -524,6 +533,8 @@ const char *core_mount_error(void)
     return mount_text;
   }
 }
+
+#pragma code-name(pop)
 
 uint8_t core_mount_all(uint8_t *failed)
 {

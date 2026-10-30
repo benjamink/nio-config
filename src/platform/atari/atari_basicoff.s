@@ -37,8 +37,26 @@ __BASICOFF__:
         sta     MEMTOP
         lda     #$BC
         sta     MEMTOP+1
+        .ifdef ATARI_BANKED
+        lda     #<banked_reset
+        .else
         lda     #<start
+        .endif
         sta     DOSVEC
+        .ifdef ATARI_BANKED
+        lda     #>banked_reset
+        .else
         lda     #>start
+        .endif
         sta     DOSVEC+1
         rts
+
+; The OS may restore PORTB on warm reset.  This hook is always resident and
+; reselects the same first 130XE-compatible bank used by the boot selector.
+        .ifdef ATARI_BANKED
+        .segment "COMMON_HIGH"
+banked_reset:
+        lda     #$E3
+        sta     PORTB
+        jmp     start
+        .endif

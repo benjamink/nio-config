@@ -23,6 +23,8 @@ from common import REPO, XEX, need_emulator
 ROOT = REPO.parents[1]
 PICOBOOT = ROOT / "repos/MyPicoDOS/picobootcode-dd.bin"
 PROCTEST = ROOT / "repos/nio-core-apps/build/atari/bin/proctest.xex"
+BANKED_XEX = REPO / "build/atari-banked/bin/config-nio.xex"
+BOOTSTRAP = REPO / "build/atari-banked/bin/loader.xex"
 NETSIO_FW = ROOT / "repos/fujinet-nio/build/atari-fujibus-netsio-debug/fujinet-nio"
 
 
@@ -46,6 +48,16 @@ def make_atr(tmp, xex, name="autorun.xex"):
     subprocess.run(["dir2atr", "-m", "-D", "-B", str(PICOBOOT), str(atr), str(stage)],
                    check=True, capture_output=True)
     return atr
+
+
+def make_selecting_atr(tmp):
+    """Build the production manifest and PicoBoot disk in an isolated directory."""
+    out = Path(tmp) / "production-boot"
+    stage = Path(tmp) / "production-stage"
+    subprocess.run(["make", "-C", str(ROOT / "repos/nio-core-apps"),
+                    "TARGET=atari", "boot-disk", f"BOOT_DISK_OUTPUT_DIR={out}",
+                    f"BOOT_DISK_STAGE_DIR={stage}"], check=True, capture_output=True)
+    return out / "autorun.atr"
 
 
 def boot(*a, **k):
@@ -87,7 +99,56 @@ class BootTests(unittest.TestCase):
             self.check_running_and_basic_off(v)
         boot(self.config_atr, scenario, basic=True)
 
-    def option_boot(self, program, expect):
+    def check_selecting_boot(self, ram_kb, banked):
+        self.assertTrue(BANKED_XEX.is_file() and BOOTSTRAP.is_file(),
+                        "build both Atari variants with make atari-banked")
+        atr = make_selecting_atr(self.tmp.name)
+        miner = Path(self.tmp.name) / "Miner.atr"
+        other = Path(self.tmp.name) / "Other.atr"
+        miner.write_bytes(b"not mounted")
+        other.write_bytes(b"not mounted")
+        def scenario(v):
+            self.check_running_and_basic_off(v)
+            portb = v.bridge.peek(0xD301, 1)[0]
+            self.assertEqual(bool(portb & 0x10), not banked,
+                             f"wrong memory layout, PORTB={portb:#04x}")
+            for label in ("Browse", "Drives", "Setup", "Hosts"):
+                v.key("TAB")
+                v.wait_for(label, row=1, timeout=30)
+                if label == "Setup":
+                    v.key("R")
+                    v.wait_for("Refreshed", row=23, timeout=30)
+            if banked:
+                v.key("A"); v.type("host:/"); v.key("RETURN")
+                v.wait_for("host:/", row=2, timeout=20)
+                v.key("RETURN")
+                v.wait_for("Miner.atr", timeout=30)
+                v.key("F"); v.type("*MiNeR*"); v.key("RETURN")
+                v.wait_for("Filter:", row=21, timeout=30)
+                self.assertIn("Miner.atr", "".join(v.screen()[3:21]))
+                self.assertNotIn("Other.atr", "".join(v.screen()[3:21]))
+            else:
+                v.key("TAB")
+            v.wait_for("RET Open", row=22, timeout=30)
+            v.bridge.warm_reset()
+            v.wait_for("RET Browse A Add", row=22, timeout=60)
+            self.check_running_and_basic_off(v)
+            portb = v.bridge.peek(0xD301, 1)[0]
+            self.assertEqual(bool(portb & 0x10), not banked)
+        boot(atr, scenario, basic=True, ram_kb=ram_kb,
+             data=[("Miner.atr", miner), ("Other.atr", other)],
+             xex=BANKED_XEX if banked else XEX)
+
+    def test_selector_boots_standard_on_64k(self):
+        self.check_selecting_boot(64, False)
+
+    def test_selector_boots_banked_on_128k(self):
+        self.check_selecting_boot(128, True)
+
+    def test_selector_boots_banked_on_1088k(self):
+        self.check_selecting_boot(1088, True)
+
+    def option_boot(self, program, expect, atr=None, ram_kb=None, xex=None):
         """Assign `program` (a boot ATR or an XEX) to D1 from the Browse tab,
         press OPTION, and wait for `expect` on the OS screen."""
         def scenario(v):
@@ -103,7 +164,13 @@ class BootTests(unittest.TestCase):
             v.wait_for("D1 <-", row=23, timeout=30)
             v.option()
             v.wait_os(expect, timeout=240)
-        boot(self.config_atr, scenario, data=[(program.name, program)], basic=False)
+        boot(atr or self.config_atr, scenario, data=[(program.name, program)],
+             basic=False, ram_kb=ram_kb, xex=xex)
+
+    @unittest.skipUnless(PROCTEST.is_file(), "build nio-core-apps (proctest.xex) first")
+    def test_selector_banked_option_boots_xex(self):
+        self.option_boot(PROCTEST, "PROCTEST", atr=make_selecting_atr(self.tmp.name),
+                         ram_kb=128, xex=BANKED_XEX)
 
     @unittest.skipUnless(PROCTEST.is_file(), "build nio-core-apps (proctest.xex) first")
     def test_option_boots_an_assigned_boot_disk(self):

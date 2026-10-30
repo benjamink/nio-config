@@ -12,7 +12,7 @@ _compose_cap:  .res 1
 src:           .res 2
         .segment "RODATA"
 prefix: .asciiz "tnfs://"
-        .segment "CODE"
+        .segment "COMMON_HIGH"
 _compose_run:
         ldx #0
         ldy #0

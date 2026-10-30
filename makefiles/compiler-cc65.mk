@@ -32,5 +32,5 @@ define compile_c
 endef
 
 define link_program
-	$(CC) $(LDFLAGS) $(EXTRA_PROGRAM_LDFLAGS) --mapfile $(basename $@).map -Ln $(basename $@).lbl -o $@ $^ $(EXTRA_LINK_OBJS)
+	$(CC) $(LDFLAGS) $(EXTRA_PROGRAM_LDFLAGS) --mapfile $(basename $@).map -Ln $(basename $@).lbl -o $@ $(filter-out %.cfg,$^) $(EXTRA_LINK_OBJS)
 endef

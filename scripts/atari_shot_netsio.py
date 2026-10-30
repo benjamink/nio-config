@@ -12,7 +12,7 @@ Needs the workspace environment (scripts/env.sh) and a built
 repos/fujinet-nio/build/atari-fujibus-netsio-debug.  The disk takes about 20
 to 40 seconds to load, so scripts should use waitfor: rather than fixed waits.
 """
-import argparse, importlib.util, os, shutil, sys, tempfile
+import argparse, importlib.util, os, re, shutil, sys, tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,7 +25,7 @@ def _load(name, path):
     spec.loader.exec_module(mod); return mod
 
 
-def boot(atr, fn, data=(), basic=False, out=None, xex=None):
+def boot(atr, fn, data=(), basic=False, out=None, xex=None, ram_kb=None):
     """Boot `atr`, call fn(view) with an atari_ui.View on the running machine,
     and return fn's result.  `data` is [(relative path, source file)] copied
     into the firmware's data directory (the `host:/` filesystem)."""
@@ -33,6 +33,23 @@ def boot(atr, fn, data=(), basic=False, out=None, xex=None):
     sys.path.insert(0, str(HERE))
     ui = _load("atari_ui", HERE / "atari_ui.py")
     acc = _load("run_boot_acceptance", ROOT / "integration-tests/atari-sio/run_boot_acceptance.py")
+    # Boot acceptance is always headless, even on a desktop session.
+    orig_command = acc.altirra_command
+    def headless_command(*args, **kwargs):
+        cmd, env, temps = orig_command(*args, **kwargs)
+        if "--headless" not in cmd:
+            cmd.append("--headless")
+        return cmd, env, temps
+    acc.altirra_command = headless_command
+    profile_dir = None
+    if ram_kb is not None:
+        profile_dir = tempfile.TemporaryDirectory(prefix="nio-atari-ram-")
+        profile_text, count = re.subn(r"(ram_kb:\s*)\d+", rf"\g<1>{int(ram_kb)}",
+                                      acc.PROFILE.read_text(), count=1)
+        if count != 1:
+            raise ValueError("Altirra profile lacks ram_kb")
+        acc.PROFILE = Path(profile_dir.name) / "profile.yaml"
+        acc.PROFILE.write_text(profile_text)
     atr = Path(atr).resolve()
     data = [(d, Path(s_).resolve()) for d, s_ in data]
     out = (Path(out) if out else Path(tempfile.mkdtemp(prefix="nio-boot-"))).resolve()
@@ -73,6 +90,8 @@ def boot(atr, fn, data=(), basic=False, out=None, xex=None):
         # image's golden trace and do not apply to other disks.
     finally:
         os.chdir(cwd)
+        if profile_dir:
+            profile_dir.cleanup()
     if "error" in state:
         raise state["error"]
     return state.get("result")

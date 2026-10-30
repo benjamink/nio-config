@@ -1,7 +1,7 @@
 TARGETS := msdos bbc master linux atari
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
-.PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk \
+.PHONY: atari-banked all all-targets clean disk confnio-bbc-disk confnio-master-disk \
 	splash-bbc splash-bbc-disk test-amiga-host amiga regen-amiga-icons $(TARGETS)
 
 all: $(DEFAULT_TARGET)
@@ -10,6 +10,13 @@ $(TARGETS):
 	$(MAKE) -f makefiles/build.mk TARGET=$@
 
 all-targets: $(TARGETS)
+
+atari-banked:
+	$(MAKE) -f makefiles/build.mk TARGET=atari ATARI_BANKED=1 TARGET_BUILD_DIR=build/atari-banked
+	@mkdir -p build/atari-banked/bin build/atari-banked/obj
+	ca65 -t atari -o build/atari-banked/obj/loader.o src/atari-bootstrap/loader.s
+	ld65 -C makefiles/atari-banked/loader.cfg -o build/atari-banked/bin/loader.xex build/atari-banked/obj/loader.o
+
 
 disk:
 	$(MAKE) -f makefiles/build.mk TARGET=$(if $(TARGET),$(TARGET),msdos) disk

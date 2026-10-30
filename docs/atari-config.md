@@ -67,6 +67,42 @@ The app reads and writes the same records as the other front ends
 the `config-nio` app-store namespace, and the slot catalogue (drive Dn uses
 catalogue slot n-1). A drive map made on another machine type is read as is.
 
+## Boot selection and banked memory
+
+Build both variants from the same source with `make TARGET=atari` and
+`make atari-banked`. The default Atari boot disk carries `autorun.xex` (the
+selector), `standard.xex` and `banked.xex`. PicoBoot loads the selector first.
+It tests that two 130XE-compatible banks are independent and restores the bytes
+it probes. A 64 KB machine uses the standard image; a machine with those two
+banks uses the banked image. The banked XEX needs the selector: it cannot be
+loaded directly without first selecting the banks.
+
+The selector uses the resident entry points and DD sector layout of the pinned
+PicoBoot binary; the boot-disk build checks the binary hash. The selector reads
+its two executables from the first MyDOS directory sector. The default manifest
+keeps all three filenames there. On RESET a resident hook reselects the main
+bank before restarting the app.
+
+In the banked image, shared code, buffers, display list and interrupts remain
+in main RAM outside `$4000-$7FFF`. Hosts, Browse and Drives share the first
+16 KB bank; Setup and its Wi-Fi routines occupy the second. Resident gates
+switch to Setup and back, and the XEX load-time initializers load each bank
+in turn. ANTIC stays in main RAM. The standard layout maps the same named tab
+segments into main RAM; it does not switch banks. See the map files under
+`build/atari/bin/` and `build/atari-banked/bin/` for exact sizes and remaining
+space. Both layouts retain the same directory caches.
+
+Headless boot tests exercise the actual selector with 64 KB and 128 KB Altirra
+memory models, including tab changes and warm RESET. They require both builds:
+
+```sh
+source ../../scripts/env.sh
+make TARGET=atari
+make atari-banked
+cd tests/atari
+NIO_ATARI_BOOT=1 python3 -m unittest test_boot -v
+```
+
 ## Memory
 
 The Atari is the tightest target: the portable layer (`src/platform/portable`)
@@ -76,8 +112,8 @@ does not use `fnsvc`, `fnctl` or conio.
 * `$0650-$0BFF` (page 6 after the display list, and the pages PicoBoot's loader used)
   holds the long buffers that need no initial value: the page cache, the current path,
   the URI buffer and the name animation buffer.
-* `makefiles/cc65-atari-nio.cfg` loads the program at `$0C00` (PicoBoot only needs
-  the page below) up to `$BC00`.
+* The standard layout in `makefiles/cc65-atari-nio.cfg` loads at `$0C00` up to
+  `$BC00`. The banked layout splits resident code around the bank window.
 * The first load chunk (`atari_basicoff.s`) switches the BASIC ROM off with
   PORTB and moves `MEMTOP` to `$BC00`, so the program may load into the RAM
   under BASIC and cc65's C stack (set from `MEMTOP`) lands at the top of RAM.

@@ -104,6 +104,28 @@ CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/bbc_oscli.s,$(CONFIG
 endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
+
+# The banked build keeps shared UI/core code above the bank window.  Wi-Fi
+# routines belong with Setup and are compiled separately so the shared library
+# archive and all other targets stay untouched.
+ifeq ($(TARGET)-$(ATARI_BANKED),atari-1)
+ATARI_LINK_CONFIG := makefiles/atari-banked/layout.cfg
+ASMFLAGS += -D ATARI_BANKED=1
+CFLAGS += -DCONFIG_NIO_BANKED
+ATARI_HIGH_OBJS := $(addprefix $(OBJ_DIR)/src/platform/atari/,atari_app.o atari_core.o atari_input.o)
+$(ATARI_HIGH_OBJS): CFLAGS += --code-name RESIDENT_HIGH
+ATARI_WIFI_OBJ := $(OBJ_DIR)/atari-banked/fn_wifi.o
+CONFIG_NIO_OBJS += $(ATARI_WIFI_OBJ)
+CONFIG_NIO_ASM_OBJS += $(OBJ_DIR)/atari-banked/bank_switch.o
+
+$(OBJ_DIR)/atari-banked/bank_switch.o: src/atari-banked/bank_switch.s
+	@mkdir -p $(dir $@)
+	ca65 -t atari -o $@ $<
+$(ATARI_WIFI_OBJ): $(FUJINET_NIO_LIB)/src/common/fn_wifi.c
+	@mkdir -p $(dir $@)
+	$(CC) -t atari -c --create-dep $(@:.o=.d) -Osir -O --code-name TAB_SETUP --include-dir $(NIO_INCLUDE_DIR) -o $@ $<
+endif
+
 DEPENDS := $(SUPPORT_OBJS:.o=.d) $(CONFIG_NIO_OBJS:.o=.d)
 
 ifneq ($(filter $(TARGET),bbc master),)
@@ -166,6 +188,10 @@ $(OBJ_DIR)/%.o: %.s | $(OBJ_DIR)
 
 $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BIN_DIR)
 	$(call link_program)
+
+ifeq ($(TARGET),atari)
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): $(ATARI_LINK_CONFIG)
+endif
 
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_OBJS) $(CONFIG_NIO_ASM_OBJS) $(CONFIG_NIO_DEPS) $(NIO_LIB_FILE) | $(BIN_DIR)
 	$(call link_program)
