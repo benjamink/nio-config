@@ -212,33 +212,128 @@ int amiga_ctl_browse_row_is_parent(amiga_ctl_t *ctl, uint16_t row)
   return row == 0 && parent_rows(ctl);
 }
 
+/* Entries per ListPages window: a whole number of protocol pages. */
+#define BROWSE_WINDOW (CONFIG_NIO_MAX_ENTRIES - (CONFIG_NIO_MAX_ENTRIES % FNSVC_PAGE_SIZE))
+
+static uint8_t page_full;
+
+static void page_cb(uint8_t is_dir, const char *name, uint32_t size,
+                    uint32_t mtime, void *ctx)
+{
+  config_nio_state_t *s = (config_nio_state_t *) ctx;
+  config_nio_entry_t *entry;
+  uint16_t n;
+
+  if (s->entry_count >= BROWSE_WINDOW) {
+    page_full = 1;
+    return;
+  }
+  entry = &s->entries[s->entry_count++];
+  entry->is_dir = is_dir;
+  entry->size = size;
+  entry->mtime = mtime;
+  n = (uint16_t) strlen(name);
+  if (n > CONFIG_NIO_NAME_MAX)
+    n = CONFIG_NIO_NAME_MAX;
+  memcpy(entry->name, name, n);
+  entry->name[n] = 0;
+}
+
+static int browse_uri(amiga_ctl_t *ctl, char *uri, uint16_t cap)
+{
+  return ctl->browse_host < ctl->state->host_count &&
+         config_nio_compose_uri(ctl->state->hosts[ctl->browse_host],
+                                ctl->state->browse_path, "", uri, cap);
+}
+
+/* Load the window that starts at sorted entry `first` (a multiple of the page
+ * size).  Sets entry_total from the device. */
+static int browse_load_window(amiga_ctl_t *ctl, uint16_t first, uint8_t reread)
+{
+  static char uri[FNSVC_MAX_URI + 1];
+  config_nio_state_t *s = ctl->state;
+  uint32_t total = 0;
+  uint32_t pos = first;
+
+  if (!browse_uri(ctl, uri, sizeof(uri)))
+    return 0;
+  page_full = 0;
+  s->entry_count = 0;
+  while (!page_full) {
+    uint16_t got = 0;
+
+    if (!fnsvc_list_pages(uri, pos, reread, page_cb, s, &total, &got))
+      return 0;
+    reread = 0;
+    pos += got;
+    if (got == 0 || pos >= total)
+      break;
+  }
+  s->entry_total = total > 0xFFFFUL ? 0xFFFF : (uint16_t) total;
+  ctl->browse_base = first;
+  return 1;
+}
+
 config_nio_entry_t *amiga_ctl_browse_row_entry(amiga_ctl_t *ctl, uint16_t row)
 {
+  config_nio_state_t *s = ctl->state;
   uint16_t up = parent_rows(ctl);
+  uint16_t e;
 
-  if (row < up || row - up >= ctl->state->entry_count)
+  if (row < up)
     return NULL;
-  return &ctl->state->entries[row - up];
+  e = (uint16_t) (row - up);
+  if (!ctl->browse_paged) {
+    if (e >= s->entry_count)
+      return NULL;
+    return &s->entries[e];
+  }
+  if (e >= s->entry_total)
+    return NULL;
+  if (e < ctl->browse_base || e - ctl->browse_base >= s->entry_count) {
+    /* Centre the new window on the row so scrolling either way is smooth. */
+    uint16_t first = e > BROWSE_WINDOW / 2
+        ? (uint16_t) ((e - BROWSE_WINDOW / 2) & ~(FNSVC_PAGE_SIZE - 1)) : 0;
+
+    if (!browse_load_window(ctl, first, 0))
+      return NULL;
+    if (e < ctl->browse_base || e - ctl->browse_base >= s->entry_count)
+      return NULL;
+  }
+  return &s->entries[e - ctl->browse_base];
 }
 
 int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
 {
   static char uri[FNSVC_MAX_URI + 1];
   config_nio_state_t *s = ctl->state;
+  uint8_t reread = ctl->browse_reread;
+  int ok;
 
+  ctl->browse_reread = 0;
   s->entry_count = 0;
   s->entry_total = 0;
   s->entries_truncated = 0;
+  ctl->browse_base = 0;
   ctl->browse_open = 1;
   amiga_list_set_count(&ctl->entries, 0);
-  if (ctl->browse_host >= s->host_count ||
-      !config_nio_compose_uri(s->hosts[ctl->browse_host], s->browse_path, "",
-                              uri, sizeof(uri))) {
+  if (!browse_uri(ctl, uri, sizeof(uri))) {
     status(ctl, "Path is too long");
     return 0;
   }
-  if (!fnsvc_list_directory(uri, list_cb, s)) {
+  /* ListPages first; firmware without it answers Unsupported, and the whole
+   * folder is read with the older listing command instead. */
+  ctl->browse_paged = 1;
+  ok = browse_load_window(ctl, 0, reread);
+  if (!ok && fnsvc_last_error() == FNSVC_ERR_UNSUPPORTED) {
+    ctl->browse_paged = 0;
     s->entry_count = 0;
+    s->entry_total = 0;
+    ok = fnsvc_list_directory(uri, list_cb, s);
+  }
+  if (!ok) {
+    s->entry_count = 0;
+    s->entry_total = 0;
     /* ".." still leads out of a drawer that cannot be read. */
     amiga_list_set_count(&ctl->entries, parent_rows(ctl));
     amiga_sprintf(ctl->msg, "Browse failed: error %u status %u",
@@ -246,17 +341,32 @@ int amiga_ctl_browse_refresh(amiga_ctl_t *ctl)
     status(ctl, ctl->msg);
     return 0;
   }
-  amiga_list_set_count(&ctl->entries,
-                       (uint16_t) (s->entry_count + parent_rows(ctl)));
-  amiga_list_select(&ctl->entries, 0);
-  if (s->entries_truncated) {
-    amiga_sprintf(ctl->msg, "Showing %u of %u entries",
-            (unsigned) s->entry_count, (unsigned) s->entry_total);
-    status(ctl, ctl->msg);
+  if (ctl->browse_paged) {
+    amiga_list_set_count(&ctl->entries,
+                         (uint16_t) (s->entry_total + parent_rows(ctl)));
+    if (s->entry_total == 0xFFFF)
+      status(ctl, "Showing the first 65535 entries");
+    else
+      status(ctl, "Entries loaded");
   } else {
-    status(ctl, "Entries loaded");
+    amiga_list_set_count(&ctl->entries,
+                         (uint16_t) (s->entry_count + parent_rows(ctl)));
+    if (s->entries_truncated) {
+      amiga_sprintf(ctl->msg, "Showing %u of %u entries",
+              (unsigned) s->entry_count, (unsigned) s->entry_total);
+      status(ctl, ctl->msg);
+    } else {
+      status(ctl, "Entries loaded");
+    }
   }
+  amiga_list_select(&ctl->entries, 0);
   return 1;
+}
+
+int amiga_ctl_browse_reread(amiga_ctl_t *ctl)
+{
+  ctl->browse_reread = 1;
+  return amiga_ctl_browse_refresh(ctl);
 }
 
 int amiga_ctl_browse_open(amiga_ctl_t *ctl)
@@ -337,19 +447,40 @@ int amiga_ctl_browse_parent(amiga_ctl_t *ctl)
   return amiga_ctl_browse_refresh(ctl);
 }
 
-int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name)
+static int select_in_window(amiga_ctl_t *ctl, const char *name)
 {
-  uint16_t up = parent_rows(ctl);
+  config_nio_state_t *s = ctl->state;
   uint16_t i;
 
-  if (up && !strcmp(name, "..")) {
+  for (i = 0; i < s->entry_count; i++) {
+    if (!strcmp(s->entries[i].name, name)) {
+      amiga_list_select(&ctl->entries,
+                        (uint16_t) (ctl->browse_base + i + parent_rows(ctl)));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name)
+{
+  uint32_t first;
+
+  if (parent_rows(ctl) && !strcmp(name, "..")) {
     amiga_list_select(&ctl->entries, 0);
     return 1;
   }
-  for (i = 0; i < ctl->state->entry_count; i++) {
-    if (!strcmp(ctl->state->entries[i].name, name)) {
-      amiga_list_select(&ctl->entries, (uint16_t) (i + up));
-      return 1;
+  if (select_in_window(ctl, name))
+    return 1;
+  /* Then every other window of the folder; the device caches the listing. */
+  if (ctl->browse_paged) {
+    for (first = 0; first < ctl->state->entry_total; first += BROWSE_WINDOW) {
+      if (first == ctl->browse_base)
+        continue;
+      if (!browse_load_window(ctl, (uint16_t) first, 0))
+        break;
+      if (select_in_window(ctl, name))
+        return 1;
     }
   }
   status(ctl, "No such entry");

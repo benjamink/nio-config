@@ -113,8 +113,44 @@ void test_ctl_browse(void)
   fake_dir_put("sd0:/", many, 250);
   amiga_list_select(&ctl.hosts, 0);
   CHECK(amiga_ctl_browse_open(&ctl));
+  /* ListPages: every entry is reachable, in windows loaded on demand. */
+  CHECK(ctl.entries.count == 250);
+  CHECK_STR(state.status, "Entries loaded");
+  CHECK(state.entry_count <= 200 && state.entry_total == 250);
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 0)->name, "F000");
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 249)->name, "F249");
+  CHECK(ctl.browse_base > 0);
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 3)->name, "F003");
+  CHECK(amiga_ctl_browse_row_entry(&ctl, 250) == NULL);
+  CHECK(amiga_ctl_browse_select_name(&ctl, "F249"));
+  CHECK(ctl.entries.selected == 249);
+  CHECK(amiga_ctl_browse_select_name(&ctl, "F001"));
+  CHECK(ctl.entries.selected == 1);
+
+  /* Only an explicit Refresh asks the device to read the folder again. */
+  {
+    unsigned before = fake_dir_pages_refreshes();
+
+    CHECK(amiga_ctl_browse_refresh(&ctl));
+    CHECK(fake_dir_pages_refreshes() == before);
+    CHECK(amiga_ctl_browse_reread(&ctl));
+    CHECK(fake_dir_pages_refreshes() == before + 1);
+    CHECK(amiga_ctl_browse_refresh(&ctl));
+    CHECK(fake_dir_pages_refreshes() == before + 1);
+  }
+
+  /* Firmware without ListPages: the whole folder through the old command,
+   * showing only what fits the table. */
+  fake_dir_pages_unsupported(1);
+  CHECK(amiga_ctl_browse_open(&ctl));
+  CHECK(!ctl.browse_paged);
   CHECK(ctl.entries.count == 200);
   CHECK_STR(state.status, "Showing 200 of 250 entries");
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 199)->name, "F199");
+  CHECK(amiga_ctl_browse_row_entry(&ctl, 200) == NULL);
+  fake_dir_pages_unsupported(0);
+  CHECK(amiga_ctl_browse_open(&ctl));
+  CHECK(ctl.browse_paged && ctl.entries.count == 250);
 
   /* No host at all. */
   while (state.host_count)

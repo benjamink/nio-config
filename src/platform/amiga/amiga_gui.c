@@ -2118,7 +2118,7 @@ static void gui_do_action(uint8_t action)
     break;
   case ACT_BROWSE_REFRESH:
     if (gctl->browse_open)
-      (void) amiga_ctl_browse_refresh(gctl);
+      (void) amiga_ctl_browse_reread(gctl);
     else
       (void) amiga_ctl_browse_open(gctl);
     break;

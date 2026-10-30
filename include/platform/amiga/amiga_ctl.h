@@ -81,6 +81,13 @@ typedef struct {
   amiga_list_t drives;
   uint8_t browse_host;
   uint8_t browse_open;
+  /* Browse keeps a window of state->entries, starting at entry browse_base of
+   * the sorted folder, and loads another window when a row falls outside it.
+   * browse_paged is 0 when the firmware has no ListPages: the whole folder is
+   * then read once, and only its first CONFIG_NIO_MAX_ENTRIES entries show. */
+  uint8_t browse_paged;
+  uint8_t browse_reread;    /* next load asks the device to re-read the folder */
+  uint16_t browse_base;
   uint8_t kick13;
   const char *fmount;
   const char *fumount;
@@ -135,6 +142,8 @@ int amiga_ctl_set_prefs(amiga_ctl_t *ctl, uint8_t date_format,
 
 int amiga_ctl_browse_open(amiga_ctl_t *ctl);
 int amiga_ctl_browse_refresh(amiga_ctl_t *ctl);
+/* Like browse_refresh, but the FujiNet reads the folder again first. */
+int amiga_ctl_browse_reread(amiga_ctl_t *ctl);
 int amiga_ctl_browse_activate(amiga_ctl_t *ctl);
 int amiga_ctl_browse_parent(amiga_ctl_t *ctl);
 int amiga_ctl_browse_select_name(amiga_ctl_t *ctl, const char *name);

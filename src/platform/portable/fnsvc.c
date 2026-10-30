@@ -21,6 +21,7 @@ enum {
 enum {
   NIO_FILE_VERSION = 1,
   NIO_FILE_LIST_DIRECTORY = 0x02,
+  NIO_FILE_LIST_PAGES = 0x07,
   NIO_FILE_RESOLVE_PATH = 0x05
 };
 
@@ -186,6 +187,119 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
       return fail(FNSVC_ERR_SHORT_RESPONSE);
   }
 
+  return 1;
+}
+
+/* ListPages request: version, uriLen, uri, startPage, pageSize,
+ * maxPayloadBytes, listFlags, maxNameBytes.  The reply starts with a 12 byte
+ * header; its budget leaves room for the FujiBus framing in a 1024 byte packet
+ * (four maximum length names are 920 bytes). */
+#define FNSVC_PAGES_HEADER 12
+#define FNSVC_PAGE_BUDGET ((FNSVC_IO_BUF_SIZE) >= 1024 ? 960 : \
+                           (FNSVC_IO_BUF_SIZE) - FNSVC_PAGES_HEADER - 32)
+#define FNSVC_PAGES_FLAG_SORT 0x01
+#define FNSVC_PAGES_FLAG_DIRS_FIRST 0x02
+#define FNSVC_PAGES_FLAG_REFRESH 0x04
+#define FNSVC_PAGES_RESP_MORE 0x01
+#define FNSVC_STATUS_UNSUPPORTED 8
+
+int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
+                     fnsvc_list_cb cb, void *ctx, uint32_t *total,
+                     uint16_t *delivered)
+{
+  uint16_t uri_len;
+  uint16_t off = 0;
+  uint8_t status;
+  uint16_t resp_len;
+  uint16_t pos;
+  uint8_t pages;
+  uint8_t p;
+  uint16_t count = 0;
+
+  if (!cb || !total || !delivered || (first_entry % FNSVC_PAGE_SIZE) != 0 ||
+      first_entry / FNSVC_PAGE_SIZE > 0xFFFFUL)
+    return fail(FNSVC_ERR_INVALID_ARG);
+  uri_len = (uint16_t) strlen(uri);
+  if ((size_t) uri_len + 12 > sizeof(req_buf))
+    return fail(FNSVC_ERR_REQUEST_TOO_LARGE);
+
+  last_error = FNSVC_ERR_NONE;
+  last_status = 0;
+  last_raw_error = 0;
+  last_response_len = 0;
+  *delivered = 0;
+
+  req_buf[off++] = NIO_FILE_VERSION;
+  put_u16le(&req_buf[off], uri_len);
+  off += 2;
+  memcpy(&req_buf[off], uri, uri_len);
+  off += uri_len;
+  put_u16le(&req_buf[off], (uint16_t) (first_entry / FNSVC_PAGE_SIZE));
+  off += 2;
+  req_buf[off++] = FNSVC_PAGE_SIZE;
+  put_u16le(&req_buf[off], FNSVC_PAGE_BUDGET);
+  off += 2;
+  req_buf[off++] = (uint8_t) (FNSVC_PAGES_FLAG_SORT | FNSVC_PAGES_FLAG_DIRS_FIRST |
+                              (refresh ? FNSVC_PAGES_FLAG_REFRESH : 0));
+  req_buf[off++] = 0; /* names up to the firmware's 220 byte limit */
+
+  if (!service_call(NIO_DEVICEID_FILE, NIO_FILE_LIST_PAGES, req_buf, off,
+                    resp_buf, sizeof(resp_buf), &status, &resp_len))
+    return fail(FNSVC_ERR_TRANSPORT);
+
+  last_status = status;
+  last_response_len = resp_len;
+  if (status == FNSVC_STATUS_UNSUPPORTED)
+    return fail(FNSVC_ERR_UNSUPPORTED);
+  if (status != FNSVC_STATUS_OK)
+    return fail(FNSVC_ERR_STATUS);
+  if (resp_len < FNSVC_PAGES_HEADER)
+    return fail(FNSVC_ERR_SHORT_RESPONSE);
+  if (resp_buf[0] != NIO_FILE_VERSION)
+    return fail(FNSVC_ERR_BAD_VERSION);
+
+  *total = get_u32le(&resp_buf[4]);
+  pages = resp_buf[11];
+  /* pageCount 0 with "more" set means the page did not fit the budget. */
+  if (pages == 0 && (resp_buf[1] & FNSVC_PAGES_RESP_MORE))
+    return fail(FNSVC_ERR_SHORT_RESPONSE);
+
+  pos = FNSVC_PAGES_HEADER;
+  for (p = 0; p < pages; p++) {
+    uint8_t entries;
+    uint16_t data_len;
+    uint16_t end;
+    uint8_t e;
+
+    if ((uint16_t) (pos + 3) > resp_len)
+      return fail(FNSVC_ERR_ENTRIES_BOUNDS);
+    entries = resp_buf[pos];
+    data_len = get_u16le(&resp_buf[pos + 1]);
+    pos += 3;
+    end = (uint16_t) (pos + data_len);
+    if (end > resp_len || end < pos)
+      return fail(FNSVC_ERR_ENTRIES_BOUNDS);
+    for (e = 0; e < entries; e++) {
+      uint8_t eflags;
+      uint8_t name_len;
+
+      if ((uint16_t) (pos + 2) > end)
+        return fail(FNSVC_ERR_ENTRY_BOUNDS);
+      eflags = resp_buf[pos++];
+      name_len = resp_buf[pos++];
+      if ((uint16_t) (pos + name_len + 8) > end || name_len >= sizeof(list_name))
+        return fail(FNSVC_ERR_ENTRY_BOUNDS);
+      memcpy(list_name, &resp_buf[pos], name_len);
+      list_name[name_len] = 0;
+      pos += name_len;
+      cb((uint8_t) (eflags & 0x01), list_name, get_u32le(&resp_buf[pos]),
+         get_u32le(&resp_buf[pos + 4]), ctx);
+      pos += 8;
+      count++;
+    }
+    pos = end;
+  }
+  *delivered = count;
   return 1;
 }
 
