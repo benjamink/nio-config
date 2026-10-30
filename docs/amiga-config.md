@@ -9,7 +9,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 
 | BBC / MS-DOS config | Amiga |
 | --- | --- |
-| Hosts: add, edit, delete, move, browse | **Hosts** page: list, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
+| Hosts: add, edit, delete, move, browse | **Hosts** page: list of up to 64 hosts, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
 | Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Add to Slot**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
