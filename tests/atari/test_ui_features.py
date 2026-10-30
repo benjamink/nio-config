@@ -35,12 +35,24 @@ class AttractMode(Session):
         from PIL import Image
         b = s.bridge
 
-        def colours():
+        def scanlines():
             image = Image.open(BytesIO(s.screenshot())).convert("RGB")
-            # Background pixels in the title, tab bar and list body.
-            return tuple(image.getpixel((5, y)) for y in (27, 35, 67))
+            # The left margin contains no text; include every line so a band
+            # boundary moving by even one scanline is visible to the test.
+            return tuple(image.getpixel((5, y)) for y in range(image.height))
 
-        normal = colours()
+        normal_lines = scanlines()
+        normal = tuple(normal_lines[y] for y in (27, 35, 67))
+        b.pause()
+        try:
+            normal_samples = []
+            for _ in range(24):
+                b.cycles(35568)
+                normal_samples.append(scanlines())
+            self.assertTrue(all(sample == normal_samples[0] for sample in normal_samples),
+                            "colour boundaries moved in normal mode")
+        finally:
+            b.resume()
         # The OS sets the colour shift from the middle RTC byte, changing it
         # every 256 frames. Start at a known value without waiting ten minutes.
         b.pause()
@@ -59,20 +71,23 @@ class AttractMode(Session):
             for _ in range(12):
                 b.poke(0x13, 0x30)
                 b.cycles(35568)
-                samples.append(colours())
-            active = samples[0]
+                samples.append(scanlines())
+            active = tuple(samples[0][y] for y in (27, 35, 67))
             self.assertTrue(all(a != n for a, n in zip(active, normal)), (normal, active))
-            self.assertTrue(all(sample == active for sample in samples), samples)
+            self.assertTrue(all(sample == samples[0] for sample in samples),
+                            "colour boundaries moved in attract mode")
             b.poke(0x13, 0x40)
             b.cycles(35568 * 2)
-            shifted = colours()
+            shifted_lines = scanlines()
+            shifted = tuple(shifted_lines[y] for y in (27, 35, 67))
             self.assertTrue(all(a != c for a, c in zip(active, shifted)), (active, shifted))
         finally:
             b.resume()
         s.key("Z")
         time.sleep(.3)
         self.assertEqual(b.peek(0x4d, 1)[0] & 0x80, 0)
-        self.assertEqual(colours(), normal)
+        restored_lines = scanlines()
+        self.assertEqual(tuple(restored_lines[y] for y in (27, 35, 67)), normal)
 
     def test_all_rows_follow_os_attract_without_flashing(self):
         self.check_attract(self.s)

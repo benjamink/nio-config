@@ -33,6 +33,11 @@ NMI_ON  = $C0
 VVBLKD  = $0224
 XITVBV  = $E462
 
+        .segment "ZEROPAGE"
+next_fg: .res   1
+next_bg: .res   1
+dlirow:  .res   1
+
         .segment "CODE"
 
 ; cgetc normally restores and updates the OS text cursor through OLDADR.
@@ -157,7 +162,7 @@ _scr_coldstart:
 ; leave the colours out of step with the rows.  When scr_present() has asked
 ; (scr_swap), it also switches the display list to the freshly drawn screen and
 ; its row colours, so a redraw appears in one frame.
-vbi:    lda     #0
+vbi:    lda     #1
         sta     dlirow
         lda     _scr_swap
         beq     @done
@@ -201,40 +206,48 @@ vbi:    lda     #0
         lda     #NMI_ON
         sta     _scr_nmi_mode
         sta     NMIEN
-@done:  jmp     XITVBV
+@done:  ; Prepare row 1 after the OS updates the attract colours.
+        ldx     #1
+        jsr     prepare
+        jmp     XITVBV
 
+; The two colours are ready before the DLI fires. Reach WSYNC early and
+; write both registers immediately after the next scanline boundary;
+; prepare the following row only after the timing-sensitive writes.
 dli:    pha
         txa
         pha
-        ldx     dlirow
-        inx
-        cpx     #24
-        bcc     @store
-        ldx     #0
-        stx     dlirow
-        ldx     #23             ; below the last row keeps its colours
-        bne     @set
-@store: stx     dlirow
-@set:   lda     _row_fg,x
-        eor     COLRSH
-        and     DRKMSK
-        pha
-        lda     _row_bg,x
-        eor     COLRSH
-        and     DRKMSK
-        tax
-        pla
+        lda     next_fg
+        ldx     next_bg
         sta     WSYNC
+        sta     WSYNC           ; keep the existing band boundary one line later
         sta     COLPF1
         stx     COLPF2
         stx     COLBK
+        ldx     dlirow
+        inx
+        cpx     #24
+        bcc     :+
+        dex
+:       stx     dlirow
+        jsr     prepare
         pla
         tax
         pla
         rti
 
+prepare:
+        lda     _row_fg,x
+        eor     COLRSH
+        and     DRKMSK
+        sta     next_fg
+        lda     _row_bg,x
+        eor     COLRSH
+        and     DRKMSK
+        sta     next_bg
+        rts
+
         .segment "BSS"
-dlirow: .res    1
 siotmp: .res    1
 _scr_nmi_mode: .res 1
 _scr_reading:  .res 1
