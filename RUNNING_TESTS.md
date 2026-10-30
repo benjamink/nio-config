@@ -227,7 +227,9 @@ boot disk and an assigned XEX (the firmware's PicoBoot wrapper). It needs `dir2a
 firmware, and `proctest.xex` from `repos/nio-core-apps`.
 It also checks the monochrome mount screen and that a failed mount restores the
 normal tab and row-colour interrupts. The production selector is tested with
-64 KB, 128 KB and 1088 KB memory models. Long-name cases verify traffic-level
+64 KB, 128 KB and 1088 KB memory models. Splash tests observe the image during
+loading, check that the bitmap stays intact until the app takes over, and boot
+both 64 KB and 128 KB machines. Long-name cases verify traffic-level
 reuse, packed bank-cache eviction, full 220-byte listing names, and drive assignment
 across a switch through Setup. The simulated Wi-Fi test joins a network, rejects a
 second one, checks a delayed restoration and automatic refresh, then retries an

@@ -88,6 +88,16 @@ it probes. A 64 KB machine uses the standard image; a machine with those two
 banks uses the banked image. The banked XEX needs the selector: it cannot be
 loaded directly without first selecting the banks.
 
+As soon as the selector starts, it displays the existing FujiNet NIO artwork
+while PicoBoot loads the chosen app. Its uncompressed 960-byte monochrome
+bitmap uses `$BC00–$BFBF`, above both app layouts and their C stack; its small
+display list lives at `$0500`, away from PicoBoot's `$0700` sector buffer and
+the app's `$0600` display list. The app switches to its own screen after it
+starts. Reset may reuse this memory for the OS screen. The source image is
+`images/config-nio-160x96x4.png`; `python3 scripts/atari_splash_bitmap.py`
+regenerates the checked-in ANTIC mode B bitmap (Pillow is needed only for
+regeneration, not for builds).
+
 The selector uses the resident entry points and DD sector layout of the pinned
 PicoBoot binary; the boot-disk build checks the binary hash. The selector reads
 its two executables from the first MyDOS directory sector. The default manifest

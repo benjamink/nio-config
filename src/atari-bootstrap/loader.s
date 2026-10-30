@@ -6,9 +6,55 @@ SIOV    = $E459
 BUF     = $0700
 DOLOAD  = $084C                 ; PicoBoot DD's documented build, see README
 SECMASK = $092B
+SPLASH  = $BC00
+SPLDL   = $0500
+SDLSTL  = $0230
+COLOR0  = $02C4
+COLOR1  = $02C5
+COLOR2  = $02C6
+COLOR4  = $02C8
 
         .segment "CODE"
 loader:
+        ; BASIC must be switched out before writing the high-RAM bitmap.
+        lda PORTB
+        ora #2
+        sta PORTB
+        ; ANTIC's page-5 display list and the 960-byte bitmap survive both
+        ; XEX layouts and stay in place until the app installs its screen.
+        ldx #0
+copy_image:
+        lda splash_image,x
+        sta SPLASH,x
+        lda splash_image+$100,x
+        sta SPLASH+$100,x
+        lda splash_image+$200,x
+        sta SPLASH+$200,x
+        inx
+        bne copy_image
+        ldx #0
+copy_tail:
+        lda splash_image+$300,x
+        sta SPLASH+$300,x
+        inx
+        cpx #192
+        bne copy_tail
+        ldx #splash_dl_end-splash_dl-1
+copy_dl:
+        lda splash_dl,x
+        sta SPLDL,x
+        dex
+        bpl copy_dl
+        lda #0
+        sta COLOR2
+        sta COLOR4
+        lda #$0e
+        sta COLOR0
+        sta COLOR1
+        lda #<SPLDL
+        sta SDLSTL
+        lda #>SPLDL
+        sta SDLSTL+1
         ; Preserve both bytes, including on a 64K machine where they alias.
         lda #$FF
         sta PORTB
@@ -153,3 +199,18 @@ base_byte: .byte 0
 bank_byte: .byte 0
 use_bank: .byte 0
 entry_offset: .byte 0
+
+; ANTIC mode B: 160 x 48 pixels, doubled vertically by the display mode.
+; Blank lines center the bitmap; no DLI or SIO hooks are required.
+splash_dl:
+        .repeat 6
+        .byte $70
+        .endrepeat
+        .byte $4B, <SPLASH, >SPLASH
+        .repeat 47
+        .byte $0B
+        .endrepeat
+        .byte $41, <SPLDL, >SPLDL
+splash_dl_end:
+splash_image:
+        .incbin "src/atari-bootstrap/assets/splash.bin"

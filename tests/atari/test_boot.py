@@ -236,6 +236,45 @@ class BootTests(unittest.TestCase):
             self.assertEqual(sum(bool(r.strip()) for r in v.screen()[3:21]), 18)
         boot(atr, scenario, data=data, ram_kb=128, xex=BANKED_XEX, out=evidence)
 
+    def check_splash_boot(self, ram_kb):
+        atr = make_selecting_atr(self.tmp.name)
+        expected = (REPO / "src/atari-bootstrap/assets/splash.bin").read_bytes()
+        def scenario(v):
+            end = time.monotonic() + 120
+            saw_splash = False
+            while time.monotonic() < end:
+                if v.bridge.peek16(0x230) == 0x0500:
+                    saw_splash = True
+                    from io import BytesIO
+                    from PIL import Image
+                    image_seen = False
+                    while v.bridge.peek16(0x230) == 0x0500 and time.monotonic() < end:
+                        self.assertEqual(v.bridge.peek(0xbc00, len(expected)), expected,
+                                         "application loading overwrote the image")
+                        data = v.screenshot()
+                        image = Image.open(BytesIO(data)).convert("RGB")
+                        pixels = image.tobytes()
+                        if sum(1 for i in range(0, len(pixels), 3)
+                               if min(pixels[i:i + 3]) > 100) > 500:
+                            image_seen = True
+                            (Path(self.tmp.name) / ("splash-%d.png" % ram_kb)).write_bytes(data)
+                        time.sleep(.05)
+                    self.assertLess(time.monotonic(), end, "loading image never handed off")
+                    self.assertTrue(image_seen, "a complete loading image was never rendered")
+                    break
+                time.sleep(.01)
+            self.assertTrue(saw_splash, "the loading image was never displayed")
+            v.wait_for("Hosts", row=1, timeout=240)
+            self.assertEqual(bool(v.bridge.peek(0xd301, 1)[0] & 0x10), ram_kb == 64)
+        boot(atr, scenario, basic=True, ram_kb=ram_kb,
+             xex=BANKED_XEX if ram_kb != 64 else XEX)
+
+    def test_splash_boot_64k(self):
+        self.check_splash_boot(64)
+
+    def test_splash_boot_banked(self):
+        self.check_splash_boot(128)
+
     def test_attract_mode_banked(self):
         from test_ui_features import AttractMode
         atr = make_selecting_atr(self.tmp.name)
