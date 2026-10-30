@@ -54,6 +54,7 @@ void test_ctl_hosts(void)
   CHECK(amiga_ctl_host_remove(&ctl));
   CHECK(state.host_count == 3 && ctl.hosts.selected == 2);
 
+  CHECK(CONFIG_NIO_MAX_HOSTS == 64);
   while (state.host_count < CONFIG_NIO_MAX_HOSTS)
     CHECK(amiga_ctl_host_add(&ctl, "tnfs://h"));
   CHECK(!amiga_ctl_host_add(&ctl, "tnfs://one-too-many"));

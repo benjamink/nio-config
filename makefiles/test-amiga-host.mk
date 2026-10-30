@@ -10,7 +10,8 @@ TEST_BIN := $(TEST_DIR)/run_tests
 TEST_CFLAGS := -std=c99 -Wall -Wextra -O0 -g \
 	-Iinclude -Iinclude/common -Iinclude/platform/amiga -Itests/amiga \
 	-I$(FUJINET_NIO_LIB)/include \
-	-DFNSVC_LIST_MAX_PAYLOAD=420 -DCONFIG_NIO_MAX_ENTRIES=200
+	-DFNSVC_LIST_MAX_PAYLOAD=420 -DCONFIG_NIO_MAX_ENTRIES=200 \
+	-DCONFIG_NIO_MAX_HOSTS=64 -DCONFIG_NIO_TEXT_MAX=16384
 
 AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_drives.c \
