@@ -236,7 +236,7 @@ def _launch_beebium(beebium_paths, real_fujinet):
 
     extra_args = [
         "--sideways",
-        f"{beebium_paths['fn_slot']}:rom:{beebium_paths['fn_rom']}",
+        f"slot={beebium_paths['fn_slot']}:type=rom:image={beebium_paths['fn_rom']}",
         "--host-serial",
         f"mode=device:path={real_fujinet.pty_path}",
     ]
@@ -244,12 +244,15 @@ def _launch_beebium(beebium_paths, real_fujinet):
     with Beebium.launch(
         mos_filepath=str(beebium_paths["mos"]),
         basic_filepath=str(beebium_paths["basic"]) if beebium_paths["basic"] else None,
-        server_filepath=str(beebium_paths["server"]),
+        server=str(beebium_paths["server"]),
         extra_args=extra_args,
     ) as bbc:
         if not bbc.system.wait_for_ready(timeout=5.0):
             raise RuntimeError("Beebium did not report READY within 5 seconds")
         bbc.system.set_speed_multiplier(0.0)
+        # Server READY precedes MOS boot completion; wait before typing keys.
+        from helpers import wait_for_screen_text
+        wait_for_screen_text(bbc, ">", timeout=10.0)
         yield bbc
 
 
