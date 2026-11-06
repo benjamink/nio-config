@@ -49,3 +49,11 @@ make test-amiga-host              # host-side logic tests (gcc only)
 ```
 
 See [docs/amiga-config.md](docs/amiga-config.md).
+
+## Palm OS 3.5
+
+`make palmos FUJINET_NIO_LIB=../fujinet-nio-lib` builds `NioConfig.prc`
+against installed NioLib ABI 1.2 or later (USB is capability-gated). This opt-in native transport-settings UI does
+not embed a transport or replace other platforms' Hosts/Devices screens.
+See [Palm configuration](docs/palmos-config.md) for Docker builds, tests,
+library dependencies, USB capability checks and current hardware qualification.

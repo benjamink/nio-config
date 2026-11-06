@@ -72,3 +72,10 @@ regen-amiga-icons:
 	mkdir -p build
 	python3 amiga/tools/mklogo.py
 	cd amiga && python3 tools/mkinfo.py --preview ../build/amiga-icon-preview.png
+
+# Palm is opt-in and uses the installed NioLib, not the static platform core.
+.PHONY: palmos test-palmos
+palmos:
+	$(MAKE) -f makefiles/palmos.mk FUJINET_NIO_LIB=$(or $(FUJINET_NIO_LIB),../fujinet-nio-lib) $(if $(NIOLIB_BUILD),NIOLIB_BUILD=$(NIOLIB_BUILD)) $(if $(PALMOS_BUILD),PALMOS_BUILD=$(PALMOS_BUILD))
+test-palmos:
+	$(or $(PALMOS_PYTHON),python3) -m unittest discover -s tests/palmos -v

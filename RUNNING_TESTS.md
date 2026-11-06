@@ -248,3 +248,20 @@ after changes to the screen code or the SIO path.
 
 `scripts/atari_shot.py` and `scripts/atari_shot_netsio.py` run the same harness
 from the command line with a key script and screenshots (see `docs/atari-config.md`).
+
+## Palm shared-library configuration
+
+Build with the existing Palm Docker image as described in
+[palmos-config.md](docs/palmos-config.md), then run:
+
+```sh
+make test-palmos PALMOS_PYTHON=../fujinet-nio-lib/build/palmos-shared/venv/bin/python
+```
+
+The focused suite executes the compiled m68k app and installed-library code
+with mocked Palm OS/transport peers. No hardware, live serial ports or running
+NIO backend are used. The library defaults to `build/palmos-shared-usb`; override
+`PALMOS_SHARED_BUILD` and `PALMOS_CONFIG_BUILD` with absolute paths when using
+other build outputs. Install the library's `tests/requirements-palmos-shared.txt`
+in the selected Python environment first. A missing Unicorn or build artifact
+is not a passed compiled-code test.
