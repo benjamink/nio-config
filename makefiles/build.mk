@@ -95,6 +95,13 @@ endif
 ifeq ($(TARGET),amiga)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif
+# The C64 runs the Atari's front end and compact core over its own screen and
+# keyboard (src/platform/c64); only the display and input layers differ.
+ifeq ($(TARGET),c64)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
+CONFIG_NIO_SRCS += $(SRC_DIR)/platform/atari/atari_app.c $(SRC_DIR)/platform/atari/atari_core.c
+CONFIG_NIO_ASM_SRCS += $(SRC_DIR)/platform/atari/atari_compose.s $(SRC_DIR)/platform/atari/atari_view.s
+endif
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
 # shares the same BBC state API; its XRAM table selection does not change this
 # wrapper's interface or storage requirements.
@@ -195,6 +202,9 @@ $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BI
 
 ifeq ($(TARGET),atari)
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(ATARI_LINK_CONFIG)
+endif
+ifeq ($(TARGET),c64)
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): $(C64_LINK_CONFIG)
 endif
 
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_OBJS) $(CONFIG_NIO_ASM_OBJS) $(CONFIG_NIO_DEPS) $(NIO_LIB_FILE) | $(BIN_DIR)

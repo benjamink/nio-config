@@ -6,6 +6,18 @@
 #define SCR_COLS 40
 #define SCR_ROWS 24
 
+/* RTCLOK's low byte. */
+#define SCR_JIFFY (*(volatile uint8_t *) 0x14)
+
+/* The app's on-screen text that names this machine's keys. */
+#define UI_HINT_HOSTS  "RET Browse A Add E Edit D Del OPT Boot"
+#define UI_HINT_BROWSE "RET Open </> BS Up F Filter H Help"
+#define UI_HINT_DRIVES "RET Pick X Eject R Read-only OPT Boot"
+#define UI_HINT_SETUP  "RET Join Wi-Fi R Refresh OPT Boot"
+#define UI_INFO_DRIVES "OPTION boots with these drives mounted"
+#define UI_HELP_BROWSE "Browse|RET open; up/down move; </> page|SPACE/B page; BS up; R reload|F filter (* ?; blank clears)"
+#define UI_HELP_GLOBAL "TAB/SELECT change tab|OPTION/START boot|Joystick moves; trigger RET|H or HELP opens this"
+
 /* Colour schemes, one per screen row. */
 enum {
   T_TITLE, T_TABS, T_FIELD, T_BODY, T_SEL, T_INFO, T_HINT, T_STATUS,

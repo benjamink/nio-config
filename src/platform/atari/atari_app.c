@@ -4,8 +4,14 @@
 #include "fujinet-nio.h"
 
 #include "atari_core.h"
+/* The same app runs on the C64, over that machine's screen and keyboard. */
+#ifdef __C64__
+#include "c64_input.h"
+#include "c64_scr.h"
+#else
 #include "atari_input.h"
 #include "atari_scr.h"
+#endif
 
 #include <string.h>
 
@@ -36,7 +42,9 @@
 #define ROW_STATUS 23
 #define NO_UNIT    0xFF
 
+#ifndef __C64__
 #define SHFLOK (*(volatile uint8_t *) 0x02BE)
+#endif
 
 /* The long buffers live in low memory (see makefiles/cc65-atari-nio.cfg), which
  * nothing clears: path is set in main(), the others are written before read. */
@@ -339,7 +347,7 @@ static void idle_tick(void)
     return;
   if (tab == TAB_SETUP && wifi_watch) {
     static uint8_t last;
-    uint8_t now = *(volatile uint8_t *) 0x14;
+    uint8_t now = SCR_JIFFY;
     if ((uint8_t) (now - last) >= 200) {
       last = now;
       scr_reading_on();
@@ -509,7 +517,7 @@ static void draw_hosts(void)
   uint8_t r;
   uint16_t pos;
 
-  draw_frame("RET Browse A Add E Edit D Del OPT Boot");
+  draw_frame(UI_HINT_HOSTS);
   pos = host_sel;
   keep_in_view(&pos, &top, host_count);
   scr_text(ROW_FIELD, 1, host_count ? host_ptr[host_sel] : "", 38);
@@ -690,7 +698,7 @@ static void draw_browse(void)
 
   if (browse_valid && list_stale) /* rebuild before drawing any of the new frame */
     (void) browse_goto(bpage, brow, 0);
-  draw_frame("RET Open </> BS Up F Filter H Help");
+  draw_frame(UI_HINT_BROWSE);
   if (!browse_valid) {
     for (r = 0; r < LIST_ROWS; r++)
       scr_fill((uint8_t) (LIST_ROW + r), 0, SCR_COLS, ' ');
@@ -736,7 +744,7 @@ static void draw_drives(void)
 {
   uint8_t u;
 
-  draw_frame("RET Pick X Eject R Read-only OPT Boot");
+  draw_frame(UI_HINT_DRIVES);
   if (drive_on[drive_sel])
     tail_text(ROW_FIELD, drive_uri[drive_sel]);
   for (u = 0; u < CORE_UNITS; u++) {
@@ -757,7 +765,7 @@ static void draw_drives(void)
   }
   for (u = CORE_UNITS; u < LIST_ROWS; u++)
     scr_fill((uint8_t) (LIST_ROW + u), 0, SCR_COLS, ' ');
-  scr_text(ROW_INFO, 1, "OPTION boots with these drives mounted", 38);
+  scr_text(ROW_INFO, 1, UI_INFO_DRIVES, 38);
 }
 #pragma code-name(pop)
 
@@ -807,7 +815,7 @@ SETUP_SCOPE void SETUP_IMPL(draw_setup)(void)
   uint8_t i;
 
   mac = line;
-  draw_frame("RET Join Wi-Fi R Refresh OPT Boot");
+  draw_frame(UI_HINT_SETUP);
   for (i = 0; i < LIST_ROWS; i++)
     scr_fill((uint8_t) (LIST_ROW + i), 0, SCR_COLS, ' ');
   list_row(LIST_ROW, 1);
@@ -1060,14 +1068,16 @@ uint8_t view_move(void);
 /* Packed help text avoids a large cc65 call sequence on this tight target.
  * | separates display rows and each tab's text ends with a NUL. */
 static const char help_hosts[] = "Hosts|RET browse, A add, E edit, D delete";
-static const char help_browse[] = "Browse|RET open; up/down move; </> page|SPACE/B page; BS up; R reload|F filter (* ?; blank clears)";
+static const char help_browse[] = UI_HELP_BROWSE;
 static const char help_drives[] = "Drives|RET pick; X eject; R protect|1-8 select drive";
 static const char help_setup[] = "Setup|RET join Wi-Fi; R refresh";
 static const char *const help_tab[] = { help_hosts, help_browse, help_drives, help_setup };
-static const char help_global[] = "TAB/SELECT change tab|OPTION/START boot|Joystick moves; trigger RET|H or HELP opens this";
+static const char help_global[] = UI_HELP_GLOBAL;
 
+#ifndef __C64__
 void help_rows_run(void);
 #define help_rows(row, p) do { scr_zr = (row); scr_zs = (p); help_rows_run(); } while (0)
+#endif
 
 /* Called only by the main loop: editors and existing dialogs consume H themselves. */
 static void show_help(void)
@@ -1323,21 +1333,25 @@ static void update_selection(void)
 static void scroll_one(uint16_t old_top)
 {
   uint8_t r;
+#ifdef __C64__
+#define COPY_ROW(to, from) scr_copy_row((to), (from))
+#else
   uint8_t *dst;
   uint8_t *src;
+#define COPY_ROW(to, from) \
+      dst = (uint8_t *) (scr_rowlo[to] | (scr_rowhi[to] << 8)); \
+      src = (uint8_t *) (scr_rowlo[from] | (scr_rowhi[from] << 8)); \
+      memcpy(dst, src, SCR_COLS)
+#endif
 
   if (top > old_top) {                  /* rows move up */
     for (r = LIST_ROW; r < LIST_ROW + LIST_ROWS - 1; r++) {
-      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
-      src = (uint8_t *) (scr_rowlo[r + 1] | (scr_rowhi[r + 1] << 8));
-      memcpy(dst, src, SCR_COLS);
+      COPY_ROW(r, r + 1);
     }
     r = LIST_ROWS - 1;
   } else {                              /* rows move down */
     for (r = LIST_ROW + LIST_ROWS - 1; r > LIST_ROW; r--) {
-      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
-      src = (uint8_t *) (scr_rowlo[r - 1] | (scr_rowhi[r - 1] << 8));
-      memcpy(dst, src, SCR_COLS);
+      COPY_ROW(r, r - 1);
     }
     r = 0;
   }
@@ -1448,7 +1462,9 @@ int main(void)
   status[0] = 0;
   status[sizeof(status) - 1] = 0;
   marq_cached = 0;
+#ifndef __C64__
   SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
+#endif
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);
   scr_text(ROW_STATUS, 1, "Starting FujiNet...", 38);
@@ -1467,8 +1483,10 @@ int main(void)
     scr_text(ROW_STATUS, 1, failed == 1 ? "FujiNet is not responding" :
              failed == 2 ? "FujiNet is not ready" : "Cannot read settings", 29);
     scr_uint(ROW_STATUS, 30, core_error, 3);
+#ifndef __C64__
     scr_text(ROW_STATUS, 34, "sio", 3);
     scr_uint(ROW_STATUS, 36, fn_atari_last_sio_status(), 3);
+#endif
     scr_present();
     for (;;)
       ;
