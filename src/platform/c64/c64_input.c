@@ -26,6 +26,7 @@
 #define PET_ARROW_LEFT 0x5F  /* the key beside 1: the C64's usual Escape */
 #define PET_F1     0x85
 #define PET_F3     0x86
+#define PET_F5     0x87
 #define PET_F7     0x88
 #define PET_UP     0x91
 #define PET_LEFT   0x9D
@@ -95,6 +96,7 @@ static uint8_t from_petscii(uint8_t pet)
   case PET_HOME:
   case PET_F3:         return K_TAB;
   case PET_F1:         return K_BOOT;
+  case PET_F5:         return K_DEMO;
   case PET_F7:         return K_HELP;
   case PET_POUND:      return '\\';
   case PET_C_AT:       return '_';

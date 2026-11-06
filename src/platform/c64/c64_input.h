@@ -15,6 +15,7 @@
 #define K_RET   0x0D
 #define K_HELP  0x11
 #define K_BOOT  0x01
+#define K_DEMO  0x02
 
 /* Wait until the stick and keyboard are idle. */
 void input_settle(void);

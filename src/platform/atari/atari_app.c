@@ -1401,6 +1401,10 @@ static void run(void)
       boot_now();
       continue;
     }
+#ifdef __C64__
+    if (k == K_DEMO)
+      c64_run_demo();
+#endif
     if (k == K_TAB) {
       set_tab((uint8_t) ((tab + 1) % TAB_COUNT));
       continue;

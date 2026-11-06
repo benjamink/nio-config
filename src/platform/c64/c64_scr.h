@@ -19,7 +19,7 @@
 #define UI_HINT_SETUP  "RET Join Wi-Fi R Refresh F1 Boot"
 #define UI_INFO_DRIVES "F1 boots with these drives mounted"
 #define UI_HELP_BROWSE "Browse|RET open; up/down move; </> page|SPACE/B page; DEL up; R reload|F filter (* ?; blank clears)"
-#define UI_HELP_GLOBAL "F3/HOME change tab|F1 boot|Joystick moves; fire RET|H or F7 opens this"
+#define UI_HELP_GLOBAL "F3/HOME change tab|F1 boot|F5 run the FujiNet demo|Joystick moves; fire RET|H or F7 opens this"
 
 /* Colour schemes, one per screen row. */
 enum {
@@ -42,6 +42,8 @@ enum {
 
 void scr_init(void);
 void scr_coldstart(void);
+/* Load and run the demo on the boot disk (c64_run.s). Does not return. */
+void c64_run_demo(void);
 void scr_theme(uint8_t row, uint8_t theme);
 /* Copy a row's text to another row. Reverse video belongs to the row, not the text. */
 void scr_copy_row(uint8_t to, uint8_t from);

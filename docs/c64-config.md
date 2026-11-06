@@ -15,6 +15,7 @@ Run it from the boot disk with `LOAD"*",8,1` and `RUN`.
 | RETURN, or fire | Choose |
 | F1 | Mount the assigned drives and restart the machine |
 | F3 or HOME | Change tab |
+| F5 | Run the FujiNet demo from the boot disk |
 | F7 or H | Help |
 | RUN/STOP or the left-arrow key | Cancel |
 | DEL | Up a level, and erase when editing |
@@ -43,4 +44,12 @@ The program loads at `$0801` with cc65's usual BASIC stub, and the startup code 
 out, which leaves up to `$CFFF`. It takes about 40 KB of the 51 KB there
 (`makefiles/cc65-c64-nio.cfg`, and `build/c64/bin/config-nio.map`). The app's assembly passes
 arguments in zero page, which is why the configuration gives it BASIC's. The app never
-returns to BASIC: it leaves through the reset vector.
+returns to BASIC as it found it: F1 leaves through the reset vector.
+
+## The demo
+
+F5 loads and runs `FUJIDEMO` from drive 8, which is the boot disk until F1 mounts something
+else. The demo's sources and build are in `repos/nio-core-apps`. The program loads over the
+app, so `src/platform/c64/c64_run.s` copies itself to the cassette buffer, sets the KERNAL and
+BASIC up again, and uses BASIC's own steps to load and run it. If the file isn't there, the
+result is the usual `?FILE NOT FOUND ERROR` and `READY.`, and `LOAD"*",8,1` gets back to the app.
