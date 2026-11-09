@@ -134,7 +134,7 @@ NIO_ATARI_BOOT=1 python3 -m unittest test_boot -v
 ## Memory
 
 The Atari is the tightest target: the portable layer (`src/platform/portable`)
-does not fit, so the Atari has a compact core of its own (`atari_core.c`) and
+does not fit, so the Atari has a compact core of its own (`compact_core.c`) and
 does not use `fnsvc`, `fnctl` or conio.
 
 * `$0650-$0BFF` (page 6 after the display list, and the pages PicoBoot's loader used)
@@ -155,13 +155,13 @@ does not use `fnsvc`, `fnctl` or conio.
   (C stack below it). The first chunk also sets `BASICF` (BASIC stays off across
   RESET) and points `DOSVEC` at the program start, so RESET restarts the app.
 * URIs may be 196 characters (host + path + name); a saved host 100. The buffers
-  that hold them are shared by design; atari_app.c lists who may use each.
+  that hold them are shared by design; compact_app.c lists who may use each.
 * Saved hosts live packed in one 1200 byte pool (up to 24); a drive keeps only
   the last 100 characters of its URI for display and the catalogue holds the
   rest. Two 1000 byte screens make up the double buffer.
 * One 512 byte buffer serves the app store, slot catalogue and directory pages;
   host text and Wi-Fi scan results borrow the directory page buffer.
-* URI composition is in `atari_compose.s`, with zero-page arguments to avoid
+* URI composition is in `compact_compose.s`, with zero-page arguments to avoid
   cc65's parameter-passing overhead. `tests/atari/test_compose.py` compares it
   with the original C rules and checks output limits under `soft65c02`.
 

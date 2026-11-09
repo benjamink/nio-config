@@ -1,11 +1,13 @@
-/* FujiNet NIO Config for the Atari: Hosts, Browse, Drives and Setup tabs on a
- * 40x24 text screen.  atari_core.c holds the data and the FujiNet calls;
- * this file is the screen and the key handling. */
+/* FujiNet NIO Config, the compact launcher: Hosts, Browse, Drives and Setup tabs on a
+ * 40x24 text screen.  compact_core.c holds the data and the FujiNet calls;
+ * this file is the screen and the key handling, and runs on every machine that
+ * provides the interface in README.md.  There is nothing machine specific here. */
 #include "fujinet-nio.h"
 
-#include "atari_core.h"
-#include "atari_input.h"
-#include "atari_scr.h"
+#include "compact_core.h"
+/* The machine's screen and keyboard, and the few hooks marked PLATFORM_ or SCR_: the
+ * compact_platform.h in the target's own folder (src/platform/<target>). */
+#include "compact_platform.h"
 
 #include <string.h>
 
@@ -19,7 +21,7 @@
  *   entries  (core_scratch)  the directory page, borrowed for host text, a
  *            name being opened, and the Wi-Fi scan and SSID/password; each
  *            borrower marks the page stale so the next draw reloads it.
- *   iobuf    (atari_core.c)  every FujiNet request/response; never held.
+ *   iobuf    (compact_core.c)  every FujiNet request/response; never held.
  *   line     one row of text; the detail line and the MAC.
  */
 #define TAB_HOSTS  0
@@ -35,8 +37,6 @@
 #define ROW_HINT   22
 #define ROW_STATUS 23
 #define NO_UNIT    0xFF
-
-#define SHFLOK (*(volatile uint8_t *) 0x02BE)
 
 /* The long buffers live in low memory (see makefiles/cc65-atari-nio.cfg), which
  * nothing clears: path is set in main(), the others are written before read. */
@@ -339,7 +339,7 @@ static void idle_tick(void)
     return;
   if (tab == TAB_SETUP && wifi_watch) {
     static uint8_t last;
-    uint8_t now = *(volatile uint8_t *) 0x14;
+    uint8_t now = SCR_JIFFY;
     if ((uint8_t) (now - last) >= 200) {
       last = now;
       scr_reading_on();
@@ -509,7 +509,7 @@ static void draw_hosts(void)
   uint8_t r;
   uint16_t pos;
 
-  draw_frame("RET Browse A Add E Edit D Del OPT Boot");
+  draw_frame(UI_HINT_HOSTS);
   pos = host_sel;
   keep_in_view(&pos, &top, host_count);
   scr_text(ROW_FIELD, 1, host_count ? host_ptr[host_sel] : "", 38);
@@ -690,7 +690,7 @@ static void draw_browse(void)
 
   if (browse_valid && list_stale) /* rebuild before drawing any of the new frame */
     (void) browse_goto(bpage, brow, 0);
-  draw_frame("RET Open </> BS Up F Filter H Help");
+  draw_frame(UI_HINT_BROWSE);
   if (!browse_valid) {
     for (r = 0; r < LIST_ROWS; r++)
       scr_fill((uint8_t) (LIST_ROW + r), 0, SCR_COLS, ' ');
@@ -736,7 +736,7 @@ static void draw_drives(void)
 {
   uint8_t u;
 
-  draw_frame("RET Pick X Eject R Read-only OPT Boot");
+  draw_frame(UI_HINT_DRIVES);
   if (drive_on[drive_sel])
     tail_text(ROW_FIELD, drive_uri[drive_sel]);
   for (u = 0; u < CORE_UNITS; u++) {
@@ -757,7 +757,7 @@ static void draw_drives(void)
   }
   for (u = CORE_UNITS; u < LIST_ROWS; u++)
     scr_fill((uint8_t) (LIST_ROW + u), 0, SCR_COLS, ' ');
-  scr_text(ROW_INFO, 1, "OPTION boots with these drives mounted", 38);
+  scr_text(ROW_INFO, 1, UI_INFO_DRIVES, 38);
 }
 #pragma code-name(pop)
 
@@ -807,7 +807,7 @@ SETUP_SCOPE void SETUP_IMPL(draw_setup)(void)
   uint8_t i;
 
   mac = line;
-  draw_frame("RET Join Wi-Fi R Refresh OPT Boot");
+  draw_frame(UI_HINT_SETUP);
   for (i = 0; i < LIST_ROWS; i++)
     scr_fill((uint8_t) (LIST_ROW + i), 0, SCR_COLS, ' ');
   list_row(LIST_ROW, 1);
@@ -1060,14 +1060,11 @@ uint8_t view_move(void);
 /* Packed help text avoids a large cc65 call sequence on this tight target.
  * | separates display rows and each tab's text ends with a NUL. */
 static const char help_hosts[] = "Hosts|RET browse, A add, E edit, D delete";
-static const char help_browse[] = "Browse|RET open; up/down move; </> page|SPACE/B page; BS up; R reload|F filter (* ?; blank clears)";
+static const char help_browse[] = UI_HELP_BROWSE;
 static const char help_drives[] = "Drives|RET pick; X eject; R protect|1-8 select drive";
 static const char help_setup[] = "Setup|RET join Wi-Fi; R refresh";
 static const char *const help_tab[] = { help_hosts, help_browse, help_drives, help_setup };
-static const char help_global[] = "TAB/SELECT change tab|OPTION/START boot|Joystick moves; trigger RET|H or HELP opens this";
-
-void help_rows_run(void);
-#define help_rows(row, p) do { scr_zr = (row); scr_zs = (p); help_rows_run(); } while (0)
+static const char help_global[] = UI_HELP_GLOBAL;
 
 /* Called only by the main loop: editors and existing dialogs consume H themselves. */
 static void show_help(void)
@@ -1323,21 +1320,16 @@ static void update_selection(void)
 static void scroll_one(uint16_t old_top)
 {
   uint8_t r;
-  uint8_t *dst;
-  uint8_t *src;
+  SCR_COPY_ROW_VARS
 
   if (top > old_top) {                  /* rows move up */
     for (r = LIST_ROW; r < LIST_ROW + LIST_ROWS - 1; r++) {
-      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
-      src = (uint8_t *) (scr_rowlo[r + 1] | (scr_rowhi[r + 1] << 8));
-      memcpy(dst, src, SCR_COLS);
+      SCR_COPY_ROW(r, r + 1);
     }
     r = LIST_ROWS - 1;
   } else {                              /* rows move down */
     for (r = LIST_ROW + LIST_ROWS - 1; r > LIST_ROW; r--) {
-      dst = (uint8_t *) (scr_rowlo[r] | (scr_rowhi[r] << 8));
-      src = (uint8_t *) (scr_rowlo[r - 1] | (scr_rowhi[r - 1] << 8));
-      memcpy(dst, src, SCR_COLS);
+      SCR_COPY_ROW(r, r - 1);
     }
     r = 0;
   }
@@ -1387,6 +1379,7 @@ static void run(void)
       boot_now();
       continue;
     }
+    PLATFORM_KEY(k);
     if (k == K_TAB) {
       set_tab((uint8_t) ((tab + 1) % TAB_COUNT));
       continue;
@@ -1448,7 +1441,7 @@ int main(void)
   status[0] = 0;
   status[sizeof(status) - 1] = 0;
   marq_cached = 0;
-  SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
+  PLATFORM_INIT();
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);
   scr_text(ROW_STATUS, 1, "Starting FujiNet...", 38);
@@ -1467,8 +1460,7 @@ int main(void)
     scr_text(ROW_STATUS, 1, failed == 1 ? "FujiNet is not responding" :
              failed == 2 ? "FujiNet is not ready" : "Cannot read settings", 29);
     scr_uint(ROW_STATUS, 30, core_error, 3);
-    scr_text(ROW_STATUS, 34, "sio", 3);
-    scr_uint(ROW_STATUS, 36, fn_atari_last_sio_status(), 3);
+    PLATFORM_FAIL_DETAIL();
     scr_present();
     for (;;)
       ;

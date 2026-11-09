@@ -57,7 +57,8 @@ endif
 rwildcard=$(wildcard $(1)$(2)) $(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
 
 CONFIG_NIO_EXTRA_SRC_DIRS_msdos := $(SRC_DIR)/platform/portable
-CONFIG_NIO_EXTRA_SRC_DIRS_atari :=
+CONFIG_NIO_EXTRA_SRC_DIRS_atari := $(SRC_DIR)/platform/compact
+CONFIG_NIO_EXTRA_SRC_DIRS_c64 := $(SRC_DIR)/platform/compact
 CONFIG_NIO_EXTRA_SRC_DIRS_linux := $(SRC_DIR)/platform/portable
 CONFIG_NIO_EXTRA_SRC_DIRS := $(CONFIG_NIO_EXTRA_SRC_DIRS_$(TARGET))
 
@@ -87,12 +88,15 @@ CONFIG_NIO_EXTRA_SRCS_amiga := \
 	$(SRC_DIR)/platform/portable/fnsvc.c \
 	$(SRC_DIR)/platform/linux/fnctl.c
 CONFIG_NIO_SRCS += $(CONFIG_NIO_EXTRA_SRCS_$(TARGET))
-# Atari has its own full-screen front end (atari_app.c, with its own main) on
-# a compact core (atari_core.c): the shared portable layer does not fit in 48K.
+# Atari and C64 share a full-screen front end (compact_app.c, with its own main) on
+# a compact core (compact_core.c): the shared portable layer does not fit in 48K.
 ifeq ($(TARGET),atari)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif
 ifeq ($(TARGET),amiga)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
+endif
+ifeq ($(TARGET),c64)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
@@ -106,6 +110,16 @@ ifeq ($(TARGET),bbc-clib)
 # The clib ROM supplies bbc_exit_hook as part of its ABI.
 CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/ui/config_nio_exit_hook.s,$(CONFIG_NIO_ASM_SRCS))
 endif
+# The Atari's assembly is linked in the order it always has been: compact_compose.s ahead of
+# the screen routines (atari_dli.s, atari_scr_fast.s) and compact_view.s after them. The
+# directory order puts compact_view.s first, which moves the code after setcursor by 0x165 bytes
+# and the screen and view zero-page variables to other addresses, and the banked build then
+# fails three tests in tests/atari/test_boot.py (the mount screen and the two OPTION boots,
+# which time out). Why is not known: the display list ($0600) and the screen buffers do not
+# move. Until it is, this order is the one that boots. The C64 takes the directory order.
+ifeq ($(TARGET),atari)
+CONFIG_NIO_ASM_SRCS := $(SRC_DIR)/platform/atari/atari_basicoff.s $(SRC_DIR)/platform/compact/compact_compose.s $(SRC_DIR)/platform/atari/atari_dli.s $(SRC_DIR)/platform/atari/atari_scr_fast.s $(SRC_DIR)/platform/compact/compact_view.s
+endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
 
@@ -116,7 +130,7 @@ ifeq ($(TARGET)-$(ATARI_BANKED),atari-1)
 ATARI_LINK_CONFIG := makefiles/atari-banked/layout.cfg
 ASMFLAGS += -D ATARI_BANKED=1
 CFLAGS += -DCONFIG_NIO_BANKED
-ATARI_HIGH_OBJS := $(addprefix $(OBJ_DIR)/src/platform/atari/,atari_app.o atari_core.o atari_input.o)
+ATARI_HIGH_OBJS := $(OBJ_DIR)/src/platform/compact/compact_app.o $(OBJ_DIR)/src/platform/compact/compact_core.o $(OBJ_DIR)/src/platform/atari/atari_input.o
 $(ATARI_HIGH_OBJS): CFLAGS += --code-name RESIDENT_HIGH
 ATARI_WIFI_OBJ := $(OBJ_DIR)/atari-banked/fn_wifi.o
 CONFIG_NIO_OBJS += $(ATARI_WIFI_OBJ)
@@ -196,11 +210,17 @@ $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BI
 ifeq ($(TARGET),atari)
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(ATARI_LINK_CONFIG)
 endif
+ifeq ($(TARGET),c64)
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): $(C64_LINK_CONFIG)
+endif
 
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_OBJS) $(CONFIG_NIO_ASM_OBJS) $(CONFIG_NIO_DEPS) $(NIO_LIB_FILE) | $(BIN_DIR)
 	$(call link_program)
 ifeq ($(TARGET),atari)
 	python3 scripts/check_atari_splash_layout.py $@ || { rm -f "$@"; exit 1; }
+endif
+ifeq ($(TARGET),c64)
+	python3 scripts/check_c64_layout.py $@ $(C64_LINK_CONFIG) || { rm -f "$@"; exit 1; }
 endif
 
 ifneq ($(filter $(TARGET),bbc master bbc-clib),)

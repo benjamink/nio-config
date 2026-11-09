@@ -1,4 +1,4 @@
-#include "atari_core.h"
+#include "compact_core.h"
 
 #include "fn_raw.h"
 #include "fujinet-nio.h"

@@ -2,6 +2,7 @@ CC := cl65
 
 ATARI_START_ADDRESS ?= 0x0C00
 ATARI_LINK_CONFIG ?= makefiles/cc65-atari-nio.cfg
+C64_LINK_CONFIG ?= makefiles/cc65-c64-nio.cfg
 BBC_START_ADDRESS ?= 0x1900
 
 CFLAGS += -Osir -O $(EXTRA_DEFS)
@@ -9,6 +10,14 @@ CFLAGS += -Osir -O $(EXTRA_DEFS)
 # recursion); the C stack is small to match.
 ifeq ($(TARGET),atari)
 CFLAGS += -Cl
+endif
+ifeq ($(TARGET),c64)
+CFLAGS += -Cl -D__C64__=1 -D__CBM__=1
+endif
+# The compact launcher takes its screen, keyboard and hooks from compact_platform.h in the
+# target's own folder (src/platform/compact/README.md).
+ifneq ($(filter $(TARGET),atari c64),)
+CFLAGS += --include-dir $(SRC_DIR)/platform/$(PLATFORM)
 endif
 ASMFLAGS += $(EXTRA_ASMDEFS)
 CFLAGS += --include-dir $(APP_INCLUDE_DIR)
@@ -19,7 +28,11 @@ CFLAGS += --include-dir $(NIO_INCLUDE_DIR)
 CFLAGS += -DFNSVC_LIST_MAX_PAYLOAD=$(FNSVC_LIST_MAX_PAYLOAD)
 ASMFLAGS += -D FNSVC_LIST_MAX_PAYLOAD=$(FNSVC_LIST_MAX_PAYLOAD)
 
+ifeq ($(TARGET),c64)
+LDFLAGS += -t c64 --config $(C64_LINK_CONFIG)
+else
 LDFLAGS += -t $(TOOLCHAIN_TARGET)
+endif
 ifeq ($(TARGET),atari)
 LDFLAGS += --config $(ATARI_LINK_CONFIG) --start-addr $(ATARI_START_ADDRESS)
 else ifneq ($(filter $(TARGET),bbc master bbc-clib),)

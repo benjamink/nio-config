@@ -1,5 +1,5 @@
-#ifndef ATARI_CORE_H
-#define ATARI_CORE_H
+#ifndef COMPACT_CORE_H
+#define COMPACT_CORE_H
 
 /* The data the Atari config app works on: hosts, drive map, directory
  * listing, and boot-time mounting.  It reads and writes the same

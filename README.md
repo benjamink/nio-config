@@ -9,13 +9,14 @@ disk/stage flow needs it.
 See [RUNNING_TESTS.md](RUNNING_TESTS.md) for copy-and-run build and Beebium
 integration-test commands.
 
-Supported default targets are `msdos`, `bbc`, `linux`, and `atari`.
+Supported default targets are `msdos`, `bbc`, `linux`, `atari`, and `c64`.
 
 ```sh
 make TARGET=msdos FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=bbc FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=linux FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
+make TARGET=c64 FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
 ## Atari
@@ -25,6 +26,11 @@ The Atari build is the machine's launcher: a 40x24 full-screen application
 Choose images, assign them to D1-D8 and press OPTION to boot with them
 mounted. See [docs/atari-config.md](docs/atari-config.md) for the design,
 the memory layout, and how to run and test it in the emulator.
+
+## Commodore 64
+
+The C64 runs the Atari's front end and compact core over its own screen and keyboard. See
+[docs/c64-config.md](docs/c64-config.md).
 
 BBC stage targets:
 

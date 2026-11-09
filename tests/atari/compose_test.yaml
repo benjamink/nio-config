@@ -4,7 +4,7 @@ configs:
 config_file: compose_test.cfg
 src_files:
   - compose_test.c
-  - ../../src/platform/atari/atari_compose.s
+  - ../../src/platform/compact/compact_compose.s
 ld_flags:
   - -t
   - none

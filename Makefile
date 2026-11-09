@@ -1,4 +1,4 @@
-TARGETS := msdos bbc master linux atari
+TARGETS := msdos bbc master linux atari c64
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
 .PHONY: atari-banked all all-targets clean disk confnio-bbc-disk confnio-master-disk \

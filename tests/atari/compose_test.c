@@ -1,7 +1,7 @@
 /* Differential test of the Atari assembly URI composer under soft65c02. */
 #include <stdint.h>
 #include <string.h>
-#include "../../src/platform/atari/atari_core.h"
+#include "../../src/platform/compact/compact_core.h"
 
 static char actual[202], expected[202];
 static char long_host[189];
