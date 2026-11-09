@@ -1,9 +1,9 @@
 /* FujiNet NIO Config for the Atari: Hosts, Browse, Drives and Setup tabs on a
- * 40x24 text screen.  atari_core.c holds the data and the FujiNet calls;
+ * 40x24 text screen.  compact_core.c holds the data and the FujiNet calls;
  * this file is the screen and the key handling. */
 #include "fujinet-nio.h"
 
-#include "atari_core.h"
+#include "compact_core.h"
 /* The same app runs on the C64, over that machine's screen and keyboard. */
 #ifdef __C64__
 #include "c64_input.h"
@@ -25,7 +25,7 @@
  *   entries  (core_scratch)  the directory page, borrowed for host text, a
  *            name being opened, and the Wi-Fi scan and SSID/password; each
  *            borrower marks the page stale so the next draw reloads it.
- *   iobuf    (atari_core.c)  every FujiNet request/response; never held.
+ *   iobuf    (compact_core.c)  every FujiNet request/response; never held.
  *   line     one row of text; the detail line and the MAC.
  */
 #define TAB_HOSTS  0

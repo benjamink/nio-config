@@ -57,7 +57,8 @@ endif
 rwildcard=$(wildcard $(1)$(2)) $(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
 
 CONFIG_NIO_EXTRA_SRC_DIRS_msdos := $(SRC_DIR)/platform/portable
-CONFIG_NIO_EXTRA_SRC_DIRS_atari :=
+CONFIG_NIO_EXTRA_SRC_DIRS_atari := $(SRC_DIR)/platform/compact
+CONFIG_NIO_EXTRA_SRC_DIRS_c64 := $(SRC_DIR)/platform/compact
 CONFIG_NIO_EXTRA_SRC_DIRS_linux := $(SRC_DIR)/platform/portable
 CONFIG_NIO_EXTRA_SRC_DIRS := $(CONFIG_NIO_EXTRA_SRC_DIRS_$(TARGET))
 
@@ -87,20 +88,16 @@ CONFIG_NIO_EXTRA_SRCS_amiga := \
 	$(SRC_DIR)/platform/portable/fnsvc.c \
 	$(SRC_DIR)/platform/linux/fnctl.c
 CONFIG_NIO_SRCS += $(CONFIG_NIO_EXTRA_SRCS_$(TARGET))
-# Atari has its own full-screen front end (atari_app.c, with its own main) on
-# a compact core (atari_core.c): the shared portable layer does not fit in 48K.
+# Atari and C64 share a full-screen front end (compact_app.c, with its own main) on
+# a compact core (compact_core.c): the shared portable layer does not fit in 48K.
 ifeq ($(TARGET),atari)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif
 ifeq ($(TARGET),amiga)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
 endif
-# The C64 runs the Atari's front end and compact core over its own screen and
-# keyboard (src/platform/c64); only the display and input layers differ.
 ifeq ($(TARGET),c64)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/main.c,$(CONFIG_NIO_SRCS))
-CONFIG_NIO_SRCS += $(SRC_DIR)/platform/atari/atari_app.c $(SRC_DIR)/platform/atari/atari_core.c
-CONFIG_NIO_ASM_SRCS += $(SRC_DIR)/platform/atari/atari_compose.s $(SRC_DIR)/platform/atari/atari_view.s
 endif
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
 # shares the same BBC state API; its XRAM table selection does not change this
@@ -113,6 +110,17 @@ ifeq ($(TARGET),bbc-clib)
 # The clib ROM supplies bbc_exit_hook as part of its ABI.
 CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/ui/config_nio_exit_hook.s,$(CONFIG_NIO_ASM_SRCS))
 endif
+# Link order sets the layout. The Atari and C64 binaries have always been linked in these
+# orders, so keeping them makes moving the launcher out of the Atari folder a byte-identical
+# change (every .xex and .prg keeps its sha256). Delete this block to take the natural
+# order: the same code, laid out differently.
+ifeq ($(TARGET),atari)
+CONFIG_NIO_ASM_SRCS := $(SRC_DIR)/platform/atari/atari_basicoff.s $(SRC_DIR)/platform/compact/compact_compose.s $(SRC_DIR)/platform/atari/atari_dli.s $(SRC_DIR)/platform/atari/atari_scr_fast.s $(SRC_DIR)/platform/compact/compact_view.s
+endif
+ifeq ($(TARGET),c64)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/platform/compact/%,$(CONFIG_NIO_SRCS)) $(SRC_DIR)/platform/compact/compact_app.c $(SRC_DIR)/platform/compact/compact_core.c
+CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/compact/%,$(CONFIG_NIO_ASM_SRCS)) $(SRC_DIR)/platform/compact/compact_compose.s $(SRC_DIR)/platform/compact/compact_view.s
+endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
 
@@ -123,7 +131,7 @@ ifeq ($(TARGET)-$(ATARI_BANKED),atari-1)
 ATARI_LINK_CONFIG := makefiles/atari-banked/layout.cfg
 ASMFLAGS += -D ATARI_BANKED=1
 CFLAGS += -DCONFIG_NIO_BANKED
-ATARI_HIGH_OBJS := $(addprefix $(OBJ_DIR)/src/platform/atari/,atari_app.o atari_core.o atari_input.o)
+ATARI_HIGH_OBJS := $(OBJ_DIR)/src/platform/compact/compact_app.o $(OBJ_DIR)/src/platform/compact/compact_core.o $(OBJ_DIR)/src/platform/atari/atari_input.o
 $(ATARI_HIGH_OBJS): CFLAGS += --code-name RESIDENT_HIGH
 ATARI_WIFI_OBJ := $(OBJ_DIR)/atari-banked/fn_wifi.o
 CONFIG_NIO_OBJS += $(ATARI_WIFI_OBJ)

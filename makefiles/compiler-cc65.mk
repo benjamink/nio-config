@@ -9,7 +9,7 @@ CFLAGS += -Osir -O $(EXTRA_DEFS)
 # Atari: static locals shrink the code by about 1.2K (the program has no
 # recursion); the C stack is small to match.
 ifeq ($(TARGET),atari)
-CFLAGS += -Cl
+CFLAGS += -Cl --include-dir $(SRC_DIR)/platform/atari
 endif
 ifeq ($(TARGET),c64)
 CFLAGS += -Cl -D__C64__=1 -D__CBM__=1 --include-dir $(SRC_DIR)/platform/c64
