@@ -110,16 +110,15 @@ ifeq ($(TARGET),bbc-clib)
 # The clib ROM supplies bbc_exit_hook as part of its ABI.
 CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/ui/config_nio_exit_hook.s,$(CONFIG_NIO_ASM_SRCS))
 endif
-# Link order sets the layout. The Atari and C64 binaries have always been linked in these
-# orders, so keeping them makes moving the launcher out of the Atari folder a byte-identical
-# change (every .xex and .prg keeps its sha256). Delete this block to take the natural
-# order: the same code, laid out differently.
+# The Atari's assembly is linked in the order it always has been: compact_compose.s ahead of
+# the screen routines (atari_dli.s, atari_scr_fast.s) and compact_view.s after them. The
+# directory order puts compact_view.s first, which moves the code after setcursor by 0x165 bytes
+# and the screen and view zero-page variables to other addresses, and the banked build then
+# fails three tests in tests/atari/test_boot.py (the mount screen and the two OPTION boots,
+# which time out). Why is not known: the display list ($0600) and the screen buffers do not
+# move. Until it is, this order is the one that boots. The C64 takes the directory order.
 ifeq ($(TARGET),atari)
 CONFIG_NIO_ASM_SRCS := $(SRC_DIR)/platform/atari/atari_basicoff.s $(SRC_DIR)/platform/compact/compact_compose.s $(SRC_DIR)/platform/atari/atari_dli.s $(SRC_DIR)/platform/atari/atari_scr_fast.s $(SRC_DIR)/platform/compact/compact_view.s
-endif
-ifeq ($(TARGET),c64)
-CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/platform/compact/%,$(CONFIG_NIO_SRCS)) $(SRC_DIR)/platform/compact/compact_app.c $(SRC_DIR)/platform/compact/compact_core.c
-CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/compact/%,$(CONFIG_NIO_ASM_SRCS)) $(SRC_DIR)/platform/compact/compact_compose.s $(SRC_DIR)/platform/compact/compact_view.s
 endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))

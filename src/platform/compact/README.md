@@ -65,4 +65,9 @@ A hook a machine does not need is defined as nothing.
 `make TARGET=atari`, `make atari-banked` and `make TARGET=c64` must all build. A change
 that should not alter the Atari or the C64 (a move, a rename, a refactor) leaves the
 sha256 of every `.xex` and `.prg` unchanged. The Atari's tests (`tests/atari`) drive the
-Atari build in a headless emulator.
+Atari build in a headless emulator; the banked build is only exercised by the boot tests
+(`NIO_ATARI_BOOT=1`, see RUNNING_TESTS.md), so run those after anything that moves code.
+
+The Atari's link order matters, for a reason not yet found. `makefiles/build.mk` fixes the
+order of its assembly because the directory order builds, passes the fast tests and fails three
+of the boot tests (see the comment there for what moves). Do not change it without running them.
