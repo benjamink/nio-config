@@ -1,6 +1,6 @@
 # Running nio-config tests
 
-The repository currently has four practical test layers:
+The repository currently has these practical test layers:
 
 * target builds, which catch C/ASM, linker, and memory-limit regressions;
 * BBC Beebium integration tests, which exercise `CONFNIO` through the BBC UI,
@@ -8,7 +8,9 @@ The repository currently has four practical test layers:
 * Atari UI smoke tests, which drive the Atari XEX in headless AltirraSDL and
   assert on its screen memory (`tests/atari`);
 * Amiga host tests, which exercise the Amiga controller and helpers with gcc
-  against an in-memory fake of the fujinet-nio calls.
+  against an in-memory fake of the fujinet-nio calls;
+* a C64 layout check on every link (`tests/c64`). Running the C64 program needs the
+  `vice-fn` VICE build and the workspace's `integration-tests/c64-iec` acceptance test.
 
 The commands below assume the normal workspace layout:
 
@@ -35,6 +37,15 @@ the Atari memory layout):
 
 ```sh
 make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
+```
+
+Build the C64 target. The link step prints how much memory is left before the stack and
+fails with less than 512 bytes (`scripts/check_c64_layout.py`); its tests run without the
+toolchain, and check the built program too when there is one:
+
+```sh
+make TARGET=c64 FUJINET_NIO_LIB=../fujinet-nio-lib
+python3 -m unittest discover -s tests/c64 -v
 ```
 
 Build the BBC target (including the 8-bit memory/linker check):

@@ -219,6 +219,9 @@ $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_OBJS) $(CONFIG_NIO_ASM_OBJS) $
 ifeq ($(TARGET),atari)
 	python3 scripts/check_atari_splash_layout.py $@ || { rm -f "$@"; exit 1; }
 endif
+ifeq ($(TARGET),c64)
+	python3 scripts/check_c64_layout.py $@ $(C64_LINK_CONFIG) || { rm -f "$@"; exit 1; }
+endif
 
 ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 BBC_CONFIG_NIO_START_ADDRESS_bbc ?= 0x1900

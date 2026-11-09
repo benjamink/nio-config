@@ -42,10 +42,14 @@ D1-D8 in the app are devices 8-15. DiskDevice slot 1 is device 8.
 ## Memory
 
 The program loads at `$0801` with cc65's usual BASIC stub, and the startup code banks BASIC
-out, which leaves up to `$CFFF`. It takes about 40 KB of the 51 KB there
-(`makefiles/cc65-c64-nio.cfg`, and `build/c64/bin/config-nio.map`). The app's assembly passes
-arguments in zero page, which is why the configuration gives it BASIC's. The app never
-returns to BASIC as it found it: F1 leaves through the reset vector.
+out, which leaves up to `$CFFF`. The stack takes the top 2 KB, so code, data and buffers have
+`$0801` to `$C7FF`, about 49 KB. They end at `$BC9E` (the file is about 40 KB; the buffers
+that nothing clears follow it in memory), which leaves 2,913 bytes
+(`makefiles/cc65-c64-nio.cfg`, and `build/c64/bin/config-nio.map`). The build prints that
+figure and refuses a program with less than 512 bytes left (`scripts/check_c64_layout.py`),
+so growth is noticed before the linker fails. The app's assembly passes arguments in zero
+page, which is why the configuration gives it BASIC's. The app never returns to BASIC as it
+found it: F1 leaves through the reset vector.
 
 ## The demo
 
@@ -54,3 +58,8 @@ else. The demo's sources and build are in `repos/nio-core-apps`. The program loa
 app, so `src/platform/c64/c64_run.s` copies itself to the cassette buffer, sets the KERNAL and
 BASIC up again, and uses BASIC's own steps to load and run it. If the file isn't there, the
 result is the usual `?FILE NOT FOUND ERROR` and `READY.`, and `LOAD"*",8,1` gets back to the app.
+
+F5 needs the stock KERNAL and BASIC V2 ROMs. `c64_run.s` calls fixed addresses in BASIC (`$A533`,
+`$A644`, `$A659`, `$A7AE`) and in the KERNAL (`$E3BF`, `$E453`), so a replacement KERNAL such as
+JiffyDOS, or a cartridge that takes BASIC over, makes F5 fail. The rest of the app uses only the
+KERNAL's jump table, as the firmware's drive and NIO channel expect.
