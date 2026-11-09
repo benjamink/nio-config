@@ -104,4 +104,8 @@ extern uint8_t row_fg[SCR_ROWS];
   do { scr_zs = (p); scr_zv = (v); scr_zw = (w); scr_dec16_run(); \
        (p) = (char *) scr_zs; } while (0)
 
+/* Rows of text separated by '|', starting at `row`, in column 2. */
+void help_rows_run(void);
+#define help_rows(row, p) do { scr_zr = (row); scr_zs = (p); help_rows_run(); } while (0)
+
 #endif

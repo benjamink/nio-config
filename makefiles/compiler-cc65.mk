@@ -9,10 +9,15 @@ CFLAGS += -Osir -O $(EXTRA_DEFS)
 # Atari: static locals shrink the code by about 1.2K (the program has no
 # recursion); the C stack is small to match.
 ifeq ($(TARGET),atari)
-CFLAGS += -Cl --include-dir $(SRC_DIR)/platform/atari
+CFLAGS += -Cl
 endif
 ifeq ($(TARGET),c64)
-CFLAGS += -Cl -D__C64__=1 -D__CBM__=1 --include-dir $(SRC_DIR)/platform/c64
+CFLAGS += -Cl -D__C64__=1 -D__CBM__=1
+endif
+# The compact launcher takes its screen, keyboard and hooks from compact_platform.h in the
+# target's own folder (src/platform/compact/README.md).
+ifneq ($(filter $(TARGET),atari c64),)
+CFLAGS += --include-dir $(SRC_DIR)/platform/$(PLATFORM)
 endif
 ASMFLAGS += $(EXTRA_ASMDEFS)
 CFLAGS += --include-dir $(APP_INCLUDE_DIR)

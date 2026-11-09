@@ -1,8 +1,9 @@
 #ifndef C64_SCR_H
 #define C64_SCR_H
 
-/* The screen the config app draws on, for the C64: the same calls as atari_scr.h
- * on the VIC-II's 40x25 text screen. The app uses the first 24 rows. */
+/* The screen the compact launcher draws on, for the C64: the interface in
+ * src/platform/compact/README.md on the VIC-II's 40x25 text screen. The app uses the
+ * first 24 rows. */
 
 #include <stdint.h>
 
@@ -65,8 +66,8 @@ void help_rows(uint8_t row, const char *p);
 char *scr_dec16_at(char *p, unsigned v, uint8_t w);
 #define scr_dec16(p, v, w) do { (p) = scr_dec16_at((p), (v), (w)); } while (0)
 
-/* The VIC-II shows screen memory directly and needs no interrupts for its colours,
- * so these hooks of the Atari's double-buffered display do nothing here. */
+/* The VIC-II shows screen memory directly and needs no interrupts for its colours, so
+ * the launcher's display hooks (see the README) do nothing here. */
 #define scr_present()
 #define scr_sio_hook()
 #define scr_reading 0

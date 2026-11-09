@@ -2,7 +2,8 @@
 
 `config-nio` for the C64 is the launcher in `src/platform/compact/` (`compact_app.c` and
 `compact_core.c`), which the Atari builds too, over the C64's own screen and keyboard in
-`src/platform/c64/`. [The Atari's document](atari-config.md) describes the tabs, the data
+`src/platform/c64/`; [its README](../src/platform/compact/README.md) lists what a machine
+provides. [The Atari's document](atari-config.md) describes the tabs, the data
 it keeps and how booting works; this one covers what differs.
 
 Run it from the boot disk with `LOAD"*",8,1` and `RUN`.

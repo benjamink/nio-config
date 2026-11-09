@@ -1,17 +1,13 @@
-/* FujiNet NIO Config for the Atari: Hosts, Browse, Drives and Setup tabs on a
+/* FujiNet NIO Config, the compact launcher: Hosts, Browse, Drives and Setup tabs on a
  * 40x24 text screen.  compact_core.c holds the data and the FujiNet calls;
- * this file is the screen and the key handling. */
+ * this file is the screen and the key handling, and runs on every machine that
+ * provides the interface in README.md.  There is nothing machine specific here. */
 #include "fujinet-nio.h"
 
 #include "compact_core.h"
-/* The same app runs on the C64, over that machine's screen and keyboard. */
-#ifdef __C64__
-#include "c64_input.h"
-#include "c64_scr.h"
-#else
-#include "atari_input.h"
-#include "atari_scr.h"
-#endif
+/* The machine's screen and keyboard, and the few hooks marked PLATFORM_ or SCR_: the
+ * compact_platform.h in the target's own folder (src/platform/<target>). */
+#include "compact_platform.h"
 
 #include <string.h>
 
@@ -41,10 +37,6 @@
 #define ROW_HINT   22
 #define ROW_STATUS 23
 #define NO_UNIT    0xFF
-
-#ifndef __C64__
-#define SHFLOK (*(volatile uint8_t *) 0x02BE)
-#endif
 
 /* The long buffers live in low memory (see makefiles/cc65-atari-nio.cfg), which
  * nothing clears: path is set in main(), the others are written before read. */
@@ -1074,11 +1066,6 @@ static const char help_setup[] = "Setup|RET join Wi-Fi; R refresh";
 static const char *const help_tab[] = { help_hosts, help_browse, help_drives, help_setup };
 static const char help_global[] = UI_HELP_GLOBAL;
 
-#ifndef __C64__
-void help_rows_run(void);
-#define help_rows(row, p) do { scr_zr = (row); scr_zs = (p); help_rows_run(); } while (0)
-#endif
-
 /* Called only by the main loop: editors and existing dialogs consume H themselves. */
 static void show_help(void)
 {
@@ -1333,25 +1320,16 @@ static void update_selection(void)
 static void scroll_one(uint16_t old_top)
 {
   uint8_t r;
-#ifdef __C64__
-#define COPY_ROW(to, from) scr_copy_row((to), (from))
-#else
-  uint8_t *dst;
-  uint8_t *src;
-#define COPY_ROW(to, from) \
-      dst = (uint8_t *) (scr_rowlo[to] | (scr_rowhi[to] << 8)); \
-      src = (uint8_t *) (scr_rowlo[from] | (scr_rowhi[from] << 8)); \
-      memcpy(dst, src, SCR_COLS)
-#endif
+  SCR_COPY_ROW_VARS
 
   if (top > old_top) {                  /* rows move up */
     for (r = LIST_ROW; r < LIST_ROW + LIST_ROWS - 1; r++) {
-      COPY_ROW(r, r + 1);
+      SCR_COPY_ROW(r, r + 1);
     }
     r = LIST_ROWS - 1;
   } else {                              /* rows move down */
     for (r = LIST_ROW + LIST_ROWS - 1; r > LIST_ROW; r--) {
-      COPY_ROW(r, r - 1);
+      SCR_COPY_ROW(r, r - 1);
     }
     r = 0;
   }
@@ -1401,10 +1379,7 @@ static void run(void)
       boot_now();
       continue;
     }
-#ifdef __C64__
-    if (k == K_DEMO)
-      c64_run_demo();
-#endif
+    PLATFORM_KEY(k);
     if (k == K_TAB) {
       set_tab((uint8_t) ((tab + 1) % TAB_COUNT));
       continue;
@@ -1466,9 +1441,7 @@ int main(void)
   status[0] = 0;
   status[sizeof(status) - 1] = 0;
   marq_cached = 0;
-#ifndef __C64__
-  SHFLOK = 0;                   /* lower case by default: URIs are case sensitive */
-#endif
+  PLATFORM_INIT();
   scr_init();
   scr_theme(ROW_STATUS, T_STATUS);
   scr_text(ROW_STATUS, 1, "Starting FujiNet...", 38);
@@ -1487,10 +1460,7 @@ int main(void)
     scr_text(ROW_STATUS, 1, failed == 1 ? "FujiNet is not responding" :
              failed == 2 ? "FujiNet is not ready" : "Cannot read settings", 29);
     scr_uint(ROW_STATUS, 30, core_error, 3);
-#ifndef __C64__
-    scr_text(ROW_STATUS, 34, "sio", 3);
-    scr_uint(ROW_STATUS, 36, fn_atari_last_sio_status(), 3);
-#endif
+    PLATFORM_FAIL_DETAIL();
     scr_present();
     for (;;)
       ;
