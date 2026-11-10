@@ -206,3 +206,41 @@ void amiga_last_line(char *out, uint16_t cap, const char *text)
   if (start)
     copy_bounded(out, cap, start, (uint16_t) (end - start));
 }
+
+uint8_t amiga_wrap_text(char *out, uint8_t stride, uint8_t max_lines,
+                        uint8_t width, const char *msg)
+{
+  uint8_t n = 0;
+
+  while (*msg && n < max_lines) {
+    uint16_t len = 0;
+    uint16_t take;
+    uint16_t brk;
+
+    while (msg[len] && msg[len] != '\n')
+      len++;
+    if (len <= width) {
+      take = len;
+      brk = len;
+    } else {
+      brk = width;
+      while (brk > 0 && msg[brk] != ' ')
+        brk--;
+      if (brk == 0) {
+        brk = width;            /* no space: cut the word */
+        take = width;
+      } else {
+        take = brk;             /* break at the space */
+      }
+    }
+    memcpy(out + (uint16_t) n * stride, msg, take);
+    out[(uint16_t) n * stride + take] = 0;
+    n++;
+    msg += brk;
+    if (*msg == '\n')
+      msg++;
+    while (*msg == ' ')
+      msg++;
+  }
+  return n;
+}

@@ -267,33 +267,36 @@ static void make_itext(struct IntuiText *t, WORD left, WORD top,
   t->NextText = next;
 }
 
+#define REQ_LINES 8
+#define REQ_COLS 50
+
 static int requester(struct Window *w, const char *message, const char *yes,
                      const char *no)
 {
-  static char lines[3][80];
-  struct IntuiText body[3];
+  static char lines[REQ_LINES][REQ_COLS + 1];
+  struct IntuiText body[REQ_LINES];
   struct IntuiText pos;
   struct IntuiText neg;
-  const char *p;
   int n;
   int i;
+  int longest = 0;
 
-  p = message;
-  for (n = 0; *p && n < 3; n++) {
-    i = 0;
-    while (*p && *p != '\n' && i < (int) sizeof(lines[0]) - 1)
-      lines[n][i++] = *p++;
-    lines[n][i] = 0;
-    if (*p == '\n')
-      p++;
-  }
-  for (i = 0; i < n; i++)
+  n = amiga_wrap_text(&lines[0][0], REQ_COLS + 1, REQ_LINES, REQ_COLS,
+                      message);
+  for (i = 0; i < n; i++) {
+    int len = (int) strlen(lines[i]);
+
+    if (len > longest)
+      longest = len;
     make_itext(&body[i], 8, (WORD) (4 + i * 10), lines[i],
                i + 1 < n ? &body[i + 1] : NULL);
+  }
   make_itext(&pos, 6, 3, yes ? yes : "", NULL);
   make_itext(&neg, 6, 3, no, NULL);
   return (int) AutoRequest(w, n ? &body[0] : NULL, yes ? &pos : NULL, &neg,
-                           0, 0, 320, (WORD) (50 + 10 * n));
+                           0, 0, (WORD) (longest * FONT_W + 32 > 320
+                                         ? longest * FONT_W + 32 : 320),
+                           (WORD) (50 + 10 * n));
 }
 
 void amiga_gui_fatal(const char *message)
