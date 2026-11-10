@@ -209,6 +209,19 @@ supported image. On Workbench 3.1 a `DN` drive whose handler has started stays
 fixed to that density and filesystem until reboot, so the picker tags it and
 steers other media to another drive.
 
+One config-nio binary runs on every Workbench from 1.3. It picks the drive
+scheme from the Kickstart version: Kickstart 1.x uses the fixed endpoints
+above, and 2.0 or newer shows the eight interchangeable `DN0:`–`DN7:` drives.
+The 2.0+ features (drive windows, theme colours, mounted-state detection) are
+used only when the OS has them.
+
+`FMOUNT`, `FUMOUNT` and `fujinet-disk.device` still come in a Workbench 1.3 set
+and a standard set. At startup config-nio runs `FMOUNT` with no arguments to
+see which set is installed (the 1.3 usage line names `HN0:`) and refuses to
+start if it does not suit the OS, telling you which set to install. If `FMOUNT`
+cannot be found or its answer is unrecognised, config-nio starts and the first
+mount reports the problem.
+
 ## SCRIPT language
 
 Each line holds one command. Blank lines, and lines that start with `;`, are
@@ -252,8 +265,9 @@ make test-amiga-host              # all tests
 make test-amiga-host ONLY=layout  # one test
 ```
 
-Build one Workbench profile. `wb13` uses the nix13 CRT; `wb31` and `wb32`
-use clib2.
+Build one Workbench profile. All profiles produce the same binary (compiled
+against the 2.0 NDK and linked with the libnix `nix13` runtime, which starts on
+Kickstart 1.3); the profile only names the output directory.
 
 ```sh
 make amiga AMIGA_PROFILE=wb32

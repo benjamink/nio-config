@@ -28,18 +28,14 @@
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
-#ifndef __KICK13__
 #include <proto/wb.h>
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern struct IntuitionBase *IntuitionBase;
-#ifndef __KICK13__
 struct Library *WorkbenchBase;
-#endif
 
 #define FONT_W 8
 #define FONT_H 8
@@ -2242,7 +2238,6 @@ static void gui_open_drive_window(void)
     return;
   }
   strcpy(tmp_text, "Opening drive windows needs Workbench 3.5 or later");
-#ifndef __KICK13__
   WorkbenchBase = OpenLibrary((CONST_STRPTR) "workbench.library", 44);
   if (WorkbenchBase) {
     int tries;
@@ -2266,7 +2261,6 @@ static void gui_open_drive_window(void)
     CloseLibrary(WorkbenchBase);
     WorkbenchBase = NULL;
   }
-#endif
   config_nio_set_status(gctl->state, tmp_text);
   gui_paint_status();
 }
@@ -2719,12 +2713,11 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
 
 static void load_theme(void)
 {
-  /* The WB1.3 build cannot read DrawInfo, but may run on Kickstart 2.0+,
-   * whose pens differ from 1.x; pick them by the running Intuition. */
+  /* Kickstart 1.x has no DrawInfo and different pens from 2.0+; pick them
+   * by the running Intuition. */
   amiga_theme_for_version(&theme,
                           (uint16_t) IntuitionBase->LibNode.lib_Version);
   new_look = 0;
-#ifndef __KICK13__
   if (IntuitionBase->LibNode.lib_Version >= 36) {
     struct DrawInfo *dri = GetScreenDrawInfo(win->WScreen);
 
@@ -2734,7 +2727,6 @@ static void load_theme(void)
       FreeScreenDrawInfo(win->WScreen, dri);
     }
   }
-#endif
 }
 
 static void wait_newsize(void)

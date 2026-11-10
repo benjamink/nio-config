@@ -25,13 +25,6 @@ static config_nio_state_t state;
 static amiga_ctl_t ctl;
 static amiga_options_t options;
 
-#ifdef __KICK13__
-#define AMIGA_KICK13 1
-#else
-#define AMIGA_KICK13 0
-#endif
-
-#ifndef __KICK13__
 /* A drive is mounted when its DOS device (DN0 ... DN7) exists: FMOUNT
  * creates it and FUMOUNT removes it, and a reboot starts without it.
  * WB1.3 uses permanent MountList entries, so it has no such probe. */
@@ -53,7 +46,6 @@ static int drive_present(uint8_t unit, void *ctx)
   }
   return found;
 }
-#endif
 
 /* Density and filesystem of an image, from the firmware's Inspect. */
 static int inspect_media(const char *uri, amiga_media_t *media, void *ctx)
@@ -68,7 +60,6 @@ static int inspect_media(const char *uri, amiga_media_t *media, void *ctx)
   return media->known;
 }
 
-#ifndef __KICK13__
 /* WB3.1's FastFileSystem cannot exit (no ACTION_DIE), so a started DNx:
  * handler stays fixed to its geometry and filesystem; FMOUNT refuses another
  * type on it.  Older FastFileSystems retire the handler, so they pin nothing.
@@ -109,7 +100,28 @@ static int handler_pinned(uint8_t unit, amiga_media_t *pinned, void *ctx)
   }
   return found;
 }
-#endif
+
+/* FMOUNT with no arguments only prints its usage, which tells the two builds
+ * apart.  An unreadable answer (FMOUNT missing, a custom path with spaces) is
+ * left for the first real mount to report. */
+static int tools_match(uint8_t kick13)
+{
+  char out[AMIGA_CMD_OUT_MAX];
+  char msg[256];
+  const char *c;
+
+  for (c = options.fmount; *c; c++) {
+    if (*c == ' ')
+      return 1;
+  }
+  out[0] = 0;
+  (void) amiga_exec_command(options.fmount, out, sizeof(out), NULL);
+  if (!amiga_tools_mismatch(kick13, amiga_fmount_flavour(out), msg,
+                            sizeof(msg)))
+    return 1;
+  amiga_gui_fatal(msg);
+  return 0;
+}
 
 void config_nio_fatal_message(const char *message)
 {
@@ -141,6 +153,9 @@ int main(int argc, char **argv)
 {
   int i;
   int rc = 20;
+  /* Kickstart 1.x has no dynamic DOS nodes: it uses the fixed DN/HN/DO/HO
+   * MountList endpoints, and 2.0+ the eight interchangeable DN0:-DN7:. */
+  uint8_t kick13 = (uint8_t) (((struct Library *) SysBase)->lib_Version < 36);
 
   IntuitionBase = (struct IntuitionBase *)
     OpenLibrary((CONST_STRPTR) "intuition.library", 33);
@@ -178,15 +193,13 @@ int main(int argc, char **argv)
     amiga_gui_fatal("Unable to load config-nio state.");
     goto shutdown;
   }
-  amiga_ctl_init(&ctl, &state, AMIGA_KICK13, 8, amiga_exec_command, NULL);
+  if (!tools_match(kick13))
+    goto shutdown;
+  amiga_ctl_init(&ctl, &state, kick13, 8, amiga_exec_command, NULL);
   amiga_ctl_set_tools(&ctl, options.fmount, options.fumount);
-#ifndef __KICK13__
   if (((struct Library *) DOSBase)->lib_Version >= 36)
     amiga_ctl_set_probe(&ctl, drive_present, NULL);
   amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, handler_pinned, NULL);
-#else
-  amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, NULL, NULL);
-#endif
   rc = amiga_gui_run(&ctl, &options);
 
 shutdown:

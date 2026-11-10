@@ -4,9 +4,8 @@
 
 #include <dos/dos.h>
 #include <proto/dos.h>
-#ifndef __KICK13__
+#include <proto/exec.h>
 #include <dos/dostags.h>
-#endif
 
 #include <string.h>
 
@@ -53,12 +52,11 @@ int amiga_exec_command(const char *command, char *output, uint16_t cap,
   out = Open((CONST_STRPTR) AMIGA_EXEC_OUT, MODE_NEWFILE);
   if (!out)
     out = Open((CONST_STRPTR) "NIL:", MODE_NEWFILE);
-#ifdef __KICK13__
-  /* KS1.3 Execute() reports only whether the command started; amiga_ctl
-   * verifies the resulting mapping rather than trusting this value. */
-  rc = Execute((CONST_STRPTR) command, 0, out) ? 0 : 20;
-#else
-  {
+  if (((struct Library *) DOSBase)->lib_Version < 36) {
+    /* KS1.3 Execute() reports only whether the command started; amiga_ctl
+     * verifies the resulting mapping rather than trusting this value. */
+    rc = Execute((CONST_STRPTR) command, 0, out) ? 0 : 20;
+  } else {
     BPTR in = Open((CONST_STRPTR) "NIL:", MODE_OLDFILE);
 
     rc = SystemTags((CONST_STRPTR) command, SYS_Input, in, SYS_Output, out,
@@ -66,7 +64,6 @@ int amiga_exec_command(const char *command, char *output, uint16_t cap,
     if (in)
       Close(in);
   }
-#endif
   if (out)
     Close(out);
   read_tail(tail);

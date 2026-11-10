@@ -1,5 +1,6 @@
 #include "check.h"
 #include "amiga_drives.h"
+#include <string.h>
 
 void test_drives(void)
 {
@@ -74,5 +75,31 @@ void test_drives(void)
     CHECK(amiga_drive_fit(6, 1, &hdo, NULL) == AMIGA_FIT_OK);   /* HO0 */
     CHECK(amiga_drive_fit(4, 1, &dd, NULL) == AMIGA_FIT_FS);    /* DO0 */
     CHECK(amiga_drive_fit(4, 1, &none, NULL) == AMIGA_FIT_OK);
+  }
+
+  /* Standard and Workbench 1.3 FMOUNT builds must match this config-nio. */
+  {
+    char msg[200];
+    static const char standard[] =
+      "Usage: FMOUNT slot [DN0:|...|DN7:|HD0:|...|HD3:] [RO|RW]";
+    static const char kick13[] =
+      "Usage: FMOUNT slot 0|1|DN0:|DN1:|HN0:|HN1:|DO0:|DO1:|HO0:|HO1: [RO|RW]";
+
+    CHECK(amiga_fmount_flavour(standard) == AMIGA_TOOLS_STANDARD);
+    CHECK(amiga_fmount_flavour(kick13) == AMIGA_TOOLS_KICK13);
+    CHECK(amiga_fmount_flavour("fmount: Unknown command") == AMIGA_TOOLS_UNKNOWN);
+    CHECK(amiga_fmount_flavour("") == AMIGA_TOOLS_UNKNOWN);
+    CHECK(amiga_fmount_flavour(NULL) == AMIGA_TOOLS_UNKNOWN);
+
+    CHECK(!amiga_tools_mismatch(0, AMIGA_TOOLS_STANDARD, msg, sizeof(msg)));
+    CHECK(!amiga_tools_mismatch(1, AMIGA_TOOLS_KICK13, msg, sizeof(msg)));
+    CHECK(!amiga_tools_mismatch(0, AMIGA_TOOLS_UNKNOWN, msg, sizeof(msg)));
+    CHECK(!amiga_tools_mismatch(1, AMIGA_TOOLS_UNKNOWN, msg, sizeof(msg)));
+    CHECK(amiga_tools_mismatch(0, AMIGA_TOOLS_KICK13, msg, sizeof(msg)));
+    CHECK(strstr(msg, "DN0: to DN7:") && strstr(msg, "WB204"));
+    CHECK(amiga_tools_mismatch(1, AMIGA_TOOLS_STANDARD, msg, sizeof(msg)));
+    CHECK(strstr(msg, "This is Workbench 1.3") && strstr(msg, "WB13"));
+    CHECK(amiga_tools_mismatch(1, AMIGA_TOOLS_STANDARD, msg, 20));
+    CHECK(strlen(msg) == 19);
   }
 }

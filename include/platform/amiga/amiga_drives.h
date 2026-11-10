@@ -41,6 +41,22 @@ uint8_t amiga_drive_fit(uint8_t unit, uint8_t kick13,
 /* The media category a WB1.3 endpoint is fixed to. */
 amiga_media_t amiga_drive_kick13_media(uint8_t unit);
 
+/* FMOUNT/FUMOUNT (and fujinet-disk.device) come in two builds: Workbench 1.3
+ * (fixed DN/HN/DO/HO endpoints) and standard (DN0:-DN7:).  The installed set
+ * must suit the OS.  Classify FMOUNT's usage line, which names HN0: only in
+ * the 1.3 build. */
+enum {
+  AMIGA_TOOLS_UNKNOWN = 0,   /* no recognisable FMOUNT usage line */
+  AMIGA_TOOLS_STANDARD,
+  AMIGA_TOOLS_KICK13
+};
+uint8_t amiga_fmount_flavour(const char *usage_line);
+/* Writes a user-facing explanation to msg and returns 1 when the installed
+ * tools (`flavour`) do not suit the drive scheme of this system: kick13 is
+ * set on Kickstart 1.x (fixed endpoints), clear on 2.0+ (DN0:-DN7:). */
+int amiga_tools_mismatch(uint8_t kick13, uint8_t flavour, char *msg,
+                         uint16_t cap);
+
 const char *amiga_drive_label(uint8_t unit, uint8_t kick13);
 int amiga_drive_unit(const char *label, uint8_t kick13);
 int amiga_fmount_command(char *out, uint16_t cap, const char *fmount,

@@ -83,6 +83,39 @@ uint8_t amiga_drive_fit(uint8_t unit, uint8_t kick13,
   return AMIGA_FIT_OK;
 }
 
+uint8_t amiga_fmount_flavour(const char *usage_line)
+{
+  if (!usage_line || !strstr(usage_line, "FMOUNT"))
+    return AMIGA_TOOLS_UNKNOWN;
+  if (strstr(usage_line, "HN0:"))
+    return AMIGA_TOOLS_KICK13;
+  if (strstr(usage_line, "DN0:"))
+    return AMIGA_TOOLS_STANDARD;
+  return AMIGA_TOOLS_UNKNOWN;
+}
+
+int amiga_tools_mismatch(uint8_t kick13, uint8_t flavour, char *msg,
+                         uint16_t cap)
+{
+  const char *text;
+
+  if (kick13 && flavour == AMIGA_TOOLS_STANDARD)
+    text = "This is Workbench 1.3, which needs the Workbench 1.3 FMOUNT, "
+           "FUMOUNT and fujinet-disk.device, but the standard FMOUNT is "
+           "installed.\nInstall the files from the WB13 drawer.";
+  else if (!kick13 && flavour == AMIGA_TOOLS_KICK13)
+    text = "This is Workbench 2.0 or newer, which uses drives DN0: to DN7:, "
+           "but the installed FMOUNT is the Workbench 1.3 build.\nInstall "
+           "FMOUNT, FUMOUNT and fujinet-disk.device from the WB204 drawer.";
+  else
+    return 0;
+  if (msg && cap) {
+    strncpy(msg, text, cap - 1);
+    msg[cap - 1] = 0;
+  }
+  return 1;
+}
+
 static char upper(char c)
 {
   return (char) ((c >= 'a' && c <= 'z') ? c - 32 : c);
