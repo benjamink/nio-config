@@ -167,7 +167,14 @@ $(OBJ_DIR)/$(SRC_DIR)/platform/$(PLATFORM)/config_nio_ui.o: $(SRC_DIR)/platform/
 endif
 
 ifeq ($(TARGET),msdos)
-PDCURSES_DIR ?= ../PDCurses
+# PDCurses (https://github.com/wmcbrine/PDCurses) supplies <curses.h> and, built for
+# MS-DOS small model, pdcurses.lib. There is no default location: say where it is.
+ifndef PDCURSES_DIR
+$(error PDCURSES_DIR is not set. Point it at a PDCurses checkout, e.g. PDCURSES_DIR=/path/to/PDCurses. See "MS-DOS" in README.md)
+endif
+ifeq ($(wildcard $(PDCURSES_DIR)/curses.h),)
+$(error PDCURSES_DIR=$(PDCURSES_DIR) has no curses.h. See "MS-DOS" in README.md)
+endif
 PDCURSES_MSDOS_LIB ?= ../../build/pdcurses/msdos-small/pdcurses.lib
 CONFIG_NIO_LIBS := $(PDCURSES_MSDOS_LIB)
 CONFIG_NIO_DEPS := $(PDCURSES_MSDOS_LIB)

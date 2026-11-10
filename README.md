@@ -19,6 +19,23 @@ make TARGET=atari FUJINET_NIO_LIB=../fujinet-nio-lib
 make TARGET=c64 FUJINET_NIO_LIB=../fujinet-nio-lib
 ```
 
+## MS-DOS
+
+The MS-DOS build links [PDCurses](https://github.com/wmcbrine/PDCurses), which this
+repository does not carry. Get a checkout, build `pdcurses.lib` for the small model
+with Open Watcom, and say where both are:
+
+```sh
+export PDCURSES_DIR=/path/to/PDCurses                       # required: has curses.h
+export PDCURSES_MSDOS_LIB=/path/to/pdcurses.lib             # default: ../../build/pdcurses/msdos-small/pdcurses.lib
+make TARGET=msdos FUJINET_NIO_LIB=../fujinet-nio-lib
+```
+
+`make TARGET=msdos` stops with an error if `PDCURSES_DIR` is unset or has no
+`curses.h`. In the NIO workspace, `git submodule update --init external/PDCurses` fetches
+the pinned copy, `scripts/build-pdcurses-msdos.sh` builds the library, and
+`scripts/env.sh` exports both variables.
+
 ## Atari
 
 The Atari build is the machine's launcher: a 40x24 full-screen application
