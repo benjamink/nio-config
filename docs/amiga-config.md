@@ -81,8 +81,13 @@ To mount an image:
 1. On **Hosts**, double-click a host.
 2. On **Browse**, open drawers until you find the image, then double-click
    it (or select it and press **Mount…**).
-3. The list shows the drives and what is in each. The first empty drive is
-   selected and `RO` is ticked. Pick a drive, untick `RO` for read/write if
+3. The list shows the drives and what is in each. config-nio asks the FujiNet
+   what the image is (DD or HD, OFS or FFS) and selects the first empty drive
+   that can take it, with `RO` ticked; the status line names the type and the
+   suggested drive. Drives fixed to a media type are tagged `[DD FFS]`, or
+   `(HD OFS only)` when the image cannot go there, and Mount refuses an
+   unsuitable drive before running `FMOUNT`. If the firmware cannot inspect
+   the image, no drive is excluded and the first empty drive is selected. Pick a drive, untick `RO` for read/write if
    you need it, and press **Mount**. If the drive already holds a disk the
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
@@ -198,7 +203,11 @@ Kickstart 1.3 this is the only reliable check, because `Execute()` does not
 report a command's return code.
 
 On Workbench 1.3 the drive names are the eight static MountList endpoints:
-`DN0: DN1: HN0: HN1: DO0: DO1: HO0: HO1:` (units 0–7).
+`DN0: DN1: HN0: HN1: DO0: DO1: HO0: HO1:` (units 0–7): DD/FFS, HD/FFS, DD/OFS
+and HD/OFS, two of each. On Workbench 2.0 to 3.0 any `DN` drive takes any
+supported image. On Workbench 3.1 a `DN` drive whose handler has started stays
+fixed to that density and filesystem until reboot, so the picker tags it and
+steers other media to another drive.
 
 ## SCRIPT language
 

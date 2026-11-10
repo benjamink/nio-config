@@ -605,6 +605,13 @@ static void row_string(uint16_t idx, uint8_t cols)
   default: {
     config_nio_mapping_t m;
     const char *label = amiga_drive_label((uint8_t) idx, gctl->kick13);
+    char note[16];
+
+    /* The mount picker says which drives are fixed to a media type and
+     * which of those cannot take the image being mounted. */
+    note[0] = 0;
+    if (gctl->page == AMIGA_PAGE_MOUNT)
+      amiga_ctl_drive_note(gctl, (uint8_t) idx, note, sizeof(note));
 
     if (config_nio_mapping_get(s, (uint8_t) idx, &m) && m.valid) {
       const config_nio_slot_t *ds = amiga_ctl_drive_slot(gctl, (uint8_t) idx);
@@ -616,12 +623,15 @@ static void row_string(uint16_t idx, uint8_t cols)
       name = strrchr(uri, '/');
       name = name && name[1] ? name + 1 : uri;
       amiga_clip_head(uri_text, sizeof(uri_text), name,
-                      (uint8_t) (cols - (saved ? 32 : 17)));
-      amiga_sprintf(tmp_text, "%-5s %s %6u  %s%s", label,
+                      (uint8_t) (cols - (saved ? 32 : 17) -
+                                 (note[0] ? 17 : 0)));
+      amiga_sprintf(tmp_text, "%-5s %s %6u  %s%s%s%s", label,
                     m.readonly ? "RO" : "RW", (unsigned) m.slot, uri_text,
-                    saved ? "  (not mounted)" : "");
+                    saved ? "  (not mounted)" : "", note[0] ? "  " : "",
+                    note);
     } else {
-      amiga_sprintf(tmp_text, "%-5s (empty)", label);
+      amiga_sprintf(tmp_text, "%-5s (empty)%s%s", label,
+                    note[0] ? "  " : "", note);
     }
     break;
   }

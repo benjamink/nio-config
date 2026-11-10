@@ -1,4 +1,5 @@
 #include "config_nio.h"
+#include "fnsvc.h"
 #include "fujinet-nio.h"
 #include "amiga_ctl.h"
 #include "amiga_exec.h"
@@ -12,6 +13,7 @@
 #include <proto/exec.h>
 #include <proto/icon.h>
 #include <dos/dosextens.h>
+#include <dos/filehandler.h>
 
 #include <stdio.h>
 
@@ -47,6 +49,62 @@ static int drive_present(uint8_t unit, void *ctx)
   list = LockDosList(LDF_DEVICES | LDF_READ);
   if (list) {
     found = FindDosEntry(list, (CONST_STRPTR) name, LDF_DEVICES) != NULL;
+    UnLockDosList(LDF_DEVICES | LDF_READ);
+  }
+  return found;
+}
+#endif
+
+/* Density and filesystem of an image, from the firmware's Inspect. */
+static int inspect_media(const char *uri, amiga_media_t *media, void *ctx)
+{
+  fnsvc_disk_inspection_t in;
+
+  (void) ctx;
+  if (!fnsvc_disk_inspect(uri, &in))
+    return 0;
+  amiga_media_classify(media, in.sector_size, in.sector_count, in.boot,
+                       in.boot_len);
+  return media->known;
+}
+
+#ifndef __KICK13__
+/* WB3.1's FastFileSystem cannot exit (no ACTION_DIE), so a started DNx:
+ * handler stays fixed to its geometry and filesystem; FMOUNT refuses another
+ * type on it.  Older FastFileSystems retire the handler, so they pin nothing.
+ * The node's DosEnvec holds the type: more than 11 blocks per track is HD,
+ * and the DosType's low bit is FFS. */
+static int handler_pinned(uint8_t unit, amiga_media_t *pinned, void *ctx)
+{
+  char name[4];
+  struct DosList *list;
+  struct DosList *entry;
+  int found = 0;
+
+  (void) ctx;
+  if (((struct Library *) DOSBase)->lib_Version < 40)
+    return 0;
+  name[0] = 'D';
+  name[1] = 'N';
+  name[2] = (char) ('0' + unit);
+  name[3] = 0;
+  list = LockDosList(LDF_DEVICES | LDF_READ);
+  if (list) {
+    entry = FindDosEntry(list, (CONST_STRPTR) name, LDF_DEVICES);
+    if (entry && entry->dol_Task &&
+        entry->dol_misc.dol_handler.dol_Startup) {
+      struct FileSysStartupMsg *fssm = (struct FileSysStartupMsg *)
+        BADDR(entry->dol_misc.dol_handler.dol_Startup);
+      struct DosEnvec *env = fssm && fssm->fssm_Environ
+        ? (struct DosEnvec *) BADDR(fssm->fssm_Environ) : NULL;
+
+      if (env) {
+        pinned->known = 1;
+        pinned->hd = (uint8_t) (env->de_BlocksPerTrack > 11);
+        pinned->ofs = (uint8_t) ((env->de_DosType & 1) == 0);
+        found = 1;
+      }
+    }
     UnLockDosList(LDF_DEVICES | LDF_READ);
   }
   return found;
@@ -125,6 +183,9 @@ int main(int argc, char **argv)
 #ifndef __KICK13__
   if (((struct Library *) DOSBase)->lib_Version >= 36)
     amiga_ctl_set_probe(&ctl, drive_present, NULL);
+  amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, handler_pinned, NULL);
+#else
+  amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, NULL, NULL);
 #endif
   rc = amiga_gui_run(&ctl, &options);
 

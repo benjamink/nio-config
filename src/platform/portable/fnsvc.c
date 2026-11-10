@@ -15,7 +15,8 @@ enum {
   NIO_DISK_VERSION = 1,
   NIO_DISK_MOUNT = 0x01,
   NIO_DISK_UNMOUNT = 0x02,
-  NIO_DISK_RESTORE_BOOT = 0x0A
+  NIO_DISK_RESTORE_BOOT = 0x0A,
+  NIO_DISK_INSPECT = 0x0F
 };
 
 enum {
@@ -515,5 +516,43 @@ int fnsvc_disk_restore_boot(uint8_t slot)
     return fail(FNSVC_ERR_SHORT_RESPONSE);
   if (resp_buf[0] != NIO_DISK_VERSION)
     return fail(FNSVC_ERR_BAD_VERSION);
+  return 1;
+}
+
+int fnsvc_disk_inspect(const char *uri, fnsvc_disk_inspection_t *out)
+{
+  uint8_t status;
+  uint16_t resp_len;
+  uint16_t uri_len = (uint16_t) strlen(uri);
+  uint16_t off = 0;
+  uint16_t boot_len;
+
+  if (uri_len == 0 || (size_t) 9 + uri_len > sizeof(req_buf))
+    return 0;
+  req_buf[off++] = NIO_DISK_VERSION;
+  req_buf[off++] = 0;                    /* no slot: inspects the URI */
+  req_buf[off++] = 0;                    /* image type: detect */
+  put_u16le(&req_buf[off], 0);           /* no sector-size hint */
+  off += 2;
+  put_u16le(&req_buf[off], FNSVC_INSPECT_BOOT);
+  off += 2;
+  put_u16le(&req_buf[off], uri_len);
+  off += 2;
+  memcpy(&req_buf[off], uri, uri_len);
+  off += uri_len;
+
+  if (!service_call(NIO_DEVICEID_DISK, NIO_DISK_INSPECT, req_buf, off,
+                    resp_buf, 10 + FNSVC_INSPECT_BOOT, &status, &resp_len))
+    return 0;
+  if (status != FNSVC_STATUS_OK || resp_len < 10 ||
+      resp_buf[0] != NIO_DISK_VERSION)
+    return 0;
+  boot_len = get_u16le(&resp_buf[8]);
+  if (boot_len > FNSVC_INSPECT_BOOT || resp_len != (uint16_t) (10 + boot_len))
+    return 0;
+  out->sector_size = get_u16le(&resp_buf[2]);
+  out->sector_count = get_u32le(&resp_buf[4]);
+  out->boot_len = boot_len;
+  memcpy(out->boot, &resp_buf[10], boot_len);
   return 1;
 }

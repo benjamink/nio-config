@@ -21,6 +21,68 @@ const char *amiga_drive_label(uint8_t unit, uint8_t kick13)
   return kick13 ? labels_kick13[unit] : labels_v36[unit];
 }
 
+amiga_media_t amiga_drive_kick13_media(uint8_t unit)
+{
+  amiga_media_t m;
+
+  /* Units 0-1 DD/FFS, 2-3 HD/FFS, 4-5 DD/OFS, 6-7 HD/OFS. */
+  m.known = 1;
+  m.hd = (uint8_t) ((unit >> 1) & 1);
+  m.ofs = (uint8_t) ((unit >> 2) & 1);
+  return m;
+}
+
+void amiga_media_classify(amiga_media_t *media, uint16_t sector_size,
+                          uint32_t sector_count, const uint8_t *boot,
+                          uint16_t boot_len)
+{
+  uint32_t bytes;
+
+  media->known = media->hd = media->ofs = 0;
+  if (sector_size != 512 || !boot || boot_len < 4 || boot[0] != 'D' ||
+      boot[1] != 'O' || boot[2] != 'S' || boot[3] > 1)
+    return;
+  bytes = sector_count;            /* 512-byte sectors: 1760 DD, 3520 HD */
+  if (bytes == 1760UL)
+    media->hd = 0;
+  else if (bytes == 3520UL)
+    media->hd = 1;
+  else
+    return;
+  media->ofs = (uint8_t) (boot[3] == 0);
+  media->known = 1;
+}
+
+const char *amiga_media_name(const amiga_media_t *media)
+{
+  if (!media || !media->known)
+    return "?";
+  if (media->hd)
+    return media->ofs ? "HD OFS" : "HD FFS";
+  return media->ofs ? "DD OFS" : "DD FFS";
+}
+
+uint8_t amiga_drive_fit(uint8_t unit, uint8_t kick13,
+                        const amiga_media_t *media,
+                        const amiga_media_t *pinned)
+{
+  amiga_media_t fixed;
+
+  if (!media || !media->known)
+    return AMIGA_FIT_OK;
+  if (kick13) {
+    fixed = amiga_drive_kick13_media(unit);
+    pinned = &fixed;
+  }
+  if (!pinned || !pinned->known)
+    return AMIGA_FIT_OK;
+  if (pinned->hd != media->hd)
+    return AMIGA_FIT_DENSITY;
+  if (pinned->ofs != media->ofs)
+    return AMIGA_FIT_FS;
+  return AMIGA_FIT_OK;
+}
+
 static char upper(char c)
 {
   return (char) ((c >= 'a' && c <= 'z') ? c - 32 : c);

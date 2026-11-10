@@ -2,6 +2,7 @@
 #define AMIGA_CTL_H
 
 #include "config_nio.h"
+#include "amiga_drives.h"
 #include "amiga_list.h"
 #include "fujinet-nio.h"
 
@@ -62,6 +63,17 @@ typedef int (*amiga_exec_fn)(const char *command, char *output, uint16_t cap,
  * FMOUNTRESTORE) creates them again. */
 typedef int (*amiga_probe_fn)(uint8_t unit, void *ctx);
 
+/* Inspects the image at `uri`: density and filesystem.  Returns 0 when it
+ * cannot (older firmware, unreadable image); the media is then unknown and
+ * no drive is excluded. */
+typedef int (*amiga_inspect_fn)(const char *uri, amiga_media_t *media,
+                                void *ctx);
+
+/* Reports what DN<unit>'s running DOS handler is fixed to (WB3.1 FFS cannot
+ * change geometry or filesystem once started).  Returns 0 when the unit is
+ * free to take any media. */
+typedef int (*amiga_pin_fn)(uint8_t unit, amiga_media_t *pinned, void *ctx);
+
 enum {
   AMIGA_DRIVE_EMPTY = 0,   /* no saved mapping */
   AMIGA_DRIVE_MOUNTED,     /* mapped and present in AmigaDOS */
@@ -96,6 +108,11 @@ typedef struct {
   void *exec_ctx;
   amiga_probe_fn probe;     /* NULL: a mapping counts as mounted */
   void *probe_ctx;
+  amiga_inspect_fn inspect;   /* NULL: media is never known */
+  void *inspect_ctx;
+  amiga_pin_fn pin;           /* NULL: no unit is pinned */
+  void *pin_ctx;
+  amiga_media_t mount_media;  /* of the image the picker is choosing for */
   /* Two catalogue windows (a visible list spans at most two) and one
    * record per drive; AMIGA_CAT_SLOTS / a clear bit mean "not cached". */
   uint16_t cat_base[2];
@@ -195,6 +212,21 @@ uint8_t amiga_ctl_catalogue_readonly(amiga_ctl_t *ctl, uint8_t slot);
 void amiga_ctl_set_probe(amiga_ctl_t *ctl, amiga_probe_fn probe, void *ctx);
 uint8_t amiga_ctl_drive_state(amiga_ctl_t *ctl, uint8_t unit);
 int amiga_ctl_drive_mounted(amiga_ctl_t *ctl, uint8_t unit);
+/* Mount picker guidance.  set_media_probes supplies the image inspector and
+ * the pinned-handler probe; the picker then starts on the first drive that
+ * can take the pending image, and the rows say which drives cannot. */
+void amiga_ctl_set_media_probes(amiga_ctl_t *ctl, amiga_inspect_fn inspect,
+                                void *inspect_ctx, amiga_pin_fn pin,
+                                void *pin_ctx);
+/* AMIGA_FIT_* of the pending image on `unit`. */
+uint8_t amiga_ctl_drive_fit(amiga_ctl_t *ctl, uint8_t unit);
+/* Picker row suffix for `unit` ("[DD FFS]", "(HD OFS only)") or "" when the
+ * drive can be anything.  Always NUL-terminated within cap. */
+void amiga_ctl_drive_note(amiga_ctl_t *ctl, uint8_t unit, char *out,
+                          uint16_t cap);
+/* First drive that fits: empty, then saved, then in use; the first empty
+ * drive when none fits. */
+uint8_t amiga_ctl_best_drive(amiga_ctl_t *ctl);
 /* Mounts a saved-but-absent drive again with its saved slot and mode. */
 int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit);
 /* The DOS name to open in a Workbench window (e.g. "DN0:"), or 0 with a

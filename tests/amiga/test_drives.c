@@ -34,4 +34,45 @@ void test_drives(void)
   CHECK(!amiga_fmount_command(buf, 10, "SYS:C/fmount", 1, 0, 0, 0));
   CHECK(!amiga_fmount_command(buf, sizeof(buf), "SYS:C/fmount", 1, 8, 0, 0));
   CHECK(!amiga_fumount_command(buf, sizeof(buf), "", 0, 0));
+
+  /* Media classification and drive fit. */
+  {
+    static const uint8_t ffs[4] = { 'D', 'O', 'S', 1 };
+    static const uint8_t ofs[4] = { 'D', 'O', 'S', 0 };
+    static const uint8_t bad[4] = { 'N', 'D', 'O', 'S' };
+    amiga_media_t dd, hd, hdo, none, pin;
+
+    amiga_media_classify(&dd, 512, 1760, ffs, 4);
+    amiga_media_classify(&hd, 512, 3520, ffs, 4);
+    amiga_media_classify(&hdo, 512, 3520, ofs, 4);
+    amiga_media_classify(&none, 512, 3520, bad, 4);
+    CHECK(dd.known && !dd.hd && !dd.ofs);
+    CHECK(hd.known && hd.hd && !hd.ofs);
+    CHECK(hdo.known && hdo.hd && hdo.ofs);
+    CHECK(!none.known);
+    amiga_media_classify(&none, 256, 1760, ffs, 4);
+    CHECK(!none.known);
+    amiga_media_classify(&none, 512, 2000, ffs, 4);
+    CHECK(!none.known);
+    CHECK_STR(amiga_media_name(&hdo), "HD OFS");
+    CHECK_STR(amiga_media_name(&dd), "DD FFS");
+    CHECK_STR(amiga_media_name(&none), "?");
+
+    /* WB2+: free units take anything; a pinned handler only its own type. */
+    CHECK(amiga_drive_fit(0, 0, &hd, NULL) == AMIGA_FIT_OK);
+    pin = dd;
+    CHECK(amiga_drive_fit(0, 0, &hd, &pin) == AMIGA_FIT_DENSITY);
+    CHECK(amiga_drive_fit(0, 0, &hdo, &hd) == AMIGA_FIT_FS);
+    CHECK(amiga_drive_fit(0, 0, &dd, &pin) == AMIGA_FIT_OK);
+    CHECK(amiga_drive_fit(0, 0, &none, &pin) == AMIGA_FIT_OK);
+
+    /* WB1.3: the endpoint fixes density and filesystem. */
+    CHECK(amiga_drive_fit(0, 1, &dd, NULL) == AMIGA_FIT_OK);    /* DN0 */
+    CHECK(amiga_drive_fit(1, 1, &hd, NULL) == AMIGA_FIT_DENSITY);
+    CHECK(amiga_drive_fit(2, 1, &hd, NULL) == AMIGA_FIT_OK);    /* HN0 */
+    CHECK(amiga_drive_fit(3, 1, &hdo, NULL) == AMIGA_FIT_FS);
+    CHECK(amiga_drive_fit(6, 1, &hdo, NULL) == AMIGA_FIT_OK);   /* HO0 */
+    CHECK(amiga_drive_fit(4, 1, &dd, NULL) == AMIGA_FIT_FS);    /* DO0 */
+    CHECK(amiga_drive_fit(4, 1, &none, NULL) == AMIGA_FIT_OK);
+  }
 }

@@ -60,6 +60,17 @@ int fnsvc_resolve_path(const char *base_uri, const char *arg,
 int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly,
                      uint16_t sector_size_hint);
 int fnsvc_disk_unmount(uint8_t slot);
+/* DiskDevice Inspect: the geometry and first FNSVC_INSPECT_BOOT bytes of the
+ * image at `uri`, without mounting it.  Returns 0 when the firmware has no
+ * Inspect or the image cannot be read. */
+#define FNSVC_INSPECT_BOOT 4
+typedef struct {
+  uint16_t sector_size;
+  uint32_t sector_count;
+  uint16_t boot_len;
+  uint8_t boot[FNSVC_INSPECT_BOOT];
+} fnsvc_disk_inspection_t;
+int fnsvc_disk_inspect(const char *uri, fnsvc_disk_inspection_t *out);
 /* FN_DISK_ERR_* (fujinet-nio.h) for the most recent fnsvc_disk_*() call:
  * FN_DISK_ERR_NONE after success, the exact reason after a failure NIO
  * explained, otherwise FN_DISK_ERR_UNREPORTED. */
