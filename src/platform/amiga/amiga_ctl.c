@@ -1156,6 +1156,15 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
     slot = (uint8_t) ctl->mount_slot;
   else if (!find_slot(ctl, ctl->mount_uri, &slot))
     return 0;
+  /* Refuse before touching the saved slot: a drive that cannot take the image
+   * must not leave a changed slot behind. */
+  if (amiga_ctl_drive_fit(ctl, unit) != AMIGA_FIT_OK) {
+    amiga_sprintf(ctl->msg, "%s is %s; %s cannot take it",
+                  ctl->mount_name, amiga_media_name(&ctl->mount_media),
+                  amiga_drive_label(unit, ctl->kick13));
+    status(ctl, ctl->msg);
+    return 0;
+  }
   s = amiga_ctl_slot(ctl, slot);
   if (!s)
     return 0;
@@ -1163,13 +1172,6 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
       (strcmp(s->mode, "r") == 0) != (readonly != 0)) {
     if (!amiga_ctl_slot_set(ctl, slot, ctl->mount_uri, readonly))
       return 0;
-  }
-  if (amiga_ctl_drive_fit(ctl, unit) != AMIGA_FIT_OK) {
-    amiga_sprintf(ctl->msg, "%s is %s; %s cannot take it",
-                  ctl->mount_name, amiga_media_name(&ctl->mount_media),
-                  amiga_drive_label(unit, ctl->kick13));
-    status(ctl, ctl->msg);
-    return 0;
   }
   if (!amiga_ctl_drive_insert(ctl, unit, slot, readonly))
     return 0;

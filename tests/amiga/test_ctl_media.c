@@ -115,6 +115,17 @@ void test_ctl_media(void)
   CHECK_STR(note, "[HD OFS]");
   CHECK(!amiga_ctl_mount_commit(&ctl, 2, 0));
   CHECK_STR(state.status, "Work.adf is HD OFS; HN0: cannot take it");
+  /* The refusal comes before the saved slot is touched: asking for a mode the
+   * slot does not have must not change it. */
+  {
+    const char *mode_before = amiga_ctl_slot(&ctl, 3)->mode;
+    char saved_mode[8];
+
+    strncpy(saved_mode, mode_before, sizeof(saved_mode) - 1);
+    saved_mode[sizeof(saved_mode) - 1] = 0;
+    CHECK(!amiga_ctl_mount_commit(&ctl, 2, strcmp(saved_mode, "r") != 0));
+    CHECK_STR(amiga_ctl_slot(&ctl, 3)->mode, saved_mode);
+  }
 
   /* No drive can take it: the message says so. */
   setup(0);
