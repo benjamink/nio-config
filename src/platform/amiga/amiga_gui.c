@@ -935,13 +935,35 @@ static void gui_paint_info(void)
 static void gui_paint_status(void)
 {
   amiga_rect_t in = amiga_rect_inset(layout.status, 2, 1);
-  uint8_t cols = (uint8_t) ((in.width - 8) / FONT_W);
+  /* Right-hand cell: a floppy and how many of the drives are mapped. */
+  WORD cell_w = glyph_chip ? (WORD) (AMIGA_GLYPH_W + 4 + 3 * FONT_W + 12) : 0;
+  uint8_t cols = (uint8_t) ((in.width - 8 - cell_w) / FONT_W);
 
   fill(&in, theme.background);
   bevel(&layout.status, 1);
   amiga_clip_head(tmp_text, sizeof(tmp_text), gctl->state->status, cols);
   text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
           (WORD) strlen(tmp_text), theme.text);
+  if (cell_w) {
+    struct RastPort *rp = win->RPort;
+    WORD x = (WORD) (in.left + in.width - cell_w);
+    config_nio_mapping_t m;
+    uint8_t i, n = 0;
+
+    /* Counts the saved mappings only.  Probing AmigaDOS for each drive
+     * on every status repaint can stall right after a mount. */
+    for (i = 0; i < AMIGA_DRIVE_COUNT; i++)
+      n = (uint8_t) (n + (config_nio_mapping_get(gctl->state, i, &m) &&
+                          m.valid ? 1 : 0));
+    SetAPen(rp, theme.shadow);
+    Move(rp, x, in.top);
+    Draw(rp, x, (WORD) (in.top + in.height - 1));
+    paint_glyph((WORD) (x + 6), (WORD) (in.top + (in.height - AMIGA_GLYPH_H) / 2),
+                AMIGA_GLYPH_FLOPPY_FULL, 0);
+    amiga_sprintf(tmp_text, "%u/%u", (unsigned) n, (unsigned) AMIGA_DRIVE_COUNT);
+    text_at((WORD) (x + 6 + AMIGA_GLYPH_W + 4), (WORD) (in.top + 1), tmp_text,
+            (WORD) strlen(tmp_text), theme.text);
+  }
 }
 
 static void paint_checkbox(void)
@@ -995,6 +1017,7 @@ static void gui_paint_buttons(void)
 }
 
 static uint8_t current_tab(void);
+static void gui_paint_logo(void);
 
 static void gui_paint_tabs(void)
 {
@@ -1011,15 +1034,47 @@ static void gui_paint_tabs(void)
     return;
   }
 
+  /* Folder tabs over a framed page.  Redrawing the frame first wipes the
+   * ledge under the previous selection.  Inactive tabs are shorter and sit
+   * on the ledge; the selected tab shares the page background, stands full
+   * height with a fill-pen band across its top, and is open at the bottom
+   * so it runs into the page. */
+  {
+    amiga_rect_t strip = layout.page;
+
+    strip.left = (int16_t) (strip.left + 2);
+    strip.width = (int16_t) (strip.width - 4);
+    strip.height = AMIGA_LAYOUT_GAP;
+    fill(&strip, theme.background);
+    bevel(&layout.page, 0);
+  }
   for (i = 0; i < AMIGA_TAB_COUNT; i++) {
     int selected = i == tab;
-    amiga_rect_t in = amiga_rect_inset(layout.tab[i], 2, 1);
+    amiga_rect_t r = layout.tab[i];
+    amiga_rect_t in;
+    amiga_rect_t band;
 
-    fill(&in, selected ? theme.fill : theme.background);
-    bevel(&layout.tab[i], selected);
-    text_centred(&layout.tab[i], tab_labels[i],
-                 selected ? theme.filltext : theme.text);
+    if (selected) {
+      r.height = (int16_t) (r.height + AMIGA_LAYOUT_GAP);
+    } else {
+      r.top = (int16_t) (r.top + 2);
+      r.height = (int16_t) (r.height - 2);
+    }
+    in = amiga_rect_inset(r, 2, 1);
+    fill(&in, theme.background);
+    bevel(&r, 0);
+    if (selected) {
+      band = amiga_rect_inset(r, 2, 1);
+      band.height = 2;
+      fill(&band, theme.fill);
+      band.top = (int16_t) (r.top + r.height - 1);
+      band.height = 1;
+      fill(&band, theme.background);   /* open into the page */
+    }
+    text_centred(&layout.tab[i], tab_labels[i], theme.text);
   }
+  /* The logo sits over the frame's top-right corner, so repaint it. */
+  gui_paint_logo();
 }
 
 /* Emblem in the fill pen, lettering in the text pen: orange/white on a
@@ -1075,7 +1130,7 @@ static void gui_paint(void)
   inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
   inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
   fill(&inner, theme.background);
-  gui_paint_logo();
+  bevel(&layout.page, 0);
   gui_paint_tabs();
   gui_paint_info();
   bevel(tiles_on() ? &tiles.panel : &layout.list, 1);

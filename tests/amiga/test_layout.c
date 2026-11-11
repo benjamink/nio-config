@@ -34,6 +34,15 @@ static void check_geometry(const amiga_layout_in_t *in, const amiga_layout_t *o)
   CHECK(o->slot.left + o->slot.width <= o->ro.left);
   CHECK(o->scroller.left == o->list.left + o->list.width);
   CHECK(o->list.height == o->list_rows * o->row_h + 4);
+  /* The page frame starts at the tab ledge, encloses everything down to the
+   * button row and ends above the status line. */
+  CHECK(o->page.top == o->tab[0].top + o->tab[0].height);
+  CHECK(o->page.left == o->tab[0].left);
+  CHECK(o->page.left < o->list.left &&
+        o->page.left + o->page.width > o->scroller.left + o->scroller.width);
+  CHECK(o->page.top + o->page.height > o->button[0].top + o->button[0].height);
+  CHECK(o->page.top + o->page.height <= o->status.top);
+  CHECK(o->page.left >= 0 && o->page.left + o->page.width <= o->win_w);
   CHECK(o->tab[0].width == o->tab[1].width);
   CHECK(o->button[0].width == o->button[4].width);
 }
