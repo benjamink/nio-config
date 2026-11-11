@@ -236,6 +236,16 @@ int amiga_ctl_net_refresh(amiga_ctl_t *ctl)
   return 1;
 }
 
+int amiga_ctl_net_status_read(amiga_ctl_t *ctl)
+{
+  amiga_net_t *n = &ctl->net;
+
+  n->have_status = fn_wifi_get_status(&n->status) == FN_OK;
+  if (!n->have_status)
+    memset(&n->status, 0, sizeof(n->status));
+  return n->have_status;
+}
+
 uint8_t amiga_ctl_net_poll(amiga_ctl_t *ctl)
 {
   if (!amiga_ctl_net_refresh(ctl))

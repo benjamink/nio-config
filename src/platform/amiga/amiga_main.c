@@ -4,6 +4,7 @@
 #include "amiga_ctl.h"
 #include "amiga_exec.h"
 #include "amiga_gui.h"
+#include "amiga_net.h"
 #include "amiga_options.h"
 #include "amiga_splash.h"
 
@@ -205,6 +206,10 @@ int main(int argc, char **argv)
   if (((struct Library *) DOSBase)->lib_Version >= 36)
     amiga_ctl_set_probe(&ctl, drive_present, NULL);
   amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, handler_pinned, NULL);
+  if (!options.script[0]) {
+    amiga_splash_text("Checking Wi-Fi...");
+    (void) amiga_ctl_net_status_read(&ctl);
+  }
   amiga_splash_wait(AMIGA_SPLASH_MIN_TICKS);
   rc = amiga_gui_run(&ctl, &options);
 

@@ -67,6 +67,10 @@ int amiga_ctl_net_refresh(amiga_ctl_t *ctl);
 /* Link state after re-reading the status, or 0xFF when that failed. */
 uint8_t amiga_ctl_net_poll(amiga_ctl_t *ctl);
 
+/* Reads only the link status (one call, no message change) for the main
+ * window's signal cell.  Returns have_status. */
+int amiga_ctl_net_status_read(amiga_ctl_t *ctl);
+
 /* Join picker: scan (all pages, at most AMIGA_NET_SCAN_MAX networks) and
  * show the list with the joined network, else the strongest, selected. */
 int amiga_ctl_wifi_begin(amiga_ctl_t *ctl);
