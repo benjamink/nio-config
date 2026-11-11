@@ -299,3 +299,7 @@ palettes. To regenerate both, and then the icon:
 ```sh
 make regen-amiga-icons
 ```
+
+## Wi-Fi signal in the status line
+
+When the FujiNet reports a Wi-Fi status, the main window's status line shows four signal bars left of the mounted-drive count (all dim when not connected). The status is read once at startup (not in scripted runs) and refreshed whenever the Configure window reads or joins a network; it is not polled. The cell is omitted when the FujiNet has no Wi-Fi status.

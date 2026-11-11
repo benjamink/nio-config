@@ -164,6 +164,7 @@ static uint8_t tiles_ok;
 static int8_t pending_tile = -1;
 static const char *pending_text = "";
 static void gui_paint_status(void);
+static void cfg_draw_bars(WORD x, WORD top, uint8_t level, int selected);
 
 static int tiles_on(void)
 {
@@ -980,13 +981,25 @@ static void gui_paint_status(void)
   amiga_rect_t in = amiga_rect_inset(layout.status, 2, 1);
   /* Right-hand cell: a floppy and how many of the drives are mapped. */
   WORD cell_w = glyph_chip ? (WORD) (AMIGA_GLYPH_W + 4 + 3 * FONT_W + 12) : 0;
-  uint8_t cols = (uint8_t) ((in.width - 8 - cell_w) / FONT_W);
+  /* Wi-Fi signal cell, only when the FujiNet reports a status. */
+  WORD wifi_w = gctl->net.have_status ? (WORD) (AMIGA_NET_BARS * 6 + 12) : 0;
+  uint8_t cols = (uint8_t) ((in.width - 8 - cell_w - wifi_w) / FONT_W);
 
   fill(&in, theme.background);
   bevel(&layout.status, 1);
   amiga_clip_head(tmp_text, sizeof(tmp_text), gctl->state->status, cols);
   text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
           (WORD) strlen(tmp_text), theme.text);
+  if (wifi_w) {
+    WORD x = (WORD) (in.left + in.width - cell_w - wifi_w);
+    uint8_t level = gctl->net.status.link_state == 2
+                      ? amiga_net_signal_bars(gctl->net.status.rssi) : 0;
+
+    SetAPen(win->RPort, theme.shadow);
+    Move(win->RPort, x, in.top);
+    Draw(win->RPort, x, (WORD) (in.top + in.height - 1));
+    cfg_draw_bars((WORD) (x + 6), (WORD) (in.top + 1), level, 0);
+  }
   if (cell_w) {
     struct RastPort *rp = win->RPort;
     WORD x = (WORD) (in.left + in.width - cell_w);
