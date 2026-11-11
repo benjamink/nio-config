@@ -259,3 +259,23 @@ after changes to the screen code or the SIO path.
 
 `scripts/atari_shot.py` and `scripts/atari_shot_netsio.py` run the same harness
 from the command line with a key script and screenshots (see `docs/atari-config.md`).
+
+## Palm shared-library configuration
+
+Build NioLib and then the app as described in [palmos-config.md](docs/palmos-config.md),
+and install the library's test requirements into its venv:
+
+```sh
+cd ../fujinet-nio-lib
+python3 -m venv build/palmos-test-venv
+build/palmos-test-venv/bin/pip install -r tests/requirements-palmos-shared.txt
+cd ../nio-config
+make test-palmos PALMOS_PYTHON=../fujinet-nio-lib/build/palmos-test-venv/bin/python
+```
+
+The focused suite executes the compiled m68k app and installed-library code
+with mocked Palm OS/transport peers. No hardware, live serial ports or running
+NIO backend are used. `make test-palmos` points the tests at
+`$(FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION)` and
+`build/palmos-usb`; override `NIOLIB_BUILD` and `PALMOS_BUILD` for other build
+outputs. A missing Unicorn or build artifact is not a passed compiled-code test.
