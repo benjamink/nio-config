@@ -75,6 +75,16 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
   mount a catalogue slot, or open (or remount) a drive.
+- Rows in Browse, Catalogue and the mount pickers start with a small glyph:
+  a drawer, a disk image (ADF or HDF), a plain file or a floppy.
+- The **Drives** page shows its eight drives as tiles, four across. A mounted
+  drive is a raised tile with a solid floppy, its image name and `RO`/`RW`
+  and slot; an empty drive is pressed in with a dotted floppy. Click a tile to
+  select it, double-click (or Return) to open it, and use the cursor keys to
+  move around the grid. On a window too short for two rows of tiles the page
+  falls back to the list, and the same applies if chip memory for the icons
+  cannot be allocated. The glyphs and icons use only the screen's own pens, so
+  they look right on the four-colour Workbench 1.3 screen as well as 2.x/3.x.
 
 To mount an image:
 
