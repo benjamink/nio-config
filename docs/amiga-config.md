@@ -80,7 +80,7 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
   a drawer, a disk image (ADF or HDF), a plain file or a floppy.
 - The **Drives** page shows its eight drives as tiles, four across. A mounted
   drive is a raised tile with a solid floppy, its image name and `RO`/`RW`
-  and slot; an empty drive is pressed in with a dotted floppy; selection is shown by the fill colour and does not change the bevel. Click a tile to
+  and slot; a drive whose image is saved but not mounted keeps the outline with a faded (dotted) body and says "not mounted"; an empty drive is pressed in with a dotted floppy; selection is shown by the fill colour and does not change the bevel. Click a tile to
   select it, double-click (or Return) to open it, and use the cursor keys to
   move around the grid. On a window too short for two rows of tiles the page
   falls back to the list, and the same applies if chip memory for the icons
@@ -305,3 +305,5 @@ make regen-amiga-icons
 When the FujiNet reports a Wi-Fi status, the main window's status line shows four signal bars left of the mounted-drive count (all dim when not connected). The status is read once at startup (not in scripted runs) and refreshed whenever the Configure window reads or joins a network; it is not polled. The cell is omitted when the FujiNet has no Wi-Fi status.
 
 In Browse, files that are not disk images (.adf, .hdf, .hdd) are drawn in a quieter pen because they cannot be mounted. Folders and images look normal, and a selected row keeps its highlight. The dimming is a hint only: it does not block Mount.
+
+The mount picker (Mount... from Browse or the Catalogue) shows the same drive tiles. A fixed-media drive names its media type on the tile; a drive that cannot take the image is drawn in a quieter pen. While a mount or eject runs, the tile shows "Mounting..." or "Ejecting..." under its floppy.

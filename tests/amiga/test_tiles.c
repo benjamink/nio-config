@@ -109,4 +109,28 @@ void test_tiles(void)
     CHECK(empty_body == 0 && empty_paper == 0);
     CHECK(empty_line > 0 && empty_line < full_line);   /* dotted outline */
   }
+  /* A saved (not mounted) disk: the full outline, a thinned body and label. */
+  {
+    unsigned s_line = 0, s_body = 0, s_paper = 0, f_line = 0, f_body = 0;
+    unsigned f_paper = 0;
+    uint8_t row, w;
+
+    for (row = 0; row < AMIGA_ICON_H; row++) {
+      for (w = 0; w < 2; w++) {
+        uint16_t f = (uint16_t) (row * AMIGA_ICON_WORDS + w);
+        uint16_t sv = (uint16_t) (row * AMIGA_ICON_WORDS +
+                                  2 * AMIGA_ICON_FLOPPY_SAVED + w);
+        uint16_t v;
+
+        for (v = line[f]; v; v &= (uint16_t) (v - 1)) f_line++;
+        for (v = line[sv]; v; v &= (uint16_t) (v - 1)) s_line++;
+        for (v = body[f]; v; v &= (uint16_t) (v - 1)) f_body++;
+        for (v = body[sv]; v; v &= (uint16_t) (v - 1)) s_body++;
+        for (v = paper[f]; v; v &= (uint16_t) (v - 1)) f_paper++;
+        for (v = paper[sv]; v; v &= (uint16_t) (v - 1)) s_paper++;
+      }
+    }
+    CHECK(s_line == f_line);
+    CHECK(s_body > 0 && s_body < f_body && s_paper > 0 && s_paper < f_paper);
+  }
 }

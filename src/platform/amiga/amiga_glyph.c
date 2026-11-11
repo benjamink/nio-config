@@ -31,8 +31,15 @@ static const uint8_t glyphs[AMIGA_GLYPH_COUNT][2][AMIGA_GLYPH_H] = {
 
 uint8_t amiga_glyph_row(uint8_t glyph, uint8_t layer, uint8_t row)
 {
+  uint8_t bits;
+
   if (glyph >= AMIGA_GLYPH_COUNT || layer > 1 || row >= AMIGA_GLYPH_H)
     return 0;
+  if (glyph == AMIGA_GLYPH_FLOPPY_SAVED) {
+    /* The mounted floppy with its body thinned to a checkerboard. */
+    bits = glyphs[AMIGA_GLYPH_FLOPPY_FULL][layer][row];
+    return layer ? (uint8_t) (bits & ((row & 1) ? 0x55 : 0xAA)) : bits;
+  }
   return glyphs[glyph][layer][row];
 }
 
@@ -126,14 +133,17 @@ void amiga_icon_build(uint16_t *line, uint16_t *body, uint16_t *paper)
   for (row = 0; row < AMIGA_ICON_H; row++) {
     for (icon = 0; icon < AMIGA_ICON_COUNT; icon++) {
       int empty = icon == AMIGA_ICON_FLOPPY_EMPTY;
+      int saved = icon == AMIGA_ICON_FLOPPY_SAVED;
 
       for (half = 0; half < 2; half++) {
         uint16_t at = (uint16_t) (row * AMIGA_ICON_WORDS + icon * 2 + half);
         uint8_t x0 = (uint8_t) (half * 8);
 
         line[at] = widen(icon_bits('#', x0, row, empty));
-        body[at] = empty ? 0 : widen(icon_bits('o', x0, row, 0));
-        paper[at] = empty ? 0 : widen(icon_bits('w', x0, row, 0));
+        /* A saved (not mounted) disk keeps its outline but the body and
+         * label are thinned out, so it reads as faded. */
+        body[at] = empty ? 0 : widen(icon_bits('o', x0, row, saved));
+        paper[at] = empty ? 0 : widen(icon_bits('w', x0, row, saved));
       }
     }
   }

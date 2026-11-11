@@ -44,6 +44,23 @@ void test_glyph(void)
   }
   CHECK(amiga_glyph_row(AMIGA_GLYPH_FLOPPY_FULL, 1, 3) != 0);
 
+  /* A saved (not mounted) floppy keeps the outline and thins the body. */
+  {
+    unsigned full = 0, thin = 0;
+
+    for (row = 0; row < AMIGA_GLYPH_H; row++) {
+      uint8_t f = amiga_glyph_row(AMIGA_GLYPH_FLOPPY_FULL, 1, row);
+      uint8_t t = amiga_glyph_row(AMIGA_GLYPH_FLOPPY_SAVED, 1, row);
+
+      CHECK(amiga_glyph_row(AMIGA_GLYPH_FLOPPY_SAVED, 0, row) ==
+            amiga_glyph_row(AMIGA_GLYPH_FLOPPY_FULL, 0, row));
+      CHECK((t & ~f) == 0);
+      for (; f; f &= (uint8_t) (f - 1)) full++;
+      for (; t; t &= (uint8_t) (t - 1)) thin++;
+    }
+    CHECK(thin > 0 && thin < full);
+  }
+
   /* Out of range is blank, never a read past the table. */
   CHECK(amiga_glyph_row(AMIGA_GLYPH_COUNT, 0, 0) == 0);
   CHECK(amiga_glyph_row(0, 2, 0) == 0);

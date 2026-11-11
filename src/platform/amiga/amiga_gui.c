@@ -168,7 +168,9 @@ static void cfg_draw_bars(WORD x, WORD top, uint8_t level, int selected);
 
 static int tiles_on(void)
 {
-  return tiles_ok && gctl && gctl->page == AMIGA_PAGE_DRIVES;
+  /* The mount picker chooses a drive, so it shows the same tiles. */
+  return tiles_ok && gctl &&
+         (gctl->page == AMIGA_PAGE_DRIVES || gctl->page == AMIGA_PAGE_MOUNT);
 }
 #define LOGO_MASK_BYTES (sizeof(amiga_logo_emblem))
 static struct Requester block_req;
@@ -717,8 +719,11 @@ static int row_glyph(uint16_t idx)
   case AMIGA_PAGE_CATALOGUE:
     return amiga_glyph_for_name(gctl->cat_uri[idx]);
   default:
-    return amiga_ctl_drive_mounted(gctl, (uint8_t) idx)
-             ? AMIGA_GLYPH_FLOPPY_FULL : AMIGA_GLYPH_FLOPPY;
+    switch (amiga_ctl_drive_state(gctl, (uint8_t) idx)) {
+    case AMIGA_DRIVE_MOUNTED: return AMIGA_GLYPH_FLOPPY_FULL;
+    case AMIGA_DRIVE_SAVED: return AMIGA_GLYPH_FLOPPY_SAVED;
+    default: return AMIGA_GLYPH_FLOPPY;
+    }
   }
 }
 
@@ -763,6 +768,13 @@ static void paint_icon(WORD x, WORD y, uint8_t icon, int selected)
               AMIGA_ICON_W, AMIGA_ICON_H);
 }
 
+/* A quieter text pen: the light shine pen on 2.0+, the shadow pen on 1.3,
+ * where shine and text are both white. */
+static uint8_t dim_pen(void)
+{
+  return theme.shine != theme.text ? theme.shine : theme.shadow;
+}
+
 static void tile_text(WORD x, WORD y, const char *s, uint8_t cols, uint8_t pen)
 {
   amiga_clip_head(uri_text, sizeof(uri_text), s, cols);
@@ -778,8 +790,13 @@ static void paint_tile(uint8_t idx)
   uint8_t state = amiga_ctl_drive_state(gctl, idx);
   int selected = idx == gctl->drives.selected;
   int empty = state == AMIGA_DRIVE_EMPTY;
-  uint8_t pen = selected ? theme.filltext : theme.text;
+  int saved = state == AMIGA_DRIVE_SAVED;
+  int picker = gctl->page == AMIGA_PAGE_MOUNT;
+  /* In the mount picker a drive that cannot take the image is quieter. */
+  int unfit = picker && amiga_ctl_drive_fit(gctl, idx) != AMIGA_FIT_OK;
+  uint8_t pen = selected ? theme.filltext : (unfit ? dim_pen() : theme.text);
   uint8_t cols = (uint8_t) ((r->width - 12) / FONT_W);
+  char note[16];
   const char *name = "";
   char mode[24];
   char label[8];
@@ -800,6 +817,13 @@ static void paint_tile(uint8_t idx)
                     (unsigned) m.slot);
   }
   strcpy(label, amiga_drive_label(idx, gctl->kick13));
+  /* The picker names a fixed media type, or the one the drive cannot take. */
+  note[0] = 0;
+  if (picker) {
+    amiga_ctl_drive_note(gctl, idx, note, sizeof(note));
+    if (note[0])
+      strcpy(mode, note);
+  }
 
   if (idx == pending_tile) {
     /* The disk is going in or out: draw it half way, with the verb. */
@@ -814,8 +838,10 @@ static void paint_tile(uint8_t idx)
   bevel(r, empty);
 
   if (tiles.big) {
-    paint_icon(x, (WORD) (y + (idx == pending_tile ? 6 : 0)),
-               empty ? AMIGA_ICON_FLOPPY_EMPTY : AMIGA_ICON_FLOPPY_FULL,
+    paint_icon(x, y,
+               empty ? AMIGA_ICON_FLOPPY_EMPTY
+                     : (saved && idx != pending_tile ? AMIGA_ICON_FLOPPY_SAVED
+                                                     : AMIGA_ICON_FLOPPY_FULL),
                selected);
     text_at((WORD) (x + AMIGA_ICON_W + 8), (WORD) (y + 4), label,
             (WORD) strlen(label), pen);
@@ -826,12 +852,17 @@ static void paint_tile(uint8_t idx)
       tile_text(x, (WORD) (y + AMIGA_ICON_H + 14), mode, cols, pen);
   } else {
     paint_glyph((WORD) (x - 2), y,
-                (uint8_t) (empty ? AMIGA_GLYPH_FLOPPY : AMIGA_GLYPH_FLOPPY_FULL),
+                (uint8_t) (empty ? AMIGA_GLYPH_FLOPPY
+                           : (saved && idx != pending_tile
+                                ? AMIGA_GLYPH_FLOPPY_SAVED
+                                : AMIGA_GLYPH_FLOPPY_FULL)),
                 selected);
     text_at((WORD) (x + AMIGA_GLYPH_W + 4), (WORD) (y + 1), label,
             (WORD) strlen(label), pen);
     tile_text(x, (WORD) (y + 11),
-              idx == pending_tile ? pending_text : (empty ? "(empty)" : name),
+              idx == pending_tile ? pending_text
+                                  : (empty ? (note[0] ? note : "(empty)")
+                                           : name),
               cols, pen);
   }
 }
@@ -927,9 +958,7 @@ static void gui_paint_rows(void)
             (WORD) (row.top + 1), padded(tmp_text, cols),
             cols, selected ? theme.filltext
                            : row_dimmed(idx)
-                               ? (theme.shine != theme.text ? theme.shine
-                                                            : theme.shadow)
-                               : theme.text);
+                               ? dim_pen() : theme.text);
   }
 }
 

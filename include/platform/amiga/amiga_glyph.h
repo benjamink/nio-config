@@ -22,6 +22,7 @@ enum {
   AMIGA_GLYPH_ADF,
   AMIGA_GLYPH_HDF,
   AMIGA_GLYPH_FILE,
+  AMIGA_GLYPH_FLOPPY_SAVED,  /* mapped but not mounted: ghosted body */
   AMIGA_GLYPH_COUNT
 };
 
@@ -53,6 +54,7 @@ uint8_t amiga_glyph_for_name(const char *name);
 enum {
   AMIGA_ICON_FLOPPY_FULL = 0,
   AMIGA_ICON_FLOPPY_EMPTY,
+  AMIGA_ICON_FLOPPY_SAVED,   /* mapped but not mounted: solid outline, ghosted body */
   AMIGA_ICON_COUNT
 };
 
