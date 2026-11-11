@@ -83,7 +83,10 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
   select it, double-click (or Return) to open it, and use the cursor keys to
   move around the grid. On a window too short for two rows of tiles the page
   falls back to the list, and the same applies if chip memory for the icons
-  cannot be allocated. The glyphs and icons use only the screen's own pens, so
+  cannot be allocated. Mount, Remount and Eject run AmigaDOS commands that
+  hold the window until they finish, so the status line first says what is
+  starting ("Mounting hd.adf on DN1: ...") and, on the tiles, the affected
+  drive shows its floppy half in or out with "Mounting..." or "Ejecting...". The glyphs and icons use only the screen's own pens, so
   they look right on the four-colour Workbench 1.3 screen as well as 2.x/3.x.
 
 To mount an image:
