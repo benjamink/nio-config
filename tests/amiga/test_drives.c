@@ -102,10 +102,10 @@ void test_drives(void)
     CHECK(!amiga_tools_mismatch(0, AMIGA_TOOLS_UNKNOWN, msg, sizeof(msg)));
     CHECK(!amiga_tools_mismatch(1, AMIGA_TOOLS_UNKNOWN, msg, sizeof(msg)));
     CHECK(amiga_tools_mismatch(0, AMIGA_TOOLS_KICK13, msg, sizeof(msg)));
-    CHECK(strstr(msg, "DN0: to DN7:") && strstr(msg, "NIORelease-WB31") &&
-          strstr(msg, "NIORelease-WB32"));
+    CHECK(strstr(msg, "DN0: to DN7:") && strstr(msg, "standard (Workbench 2.0"));
     CHECK(amiga_tools_mismatch(1, AMIGA_TOOLS_STANDARD, msg, sizeof(msg)));
-    CHECK(strstr(msg, "This is Workbench 1.3") && strstr(msg, "NIORelease-WB13"));
+    CHECK(strstr(msg, "This is Workbench 1.3") &&
+          strstr(msg, "Install the Workbench 1.3 versions"));
     CHECK(amiga_tools_mismatch(1, AMIGA_TOOLS_STANDARD, msg, 20));
     CHECK(strlen(msg) == 19);
   }

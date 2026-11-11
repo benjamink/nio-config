@@ -107,13 +107,12 @@ int amiga_tools_mismatch(uint8_t kick13, uint8_t flavour, char *msg,
   if (kick13 && flavour == AMIGA_TOOLS_STANDARD)
     text = "This is Workbench 1.3, which needs the Workbench 1.3 FMOUNT, "
            "FUMOUNT and fujinet-disk.device, but the standard FMOUNT is "
-           "installed.\nInstall them from the Workbench 1.3 release disk "
-           "(NIORelease-WB13).";
+           "installed.\nInstall the Workbench 1.3 versions of those files.";
   else if (!kick13 && flavour == AMIGA_TOOLS_KICK13)
     text = "This is Workbench 2.0 or newer, which uses drives DN0: to DN7:, "
            "but the installed FMOUNT is the Workbench 1.3 build.\nInstall "
-           "FMOUNT, FUMOUNT and fujinet-disk.device from the Workbench 3.x "
-           "release disk (NIORelease-WB31 or NIORelease-WB32).";
+           "the standard (Workbench 2.0 and newer) versions of FMOUNT, "
+           "FUMOUNT and fujinet-disk.device.";
   else
     return 0;
   if (msg && cap) {
