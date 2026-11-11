@@ -25,6 +25,7 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_ctl.c \
 	src/platform/amiga/amiga_script.c \
 	src/platform/amiga/amiga_logo.c \
+	src/platform/amiga/amiga_glyph.c \
 	src/platform/amiga/amiga_logo_data.c \
 	src/platform/amiga/amiga_help.c \
 	src/platform/amiga/amiga_net.c

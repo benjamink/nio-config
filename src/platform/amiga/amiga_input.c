@@ -2,6 +2,8 @@
 
 #define RAW_UP 0x4C
 #define RAW_DOWN 0x4D
+#define RAW_RIGHT 0x4E
+#define RAW_LEFT 0x4F
 #define RAW_RETURN 0x44
 #define RAW_ENTER 0x43
 #define RAW_ESC 0x45
@@ -25,6 +27,10 @@ amiga_key_t amiga_key_from_raw(uint16_t code, uint16_t qualifier)
     if (qualifier & QUAL_ALT)
       return AMIGA_KEY_BOTTOM;
     return (qualifier & QUAL_SHIFT) ? AMIGA_KEY_PAGE_DOWN : AMIGA_KEY_DOWN;
+  case RAW_LEFT:
+    return AMIGA_KEY_LEFT;
+  case RAW_RIGHT:
+    return AMIGA_KEY_RIGHT;
   case RAW_RETURN:
   case RAW_ENTER:
     return AMIGA_KEY_ACTIVATE;

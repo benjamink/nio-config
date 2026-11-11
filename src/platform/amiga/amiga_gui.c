@@ -8,6 +8,7 @@
 #include "amiga_fmt.h"
 #include "amiga_drives.h"
 #include "amiga_format.h"
+#include "amiga_glyph.h"
 #include "amiga_help.h"
 #include "amiga_input.h"
 #include "amiga_layout.h"
@@ -151,6 +152,18 @@ static uint8_t prop_active;
 static UWORD *busy_sprite;
 /* Chip-RAM copies of the logo masks; BltTemplate reads them by blitter. */
 static UWORD *logo_chip;
+/* Chip-RAM glyph strips (outline, fill); NULL means plain text rows. */
+static UWORD *glyph_chip;
+/* Chip-RAM strips (line, body, paper) of the large drive-tile icons. */
+static UWORD *tile_chip;
+/* Drive tiles replace the Drives page list when the window has room. */
+static amiga_tiles_t tiles;
+static uint8_t tiles_ok;
+
+static int tiles_on(void)
+{
+  return tiles_ok && gctl && gctl->page == AMIGA_PAGE_DRIVES;
+}
 #define LOGO_MASK_BYTES (sizeof(amiga_logo_emblem))
 static struct Requester block_req;
 static uint8_t busy_depth;
@@ -420,6 +433,8 @@ static int page_has(uint8_t id)
   if (id < GID_TAB0 + AMIGA_TAB_COUNT)
     return gctl->page != AMIGA_PAGE_HELP;
   switch (id) {
+  case GID_PROP:
+    return !tiles_on();
   case GID_EDIT:
     return gctl->page == AMIGA_PAGE_HOSTS ||
            gctl->page == AMIGA_PAGE_CATALOGUE;
@@ -438,6 +453,11 @@ static void gui_sync_gadgets(void)
 {
   uint8_t id;
 
+  /* With tiles the list gadget also covers the scroller's strip, so a
+   * click anywhere in the tile panel reaches a tile. */
+  detach(GID_LIST);
+  gad[GID_LIST].Width = (WORD) (layout.list.width - 4 +
+                                (tiles_on() ? layout.scroller.width : 0));
   for (id = 0; id < GID_COUNT; id++) {
     if (page_has(id))
       attach(id);
@@ -642,9 +662,168 @@ static void update_prop(void)
   uint16_t pot;
   uint16_t body;
 
+  if (!attached[GID_PROP])
+    return;
   amiga_list_prop(page_list(), &pot, &body);
   NewModifyProp(&gad[GID_PROP], win, NULL, prop_pi.Flags, 0, pot, MAXBODY,
                 body, 1);
+}
+
+/* Pages whose rows lead with a 16x8 glyph; the text starts three columns in
+ * (two for the glyph, one clear). */
+#define GLYPH_COLS 3
+
+static int page_has_glyphs(void)
+{
+  if (!glyph_chip)
+    return 0;
+  switch (gctl->page) {
+  case AMIGA_PAGE_BROWSE:
+  case AMIGA_PAGE_ADD:
+  case AMIGA_PAGE_CATALOGUE:
+  case AMIGA_PAGE_DRIVES:
+  case AMIGA_PAGE_MOUNT:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static int row_glyph(uint16_t idx)
+{
+  switch (gctl->page) {
+  case AMIGA_PAGE_BROWSE: {
+    config_nio_entry_t *e = amiga_ctl_browse_row_entry(gctl, idx);
+
+    if (amiga_ctl_browse_row_is_parent(gctl, idx))
+      return AMIGA_GLYPH_UP;
+    if (e && (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR))
+      return AMIGA_GLYPH_DRAWER;
+    return e ? amiga_glyph_for_name(e->name) : AMIGA_GLYPH_FILE;
+  }
+  case AMIGA_PAGE_ADD: {
+    int c = amiga_ctl_catalogue_index(gctl, (uint8_t) idx);
+
+    return c < 0 ? AMIGA_GLYPH_FLOPPY : amiga_glyph_for_name(gctl->cat_uri[c]);
+  }
+  case AMIGA_PAGE_CATALOGUE:
+    return amiga_glyph_for_name(gctl->cat_uri[idx]);
+  default:
+    return amiga_ctl_drive_mounted(gctl, (uint8_t) idx)
+             ? AMIGA_GLYPH_FLOPPY_FULL : AMIGA_GLYPH_FLOPPY;
+  }
+}
+
+/* Outline in the text pen over a fill-pen body.  On a selected row the
+ * background is the fill pen, so the body switches to the shine pen. */
+static void paint_glyph(WORD x, WORD y, uint8_t g, int selected)
+{
+  struct RastPort *rp = win->RPort;
+  UWORD *line = glyph_chip;
+  UWORD *body = (UWORD *) ((UBYTE *) glyph_chip + AMIGA_GLYPH_STRIP_BYTES);
+  /* One word per glyph per row, so each glyph is word aligned. */
+  SetDrMd(rp, JAM1);
+  SetAPen(rp, selected ? theme.shine : theme.fill);
+  BltTemplate((PLANEPTR) (body + g), 0, AMIGA_GLYPH_WORDS * 2, rp, x, y,
+              AMIGA_GLYPH_W, AMIGA_GLYPH_H);
+  SetAPen(rp, selected ? theme.filltext : theme.text);
+  BltTemplate((PLANEPTR) (line + g), 0, AMIGA_GLYPH_WORDS * 2, rp, x, y,
+              AMIGA_GLYPH_W, AMIGA_GLYPH_H);
+}
+
+/* ---- Drive tiles ---------------------------------------------------- */
+
+static void paint_icon(WORD x, WORD y, uint8_t icon, int selected)
+{
+  struct RastPort *rp = win->RPort;
+  UWORD *line = tile_chip;
+  UWORD *body = (UWORD *) ((UBYTE *) tile_chip + AMIGA_ICON_STRIP_BYTES);
+  UWORD *paper = (UWORD *) ((UBYTE *) tile_chip + 2 * AMIGA_ICON_STRIP_BYTES);
+  WORD word = (WORD) (icon * 2);
+
+  /* A selected tile is filled, so its body falls back to the background
+   * pen; the label paper is always the shine pen. */
+  SetDrMd(rp, JAM1);
+  SetAPen(rp, selected ? theme.background : theme.fill);
+  BltTemplate((PLANEPTR) (body + word), 0, AMIGA_ICON_WORDS * 2, rp, x, y,
+              AMIGA_ICON_W, AMIGA_ICON_H);
+  SetAPen(rp, theme.shine);
+  BltTemplate((PLANEPTR) (paper + word), 0, AMIGA_ICON_WORDS * 2, rp, x, y,
+              AMIGA_ICON_W, AMIGA_ICON_H);
+  SetAPen(rp, selected ? theme.filltext : theme.text);
+  BltTemplate((PLANEPTR) (line + word), 0, AMIGA_ICON_WORDS * 2, rp, x, y,
+              AMIGA_ICON_W, AMIGA_ICON_H);
+}
+
+static void tile_text(WORD x, WORD y, const char *s, uint8_t cols, uint8_t pen)
+{
+  amiga_clip_head(uri_text, sizeof(uri_text), s, cols);
+  text_at(x, y, uri_text, (WORD) strlen(uri_text), pen);
+}
+
+static void paint_tile(uint8_t idx)
+{
+  const amiga_rect_t *r = &tiles.tile[idx];
+  amiga_rect_t in = amiga_rect_inset(*r, 2, 2);
+  config_nio_state_t *s = gctl->state;
+  config_nio_mapping_t m;
+  uint8_t state = amiga_ctl_drive_state(gctl, idx);
+  int selected = idx == gctl->drives.selected;
+  int empty = state == AMIGA_DRIVE_EMPTY;
+  uint8_t pen = selected ? theme.filltext : theme.text;
+  uint8_t cols = (uint8_t) ((r->width - 12) / FONT_W);
+  const char *name = "";
+  char mode[24];
+  char label[8];
+  WORD x = (WORD) (r->left + 6);
+  WORD y = (WORD) (r->top + 4);
+
+  mode[0] = 0;
+  if (!empty && config_nio_mapping_get(s, idx, &m) && m.valid) {
+    const config_nio_slot_t *ds = amiga_ctl_drive_slot(gctl, idx);
+    const char *uri = !ds ? "?" : (ds->enabled ? ds->uri : "");
+
+    name = strrchr(uri, '/');
+    name = name && name[1] ? name + 1 : uri;
+    if (state == AMIGA_DRIVE_SAVED)
+      strcpy(mode, "not mounted");
+    else
+      amiga_sprintf(mode, "%s slot %u", m.readonly ? "RO" : "RW",
+                    (unsigned) m.slot);
+  }
+  strcpy(label, amiga_drive_label(idx, gctl->kick13));
+
+  fill(&in, selected ? theme.fill : theme.background);
+  /* Raised while it holds media, pressed in while empty or selected. */
+  bevel(r, selected || empty);
+
+  if (tiles.big) {
+    paint_icon(x, y, empty ? AMIGA_ICON_FLOPPY_EMPTY : AMIGA_ICON_FLOPPY_FULL,
+               selected);
+    text_at((WORD) (x + AMIGA_ICON_W + 8), (WORD) (y + 4), label,
+            (WORD) strlen(label), pen);
+    tile_text(x, (WORD) (y + AMIGA_ICON_H + 4), empty ? "(empty)" : name, cols,
+              pen);
+    if (mode[0])
+      tile_text(x, (WORD) (y + AMIGA_ICON_H + 14), mode, cols, pen);
+  } else {
+    paint_glyph((WORD) (x - 2), y,
+                (uint8_t) (empty ? AMIGA_GLYPH_FLOPPY : AMIGA_GLYPH_FLOPPY_FULL),
+                selected);
+    text_at((WORD) (x + AMIGA_GLYPH_W + 4), (WORD) (y + 1), label,
+            (WORD) strlen(label), pen);
+    tile_text(x, (WORD) (y + 11), empty ? "(empty)" : name, cols, pen);
+  }
+}
+
+static void paint_tiles(void)
+{
+  amiga_rect_t in = amiga_rect_inset(tiles.panel, 2, 2);
+  uint8_t i;
+
+  fill(&in, theme.background);
+  for (i = 0; i < AMIGA_TILE_COUNT; i++)
+    paint_tile(i);
 }
 
 static void gui_paint_rows(void)
@@ -652,8 +831,16 @@ static void gui_paint_rows(void)
   amiga_list_t *l = page_list();
   amiga_rect_t in = list_interior();
   uint8_t cols = list_cols();
+  int glyphs = page_has_glyphs();
   uint8_t r;
 
+  if (tiles_on()) {
+    paint_tiles();
+    return;
+  }
+
+  if (glyphs)
+    cols = (uint8_t) (cols - GLYPH_COLS);
   for (r = 0; r < layout.list_rows; r++) {
     amiga_rect_t row;
     uint16_t idx = (uint16_t) (l->top + r);
@@ -672,8 +859,13 @@ static void gui_paint_rows(void)
       continue;
     }
     fill(&row, selected ? theme.fill : theme.background);
+    if (glyphs)
+      paint_glyph((WORD) (row.left + 2),
+                  (WORD) (row.top + (layout.row_h - AMIGA_GLYPH_H) / 2),
+                  (uint8_t) row_glyph(idx), selected);
     row_string(idx, cols);
-    text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
+    text_at((WORD) (row.left + 2 + (glyphs ? GLYPH_COLS * FONT_W : 0)),
+            (WORD) (row.top + 1), padded(tmp_text, cols),
             cols, selected ? theme.filltext : theme.text);
   }
 }
@@ -705,8 +897,9 @@ static void gui_paint_info(void)
     }
     break;
   case AMIGA_PAGE_CATALOGUE:
-    amiga_sprintf(tmp_text, "Slot Mode Image   (%u of %u slots used)",
-                  (unsigned) gctl->cat_count, (unsigned) AMIGA_CAT_SLOTS);
+    amiga_sprintf(tmp_text, "%sSlot Mode Image   (%u of %u slots used)",
+                  page_has_glyphs() ? "   " : "", (unsigned) gctl->cat_count,
+                  (unsigned) AMIGA_CAT_SLOTS);
     break;
   case AMIGA_PAGE_HELP:
     amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(gctl->help_topic));
@@ -722,7 +915,17 @@ static void gui_paint_info(void)
     amiga_sprintf(tmp_text, "Mount %s on drive:", uri_text);
     break;
   default:
-    strcpy(tmp_text, "Drive Mode Slot  Image");
+    if (tiles_on()) {
+      uint8_t i, n = 0;
+
+      for (i = 0; i < AMIGA_DRIVE_COUNT; i++)
+        n = (uint8_t) (n + (amiga_ctl_drive_mounted(gctl, i) ? 1 : 0));
+      amiga_sprintf(tmp_text, "FujiNet drives (%u of %u mounted)", (unsigned) n,
+                    (unsigned) AMIGA_DRIVE_COUNT);
+    } else {
+      strcpy(tmp_text, page_has_glyphs() ? "   Drive Mode Slot  Image"
+                                         : "Drive Mode Slot  Image");
+    }
     break;
   }
   text_at(layout.info.left, (WORD) (layout.info.top + 1), tmp_text,
@@ -875,7 +1078,7 @@ static void gui_paint(void)
   gui_paint_logo();
   gui_paint_tabs();
   gui_paint_info();
-  bevel(&layout.list, 1);
+  bevel(tiles_on() ? &tiles.panel : &layout.list, 1);
   gui_paint_rows();
   gui_paint_editors();
   gui_paint_buttons();
@@ -2337,9 +2540,16 @@ static void gui_list_click(struct IntuiMessage *msg)
   amiga_rect_t in = list_interior();
   uint16_t index;
 
-  if (!amiga_list_hit(page_list(), (int16_t) (msg->MouseY - in.top),
-                      layout.row_h, &index))
+  if (tiles_on()) {
+    uint8_t t;
+
+    if (!amiga_tiles_hit(&tiles, msg->MouseX, msg->MouseY, &t))
+      return;
+    index = t;
+  } else if (!amiga_list_hit(page_list(), (int16_t) (msg->MouseY - in.top),
+                             layout.row_h, &index)) {
     return;
+  }
   if (index == last_index &&
       DoubleClick(last_secs, last_micros, msg->Seconds, msg->Micros)) {
     last_index = AMIGA_LIST_NONE;
@@ -2383,6 +2593,17 @@ static int gui_handle_key(UWORD code, UWORD qualifier, ULONG secs,
     gui_select(amiga_typeahead_feed(&slot_typing, (uint8_t) digit,
                                     (uint32_t) (secs * 1000UL + micros / 1000UL),
                                     AMIGA_CAT_SLOTS - 1));
+    return 0;
+  }
+
+  /* On the drive tiles the cursor keys move across the grid. */
+  if (tiles_on() && (key == AMIGA_KEY_UP || key == AMIGA_KEY_DOWN ||
+                     key == AMIGA_KEY_LEFT || key == AMIGA_KEY_RIGHT)) {
+    gui_select(amiga_tiles_step(l->selected,
+                                key == AMIGA_KEY_RIGHT ? 1 :
+                                key == AMIGA_KEY_LEFT ? -1 : 0,
+                                key == AMIGA_KEY_DOWN ? 1 :
+                                key == AMIGA_KEY_UP ? -1 : 0));
     return 0;
   }
 
@@ -2810,6 +3031,24 @@ static int gui_open(void)
     CopyMem((APTR) amiga_logo_text, (UBYTE *) logo_chip + LOGO_MASK_BYTES,
             LOGO_MASK_BYTES);
   }
+  glyph_chip = (UWORD *) AllocMem(2 * AMIGA_GLYPH_STRIP_BYTES, MEMF_CHIP);
+  if (glyph_chip)
+    amiga_glyph_build(glyph_chip,
+                      (UWORD *) ((UBYTE *) glyph_chip +
+                                 AMIGA_GLYPH_STRIP_BYTES));
+  tile_chip = (UWORD *) AllocMem(3 * AMIGA_ICON_STRIP_BYTES, MEMF_CHIP);
+  if (tile_chip)
+    amiga_icon_build(tile_chip,
+                     (UWORD *) ((UBYTE *) tile_chip + AMIGA_ICON_STRIP_BYTES),
+                     (UWORD *) ((UBYTE *) tile_chip +
+                                2 * AMIGA_ICON_STRIP_BYTES));
+  {
+    amiga_rect_t panel = layout.list;
+
+    panel.width = (int16_t) (panel.width + layout.scroller.width);
+    tiles_ok = (uint8_t) (amiga_tiles_compute(panel, &tiles) && glyph_chip &&
+                          (!tiles.big || tile_chip));
+  }
   busy_sprite = (UWORD *) AllocMem(sizeof(busy_image), MEMF_CHIP);
   if (busy_sprite)
     CopyMem((APTR) busy_image, busy_sprite, sizeof(busy_image));
@@ -2841,6 +3080,15 @@ static void gui_close(void)
     FreeMem(logo_chip, 2 * LOGO_MASK_BYTES);
     logo_chip = NULL;
   }
+  if (glyph_chip) {
+    FreeMem(glyph_chip, 2 * AMIGA_GLYPH_STRIP_BYTES);
+    glyph_chip = NULL;
+  }
+  if (tile_chip) {
+    FreeMem(tile_chip, 3 * AMIGA_ICON_STRIP_BYTES);
+    tile_chip = NULL;
+  }
+  tiles_ok = 0;
   if (font) {
     CloseFont(font);
     font = NULL;

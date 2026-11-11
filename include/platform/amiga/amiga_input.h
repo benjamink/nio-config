@@ -16,7 +16,9 @@ typedef enum {
   AMIGA_KEY_CANCEL,
   AMIGA_KEY_HELP,
   AMIGA_KEY_NEXT_PAGE,
-  AMIGA_KEY_PREV_PAGE
+  AMIGA_KEY_PREV_PAGE,
+  AMIGA_KEY_LEFT,
+  AMIGA_KEY_RIGHT
 } amiga_key_t;
 
 amiga_key_t amiga_key_from_raw(uint16_t code, uint16_t qualifier);
