@@ -38,6 +38,14 @@ const char *amiga_media_name(const amiga_media_t *media);
 uint8_t amiga_drive_fit(uint8_t unit, uint8_t kick13,
                         const amiga_media_t *media,
                         const amiga_media_t *pinned);
+/* Whether a started DNx: handler stays fixed to the media it started with.
+ * Only WB3.1's FastFileSystem 40.1 (dos.library 40) lacks ACTION_DIE, so its
+ * handler can never exit and FMOUNT refuses a different type on it.  Earlier
+ * FastFileSystems and WB3.2's (dos.library 47: FUMOUNT removes the DN node,
+ * see test_diskdevice_fumount_handler.py) retire the handler, so they pin
+ * nothing.  FMOUNT itself learns this by trying ACTION_DIE, which would kill
+ * a live handler, so the picker uses the version. */
+uint8_t amiga_handler_pins_media(uint16_t dos_version);
 /* The media category a WB1.3 endpoint is fixed to. */
 amiga_media_t amiga_drive_kick13_media(uint8_t unit);
 

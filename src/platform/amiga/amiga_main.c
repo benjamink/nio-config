@@ -62,7 +62,8 @@ static int inspect_media(const char *uri, amiga_media_t *media, void *ctx)
 
 /* WB3.1's FastFileSystem cannot exit (no ACTION_DIE), so a started DNx:
  * handler stays fixed to its geometry and filesystem; FMOUNT refuses another
- * type on it.  Older FastFileSystems retire the handler, so they pin nothing.
+ * type on it.  Other versions retire the handler, so they pin nothing
+ * (amiga_handler_pins_media).
  * The node's DosEnvec holds the type: more than 11 blocks per track is HD,
  * and the DosType's low bit is FFS. */
 static int handler_pinned(uint8_t unit, amiga_media_t *pinned, void *ctx)
@@ -73,7 +74,7 @@ static int handler_pinned(uint8_t unit, amiga_media_t *pinned, void *ctx)
   int found = 0;
 
   (void) ctx;
-  if (((struct Library *) DOSBase)->lib_Version < 40)
+  if (!amiga_handler_pins_media(((struct Library *) DOSBase)->lib_Version))
     return 0;
   name[0] = 'D';
   name[1] = 'N';

@@ -21,6 +21,11 @@ const char *amiga_drive_label(uint8_t unit, uint8_t kick13)
   return kick13 ? labels_kick13[unit] : labels_v36[unit];
 }
 
+uint8_t amiga_handler_pins_media(uint16_t dos_version)
+{
+  return dos_version == 40;
+}
+
 amiga_media_t amiga_drive_kick13_media(uint8_t unit)
 {
   amiga_media_t m;

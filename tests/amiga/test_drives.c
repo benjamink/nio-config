@@ -91,6 +91,12 @@ void test_drives(void)
     CHECK(amiga_fmount_flavour("") == AMIGA_TOOLS_UNKNOWN);
     CHECK(amiga_fmount_flavour(NULL) == AMIGA_TOOLS_UNKNOWN);
 
+    /* Only WB3.1's FFS 40.1 pins a started handler; 3.0, 3.1.4 and 3.2 retire it. */
+    CHECK(amiga_handler_pins_media(40));
+    CHECK(!amiga_handler_pins_media(36));
+    CHECK(!amiga_handler_pins_media(39));
+    CHECK(!amiga_handler_pins_media(46));
+    CHECK(!amiga_handler_pins_media(47));
     CHECK(!amiga_tools_mismatch(0, AMIGA_TOOLS_STANDARD, msg, sizeof(msg)));
     CHECK(!amiga_tools_mismatch(1, AMIGA_TOOLS_KICK13, msg, sizeof(msg)));
     CHECK(!amiga_tools_mismatch(0, AMIGA_TOOLS_UNKNOWN, msg, sizeof(msg)));
