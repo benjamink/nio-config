@@ -29,6 +29,17 @@ void test_options(void)
   CHECK(amiga_options_parse(&o, longval) == 0);
   CHECK_STR(o.result, "");
 
+  /* The splash is on unless SPLASH=OFF (or NO, 0) turns it off. */
+  CHECK(o.no_splash == 0);
+  CHECK(amiga_options_parse(&o, "SPLASH=OFF") == 1 && o.no_splash == 1);
+  CHECK(amiga_options_parse(&o, "splash=on") == 1 && o.no_splash == 0);
+  CHECK(amiga_options_parse(&o, "SPLASH=no") == 1 && o.no_splash == 1);
+  CHECK(amiga_options_parse(&o, "SPLASH=1") == 1 && o.no_splash == 0);
+  CHECK(amiga_options_parse(&o, "SPLASH=0") == 1 && o.no_splash == 1);
+  CHECK(amiga_options_parse(&o, "SPLASH=maybe") == 0 && o.no_splash == 1);
+  CHECK(amiga_options_parse(&o, "SPLASH=") == 0);
+  CHECK(amiga_options_parse(&o, "(SPLASH=ON)") == -1 && o.no_splash == 1);
+
   amiga_options_finish(&o);
   CHECK_STR(o.result, "RAM:config-nio.result");
   CHECK(amiga_options_parse(&o, "result=T:out") == 1);

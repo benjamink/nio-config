@@ -37,7 +37,7 @@ reason the window has no Save/Use/Cancel buttons.
 From a Shell:
 
 ```text
-config-nio [FMOUNT=path] [FUMOUNT=path] [SCRIPT=file] [RESULT=file]
+config-nio [FMOUNT=path] [FUMOUNT=path] [SPLASH=ON|OFF] [SCRIPT=file] [RESULT=file]
 ```
 
 From Workbench, double-click the `config-nio` icon. Its ToolTypes use the same
@@ -48,6 +48,7 @@ brackets, such as `(FMOUNT=...)`.
 | --- | --- | --- |
 | `FMOUNT` | `fmount` | Command used by Mount, resolved through the inherited AmigaDOS command path |
 | `FUMOUNT` | `fumount` | Command used by Eject, resolved through the inherited AmigaDOS command path |
+| `SPLASH` | `ON` | A small window with the logo and a line of progress while the program connects to the FujiNet and loads its state, shown for at least a second. `OFF` (or `NO`, `0`) skips it. It is never shown for a `SCRIPT` run |
 | `SCRIPT` | none | Run commands from a file instead of waiting for input |
 | `RESULT` | `RAM:config-nio.result` | Transcript file for `SCRIPT` |
 

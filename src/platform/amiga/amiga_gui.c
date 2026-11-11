@@ -15,6 +15,7 @@
 #include "amiga_logo.h"
 #include "amiga_net.h"
 #include "amiga_script.h"
+#include "amiga_splash.h"
 #include "amiga_theme.h"
 
 #include <exec/memory.h>
@@ -314,6 +315,8 @@ static int requester(struct Window *w, const char *message, const char *yes,
 
 void amiga_gui_fatal(const char *message)
 {
+  /* The message must not be hidden behind, or wait on, the splash. */
+  amiga_splash_close();
   if (!IntuitionBase) {
     puts(message);
     return;
@@ -3200,11 +3203,14 @@ int amiga_gui_run(amiga_ctl_t *ctl, const amiga_options_t *opts)
 
   gctl = ctl;
   if (!gui_open()) {
+    amiga_splash_close();
     gui_close();
     return 20;
   }
   gui_sync_editors();
   gui_paint();
+  /* The main window now covers the splash, so it can go. */
+  amiga_splash_close();
 
   if (opts->script[0]) {
     rc = gui_run_script(opts);

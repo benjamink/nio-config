@@ -12,6 +12,7 @@ typedef struct {
   char fumount[AMIGA_OPT_PATH_MAX];
   char script[AMIGA_OPT_PATH_MAX];
   char result[AMIGA_OPT_PATH_MAX];
+  uint8_t no_splash;   /* SPLASH=OFF */
 } amiga_options_t;
 
 void amiga_options_defaults(amiga_options_t *o);
