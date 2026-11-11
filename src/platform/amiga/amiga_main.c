@@ -108,7 +108,7 @@ static int handler_pinned(uint8_t unit, amiga_media_t *pinned, void *ctx)
 static int tools_match(uint8_t kick13)
 {
   char out[AMIGA_CMD_OUT_MAX];
-  char msg[256];
+  char msg[320];
   const char *c;
 
   for (c = options.fmount; *c; c++) {
