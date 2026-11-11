@@ -49,6 +49,18 @@ static void append_text(char *buf, uint16_t *off, const char *text)
   buf[*off] = 0;
 }
 
+/* The last app-store read error and which load step hit it, for the
+ * failure message (see config_nio_load_error). */
+static uint8_t load_error_code;
+static const char *load_error_step = "";
+
+const char *config_nio_load_error(uint8_t *code)
+{
+  if (code)
+    *code = load_error_code;
+  return load_error_step;
+}
+
 static int appstore_read_text(const char *key, char *buf, uint16_t cap,
                               uint8_t *exists)
 {
@@ -78,8 +90,10 @@ static int appstore_read_text(const char *key, char *buf, uint16_t cap,
       return 0;
     result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, key, total,
                               appstore_buf, want, &rr);
-    if (result != FN_OK)
+    if (result != FN_OK) {
+      load_error_code = result;
       return 0;
+    }
     if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
       return 1;
     if (exists)
@@ -256,8 +270,10 @@ static int appstore_read_mappings(config_nio_state_t *state, uint8_t *exists)
   result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS,
                             CONFIG_NIO_KEY_MAPPINGS, 0, appstore_buf,
                             CONFIG_NIO_MAPPINGS_SIZE, &rr);
-  if (result != FN_OK)
+  if (result != FN_OK) {
+    load_error_code = result;
     return 0;
+  }
   if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
     return 1;
   if (exists)
@@ -488,6 +504,8 @@ int config_nio_load(config_nio_state_t *state)
 
   memset(state, 0, sizeof(*state));
   seed_prefs(state);
+  load_error_code = 0;
+  load_error_step = "host list";
   if (!appstore_read_text(CONFIG_NIO_KEY_HOSTS, (char *) store_buf,
                           sizeof(store_buf), &exists))
     return 0;
@@ -498,9 +516,11 @@ int config_nio_load(config_nio_state_t *state)
     (void) config_nio_save_hosts(state);
   }
 
+  load_error_step = "drive mappings";
   if (!appstore_read_mappings(state, &exists))
     return 0;
 
+  load_error_step = "preferences";
   if (!appstore_read_text(CONFIG_NIO_KEY_PREFS, (char *) store_buf,
                           sizeof(store_buf), &exists))
     return 0;

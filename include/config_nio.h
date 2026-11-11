@@ -39,6 +39,10 @@
 #endif
 
 int config_nio_load(config_nio_state_t *state);
+
+/* After config_nio_load fails: the step that failed ("host list", ...) and
+ * the FujiNet error code behind it (0 when it was not a device error). */
+const char *config_nio_load_error(uint8_t *code);
 int config_nio_save_hosts(const config_nio_state_t *state);
 int config_nio_save_mappings(const config_nio_state_t *state);
 int config_nio_save_prefs(const config_nio_state_t *state);

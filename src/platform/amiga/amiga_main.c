@@ -3,6 +3,7 @@
 #include "fujinet-nio.h"
 #include "amiga_ctl.h"
 #include "amiga_exec.h"
+#include "amiga_fmt.h"
 #include "amiga_gui.h"
 #include "amiga_net.h"
 #include "amiga_options.h"
@@ -197,7 +198,13 @@ int main(int argc, char **argv)
   }
   amiga_splash_text("Loading hosts...");
   if (!config_nio_load(&state)) {
-    amiga_gui_fatal("Unable to load config-nio state.");
+    char msg[96];
+    uint8_t code = 0;
+    const char *step = config_nio_load_error(&code);
+
+    amiga_sprintf(msg, "Unable to load config-nio state.\nReading the %s failed: FujiNet error %u.",
+                  step, (unsigned) code);
+    amiga_gui_fatal(msg);
     goto shutdown;
   }
   if (!tools_match(kick13))
