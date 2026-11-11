@@ -40,6 +40,22 @@ int amiga_options_parse(amiga_options_t *o, const char *arg)
   if (!eq)
     return -1;
   key_len = (uint16_t) (eq - arg);
+  if (key_is(arg, key_len, "SPLASH")) {
+    /* ON/YES/1 or OFF/NO/0; anything else is an invalid value. */
+    const char *v = eq + 1;
+
+    if (key_is(v, (uint16_t) strlen(v), "OFF") ||
+        key_is(v, (uint16_t) strlen(v), "NO") || !strcmp(v, "0")) {
+      o->no_splash = 1;
+      return 1;
+    }
+    if (key_is(v, (uint16_t) strlen(v), "ON") ||
+        key_is(v, (uint16_t) strlen(v), "YES") || !strcmp(v, "1")) {
+      o->no_splash = 0;
+      return 1;
+    }
+    return 0;
+  }
   if (key_is(arg, key_len, "FMOUNT"))
     dst = o->fmount;
   else if (key_is(arg, key_len, "FUMOUNT"))

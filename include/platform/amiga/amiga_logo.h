@@ -14,6 +14,15 @@
 extern const uint16_t amiga_logo_emblem[AMIGA_LOGO_WORDS * AMIGA_LOGO_H];
 extern const uint16_t amiga_logo_text[AMIGA_LOGO_WORDS * AMIGA_LOGO_H];
 
+/* The same artwork at splash size: 160x48 (the source's width, half its rows
+ * for hires pixels), drawn by amiga_splash.c while the program starts. */
+#define AMIGA_SPLASH_W 160
+#define AMIGA_SPLASH_H 48
+#define AMIGA_SPLASH_WORDS ((AMIGA_SPLASH_W + 15) / 16)
+
+extern const uint16_t amiga_splash_emblem[AMIGA_SPLASH_WORDS * AMIGA_SPLASH_H];
+extern const uint16_t amiga_splash_lettering[AMIGA_SPLASH_WORDS * AMIGA_SPLASH_H];
+
 int amiga_logo_pixel(const uint16_t *mask, uint16_t x, uint16_t y);
 
 #endif

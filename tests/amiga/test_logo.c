@@ -49,4 +49,30 @@ void test_logo(void)
     CHECK(amiga_logo_pixel(probe, 31, 0) == 1);
     CHECK(amiga_logo_pixel(probe, 0, 1) == 0);
   }
+
+  /* The splash is the same artwork at 160x48, split the same way. */
+  {
+    unsigned se = 0, st = 0, sboth = 0, spad = 0;
+
+    CHECK(AMIGA_SPLASH_W == 160 && AMIGA_SPLASH_H == 48);
+    CHECK(AMIGA_SPLASH_WORDS == 10);
+    for (y = 0; y < AMIGA_SPLASH_H; y++) {
+      for (x = 0; x < AMIGA_SPLASH_WORDS * 16; x++) {
+        unsigned e = (unsigned) ((amiga_splash_emblem[y * AMIGA_SPLASH_WORDS +
+                                                      x / 16] >>
+                                  (15 - x % 16)) & 1);
+        unsigned t = (unsigned) ((amiga_splash_lettering[y * AMIGA_SPLASH_WORDS +
+                                                    x / 16] >>
+                                  (15 - x % 16)) & 1);
+
+        se += e;
+        st += t;
+        sboth += e & t;
+        if (x >= AMIGA_SPLASH_W)
+          spad += e | t;
+      }
+    }
+    CHECK(se > 500 && st > 500);
+    CHECK(sboth == 0 && spad == 0);
+  }
 }
