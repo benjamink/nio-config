@@ -159,6 +159,10 @@ static UWORD *tile_chip;
 /* Drive tiles replace the Drives page list when the window has room. */
 static amiga_tiles_t tiles;
 static uint8_t tiles_ok;
+/* Drive tile showing an action in progress (-1 none) and what it is doing. */
+static int8_t pending_tile = -1;
+static const char *pending_text = "";
+static void gui_paint_status(void);
 
 static int tiles_on(void)
 {
@@ -793,17 +797,26 @@ static void paint_tile(uint8_t idx)
   }
   strcpy(label, amiga_drive_label(idx, gctl->kick13));
 
+  if (idx == pending_tile) {
+    /* The disk is going in or out: draw it half way, with the verb. */
+    empty = 0;
+    name = "";
+    mode[0] = 0;
+  }
+
   fill(&in, selected ? theme.fill : theme.background);
   /* Raised while it holds media, pressed in while empty or selected. */
   bevel(r, selected || empty);
 
   if (tiles.big) {
-    paint_icon(x, y, empty ? AMIGA_ICON_FLOPPY_EMPTY : AMIGA_ICON_FLOPPY_FULL,
+    paint_icon(x, (WORD) (y + (idx == pending_tile ? 6 : 0)),
+               empty ? AMIGA_ICON_FLOPPY_EMPTY : AMIGA_ICON_FLOPPY_FULL,
                selected);
     text_at((WORD) (x + AMIGA_ICON_W + 8), (WORD) (y + 4), label,
             (WORD) strlen(label), pen);
-    tile_text(x, (WORD) (y + AMIGA_ICON_H + 4), empty ? "(empty)" : name, cols,
-              pen);
+    tile_text(x, (WORD) (y + AMIGA_ICON_H + 4),
+              idx == pending_tile ? pending_text : (empty ? "(empty)" : name),
+              cols, pen);
     if (mode[0])
       tile_text(x, (WORD) (y + AMIGA_ICON_H + 14), mode, cols, pen);
   } else {
@@ -812,7 +825,34 @@ static void paint_tile(uint8_t idx)
                 selected);
     text_at((WORD) (x + AMIGA_GLYPH_W + 4), (WORD) (y + 1), label,
             (WORD) strlen(label), pen);
-    tile_text(x, (WORD) (y + 11), empty ? "(empty)" : name, cols, pen);
+    tile_text(x, (WORD) (y + 11),
+              idx == pending_tile ? pending_text : (empty ? "(empty)" : name),
+              cols, pen);
+  }
+}
+
+/* Shows the action before it starts: mounts and ejects block this task
+ * while AmigaDOS runs them, so this is all the feedback there is until
+ * they finish.  The status line says what is happening; on the drive
+ * tiles the affected tile shows its disk half in or out. */
+static void gui_pending(uint8_t unit, const char *verb, const char *what)
+{
+  char line[ROW_TEXT_MAX];
+  char label[8];
+
+  strcpy(label, amiga_drive_label(unit, gctl->kick13));
+  if (what && what[0]) {
+    amiga_clip_tail(uri_text, sizeof(uri_text), what, 36);
+    amiga_sprintf(line, "%s %s on %s ...", verb, uri_text, label);
+  } else {
+    amiga_sprintf(line, "%s %s ...", verb, label);
+  }
+  config_nio_set_status(gctl->state, line);
+  gui_paint_status();
+  if (tiles_on() && unit < AMIGA_TILE_COUNT) {
+    pending_tile = (int8_t) unit;
+    pending_text = !strcmp(verb, "Ejecting") ? "Ejecting..." : "Mounting...";
+    paint_tile(unit);
   }
 }
 
@@ -2431,6 +2471,7 @@ static void gui_do_action(uint8_t action)
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
       uint8_t unit = (uint8_t) gctl->drives.selected;
 
+      gui_pending(unit, "Mounting", gctl->mount_name);
       /* Touch the drive so its disk icon appears, like a floppy. */
       if (amiga_ctl_mount_commit(gctl, unit, (uint8_t) read_ro()))
         (void) gui_touch_drive(amiga_drive_label(unit, gctl->kick13));
@@ -2452,13 +2493,16 @@ static void gui_do_action(uint8_t action)
     amiga_ctl_help_close(gctl);
     break;
   case ACT_DRIVE_EJECT:
-    if (gctl->drives.selected != AMIGA_LIST_NONE)
+    if (gctl->drives.selected != AMIGA_LIST_NONE) {
+      gui_pending((uint8_t) gctl->drives.selected, "Ejecting", NULL);
       (void) amiga_ctl_drive_eject(gctl, (uint8_t) gctl->drives.selected);
+    }
     break;
   case ACT_DRIVE_REMOUNT:
     if (gctl->drives.selected != AMIGA_LIST_NONE) {
       uint8_t unit = (uint8_t) gctl->drives.selected;
 
+      gui_pending(unit, "Mounting", NULL);
       if (amiga_ctl_drive_remount(gctl, unit))
         (void) gui_touch_drive(amiga_drive_label(unit, gctl->kick13));
     }
@@ -2466,6 +2510,7 @@ static void gui_do_action(uint8_t action)
   default:
     break;
   }
+  pending_tile = -1;
   busy_end();
   gui_after_action(old_page);
 }
