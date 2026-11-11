@@ -80,7 +80,7 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
   a drawer, a disk image (ADF or HDF), a plain file or a floppy.
 - The **Drives** page shows its eight drives as tiles, four across. A mounted
   drive is a raised tile with a solid floppy, its image name and `RO`/`RW`
-  and slot; an empty drive is pressed in with a dotted floppy. Click a tile to
+  and slot; an empty drive is pressed in with a dotted floppy; selection is shown by the fill colour and does not change the bevel. Click a tile to
   select it, double-click (or Return) to open it, and use the cursor keys to
   move around the grid. On a window too short for two rows of tiles the page
   falls back to the list, and the same applies if chip memory for the icons

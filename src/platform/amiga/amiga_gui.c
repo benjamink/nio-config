@@ -809,8 +809,9 @@ static void paint_tile(uint8_t idx)
   }
 
   fill(&in, selected ? theme.fill : theme.background);
-  /* Raised while it holds media, pressed in while empty or selected. */
-  bevel(r, selected || empty);
+  /* Raised while it holds media, pressed in while empty; the fill colour,
+   * not the bevel, marks the selection. */
+  bevel(r, empty);
 
   if (tiles.big) {
     paint_icon(x, (WORD) (y + (idx == pending_tile ? 6 : 0)),
