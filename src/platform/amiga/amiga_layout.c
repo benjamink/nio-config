@@ -62,7 +62,13 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
     out->logo = rect((int16_t) (x0 + cw - in->logo_w), y, in->logo_w,
                      (int16_t) (btn_h + AMIGA_LAYOUT_GAP + info_h));
   }
-  spread(out->tab, AMIGA_TAB_COUNT, x0, y, head_w, btn_h);
+  /* Tabs start at the page frame's left edge, AMIGA_PAGE_MARGIN outside
+   * the content. */
+  spread(out->tab, AMIGA_TAB_COUNT, (int16_t) (x0 - AMIGA_PAGE_MARGIN), y,
+         (int16_t) (head_w + AMIGA_PAGE_MARGIN), btn_h);
+  out->page = rect((int16_t) (x0 - AMIGA_PAGE_MARGIN),
+                   (int16_t) (y + btn_h), (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN),
+                   0);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->info = rect(x0, y, head_w, info_h);
   y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
@@ -100,6 +106,9 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
   y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
 
   spread(out->button, AMIGA_BUTTON_COUNT, x0, y, cw, btn_h);
+  /* The frame's bottom edge sits one row below the buttons, in the gap
+   * above the status line. */
+  out->page.height = (int16_t) (y + btn_h + 2 - out->page.top);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->status = rect(x0, y, cw, status_h);
   y = (int16_t) (y + status_h + AMIGA_LAYOUT_PAD);

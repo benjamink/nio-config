@@ -6,6 +6,7 @@
 #define AMIGA_LAYOUT_PAD 4
 #define AMIGA_LAYOUT_GAP 3
 #define AMIGA_LAYOUT_COLS 76
+#define AMIGA_PAGE_MARGIN 3   /* page frame outside the content, each side */
 #define AMIGA_LAYOUT_MIN_ROWS 6
 #define AMIGA_LAYOUT_MAX_ROWS 16
 #define AMIGA_SCROLLER_W 16
@@ -32,6 +33,9 @@ typedef struct {
   uint16_t win_w, win_h;
   uint8_t row_h, list_rows;
   amiga_rect_t tab[AMIGA_TAB_COUNT];
+  /* Frame round the page: its top edge is the tab ledge, directly under
+   * the tabs, and it reaches down to just below the button row. */
+  amiga_rect_t page;
   amiga_rect_t logo;       /* top right, beside tabs and info; 0 width = none */
   amiga_rect_t info;
   amiga_rect_t list;
