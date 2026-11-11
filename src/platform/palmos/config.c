@@ -207,7 +207,7 @@ static Boolean handle(EventType *event)
     }
     return false;
 }
-UInt32 PilotMain(UInt16 cmd, MemPtr params, UInt16 flags)
+UInt32 PilotMain(UInt16 cmd, NioPalmLaunchPtr params, UInt16 flags)
 {
     EventType event; UInt16 error; FormPtr form;
     (void)params; (void)flags;
