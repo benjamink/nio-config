@@ -303,3 +303,5 @@ make regen-amiga-icons
 ## Wi-Fi signal in the status line
 
 When the FujiNet reports a Wi-Fi status, the main window's status line shows four signal bars left of the mounted-drive count (all dim when not connected). The status is read once at startup (not in scripted runs) and refreshed whenever the Configure window reads or joins a network; it is not polled. The cell is omitted when the FujiNet has no Wi-Fi status.
+
+In Browse, files that are not disk images (.adf, .hdf, .hdd) are drawn in a quieter pen because they cannot be mounted. Folders and images look normal, and a selected row keeps its highlight. The dimming is a hint only: it does not block Mount.

@@ -870,6 +870,20 @@ static void paint_tiles(void)
     paint_tile(i);
 }
 
+/* Browse files that are not disk images cannot be mounted: draw them in a
+ * quieter pen.  Directories, the parent row and images stay normal; a
+ * selected row keeps its highlight. */
+static int row_dimmed(uint16_t idx)
+{
+  config_nio_entry_t *e;
+
+  if (gctl->page != AMIGA_PAGE_BROWSE || amiga_ctl_browse_row_is_parent(gctl, idx))
+    return 0;
+  e = amiga_ctl_browse_row_entry(gctl, idx);
+  return e && !(e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) &&
+         amiga_glyph_for_name(e->name) == AMIGA_GLYPH_FILE;
+}
+
 static void gui_paint_rows(void)
 {
   amiga_list_t *l = page_list();
@@ -910,7 +924,11 @@ static void gui_paint_rows(void)
     row_string(idx, cols);
     text_at((WORD) (row.left + 2 + (glyphs ? GLYPH_COLS * FONT_W : 0)),
             (WORD) (row.top + 1), padded(tmp_text, cols),
-            cols, selected ? theme.filltext : theme.text);
+            cols, selected ? theme.filltext
+                           : row_dimmed(idx)
+                               ? (theme.shine != theme.text ? theme.shine
+                                                            : theme.shadow)
+                               : theme.text);
   }
 }
 
