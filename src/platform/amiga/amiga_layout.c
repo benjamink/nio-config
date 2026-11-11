@@ -133,7 +133,10 @@ int amiga_cfg_layout_compute(const amiga_layout_in_t *in,
   out->row_h = (uint8_t) (in->font_h + 1);
 
   y = (int16_t) (in->border_t + AMIGA_LAYOUT_PAD);
-  spread(out->tab, AMIGA_CFG_TAB_COUNT, x0, y, cw, btn_h);
+  spread(out->tab, AMIGA_CFG_TAB_COUNT, (int16_t) (x0 - AMIGA_PAGE_MARGIN), y,
+         (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN), btn_h);
+  out->page = rect((int16_t) (x0 - AMIGA_PAGE_MARGIN), (int16_t) (y + btn_h),
+                   (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN), 0);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->info = rect(x0, y, cw, info_h);
   y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
@@ -154,6 +157,7 @@ int amiga_cfg_layout_compute(const amiga_layout_in_t *in,
   y = (int16_t) (y + out->list.height + AMIGA_LAYOUT_GAP);
 
   spread(out->button, AMIGA_CFG_BUTTON_COUNT, x0, y, cw, btn_h);
+  out->page.height = (int16_t) (y + btn_h + 2 - out->page.top);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->status = rect(x0, y, cw, status_h);
   y = (int16_t) (y + status_h + AMIGA_LAYOUT_PAD);

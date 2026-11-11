@@ -112,6 +112,11 @@ void test_layout(void)
       CHECK(c.button[0].top >= c.list.top + c.list.height);
       CHECK(c.status.top >= c.button[0].top + c.button[0].height);
       CHECK(c.scroller.left == c.list.left + c.list.width);
+      CHECK(c.page.top == c.tab[0].top + c.tab[0].height);
+      CHECK(c.page.left == c.tab[0].left && c.page.left < c.list.left);
+      CHECK(c.page.top + c.page.height > c.button[0].top + c.button[0].height);
+      CHECK(c.page.top + c.page.height <= c.status.top);
+      CHECK(c.page.left + c.page.width <= c.win_w);
       CHECK(c.list.height == c.list_rows * c.row_h + 4);
       CHECK(c.tab[1].width - c.tab[0].width <= 1);   /* remainder to the last */
       for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++)

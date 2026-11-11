@@ -86,6 +86,7 @@ typedef struct {
   uint16_t win_w, win_h;
   uint8_t row_h, list_rows;
   amiga_rect_t tab[AMIGA_CFG_TAB_COUNT];
+  amiga_rect_t page;       /* frame round the page, as in amiga_layout_t */
   amiga_rect_t info;
   amiga_rect_t list;
   amiga_rect_t scroller;

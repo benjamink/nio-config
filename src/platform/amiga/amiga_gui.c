@@ -1059,38 +1059,26 @@ static void gui_paint_buttons(void)
 static uint8_t current_tab(void);
 static void gui_paint_logo(void);
 
-static void gui_paint_tabs(void)
+/* Folder tabs over a framed page.  Redrawing the frame first wipes the
+ * ledge under the previous selection.  Inactive tabs are shorter and sit
+ * on the ledge; the selected tab shares the page background, stands full
+ * height with a fill-pen band across its top, and is open at the bottom
+ * so it runs into the page. */
+static void paint_tab_row(const amiga_rect_t *tabs, uint8_t count,
+                          const char *const *labels, uint8_t selected_tab,
+                          const amiga_rect_t *page)
 {
-  uint8_t tab = current_tab();
+  amiga_rect_t strip = *page;
   uint8_t i;
 
-  if (gctl->page == AMIGA_PAGE_HELP) {
-    amiga_rect_t row = layout.tab[0];
-
-    row.width = (int16_t) (layout.tab[AMIGA_TAB_COUNT - 1].left +
-                           layout.tab[AMIGA_TAB_COUNT - 1].width - row.left);
-    fill(&row, theme.background);
-    text_centred(&row, "FujiNet Config Help", theme.highlight);
-    return;
-  }
-
-  /* Folder tabs over a framed page.  Redrawing the frame first wipes the
-   * ledge under the previous selection.  Inactive tabs are shorter and sit
-   * on the ledge; the selected tab shares the page background, stands full
-   * height with a fill-pen band across its top, and is open at the bottom
-   * so it runs into the page. */
-  {
-    amiga_rect_t strip = layout.page;
-
-    strip.left = (int16_t) (strip.left + 2);
-    strip.width = (int16_t) (strip.width - 4);
-    strip.height = AMIGA_LAYOUT_GAP;
-    fill(&strip, theme.background);
-    bevel(&layout.page, 0);
-  }
-  for (i = 0; i < AMIGA_TAB_COUNT; i++) {
-    int selected = i == tab;
-    amiga_rect_t r = layout.tab[i];
+  strip.left = (int16_t) (strip.left + 2);
+  strip.width = (int16_t) (strip.width - 4);
+  strip.height = AMIGA_LAYOUT_GAP;
+  fill(&strip, theme.background);
+  bevel(page, 0);
+  for (i = 0; i < count; i++) {
+    int selected = i == selected_tab;
+    amiga_rect_t r = tabs[i];
     amiga_rect_t in;
     amiga_rect_t band;
 
@@ -1111,8 +1099,26 @@ static void gui_paint_tabs(void)
       band.height = 1;
       fill(&band, theme.background);   /* open into the page */
     }
-    text_centred(&layout.tab[i], tab_labels[i], theme.text);
+    text_centred(&tabs[i], labels[i], theme.text);
   }
+}
+
+static void gui_paint_tabs(void)
+{
+  uint8_t tab = current_tab();
+
+  if (gctl->page == AMIGA_PAGE_HELP) {
+    amiga_rect_t row = layout.tab[0];
+
+    row.width = (int16_t) (layout.tab[AMIGA_TAB_COUNT - 1].left +
+                           layout.tab[AMIGA_TAB_COUNT - 1].width - row.left);
+    fill(&row, theme.background);
+    text_centred(&row, "FujiNet Config Help", theme.highlight);
+    return;
+  }
+
+  paint_tab_row(layout.tab, AMIGA_TAB_COUNT, tab_labels, tab, &layout.page);
+
   /* The logo sits over the frame's top-right corner, so repaint it. */
   gui_paint_logo();
 }
@@ -1660,18 +1666,8 @@ static uint8_t cfg_ssid_cols(void)
 
 static void cfg_paint_tabs(void)
 {
-  uint8_t tab = gctl->net.view == AMIGA_NET_VIEW_DEVICE ? 0 : 1;
-  uint8_t i;
-
-  for (i = 0; i < AMIGA_CFG_TAB_COUNT; i++) {
-    int selected = i == tab;
-    amiga_rect_t in = amiga_rect_inset(cfg.tab[i], 2, 1);
-
-    fill(&in, selected ? theme.fill : theme.background);
-    bevel(&cfg.tab[i], selected);
-    text_centred(&cfg.tab[i], cfg_tab_labels[i],
-                 selected ? theme.filltext : theme.text);
-  }
+  paint_tab_row(cfg.tab, AMIGA_CFG_TAB_COUNT, cfg_tab_labels,
+                gctl->net.view == AMIGA_NET_VIEW_DEVICE ? 0 : 1, &cfg.page);
 }
 
 static void cfg_paint_info(void)
@@ -1826,6 +1822,7 @@ static void cfg_paint(void)
   inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
   inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
   fill(&inner, theme.background);
+  bevel(&cfg.page, 0);
   cfg_paint_tabs();
   cfg_paint_info();
   bevel(&cfg.list, 1);
