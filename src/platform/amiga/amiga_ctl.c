@@ -868,6 +868,71 @@ uint8_t amiga_ctl_first_empty_drive(amiga_ctl_t *ctl)
   return 0;
 }
 
+void amiga_ctl_set_media_probes(amiga_ctl_t *ctl, amiga_inspect_fn inspect,
+                                void *inspect_ctx, amiga_pin_fn pin,
+                                void *pin_ctx)
+{
+  ctl->inspect = inspect;
+  ctl->inspect_ctx = inspect_ctx;
+  ctl->pin = pin;
+  ctl->pin_ctx = pin_ctx;
+}
+
+/* The media `unit` is fixed to, or 0 when it can take anything. */
+static int drive_fixed(amiga_ctl_t *ctl, uint8_t unit, amiga_media_t *out)
+{
+  out->known = 0;
+  if (ctl->kick13) {
+    *out = amiga_drive_kick13_media(unit);
+    return 1;
+  }
+  return ctl->pin && ctl->pin(unit, out, ctl->pin_ctx) && out->known;
+}
+
+uint8_t amiga_ctl_drive_fit(amiga_ctl_t *ctl, uint8_t unit)
+{
+  amiga_media_t pinned;
+
+  (void) drive_fixed(ctl, unit, &pinned);
+  return amiga_drive_fit(unit, ctl->kick13, &ctl->mount_media,
+                         pinned.known ? &pinned : NULL);
+}
+
+void amiga_ctl_drive_note(amiga_ctl_t *ctl, uint8_t unit, char *out,
+                          uint16_t cap)
+{
+  amiga_media_t fixed;
+  const char *name;
+
+  out[0] = 0;
+  if (!drive_fixed(ctl, unit, &fixed))
+    return;
+  name = amiga_media_name(&fixed);
+  if (amiga_ctl_drive_fit(ctl, unit) != AMIGA_FIT_OK)
+    amiga_sprintf(out, "(%s only)", name);
+  else
+    amiga_sprintf(out, "[%s]", name);
+  if (strlen(out) >= cap)
+    out[cap - 1] = 0;
+}
+
+uint8_t amiga_ctl_best_drive(amiga_ctl_t *ctl)
+{
+  static const uint8_t order[3] = { AMIGA_DRIVE_EMPTY, AMIGA_DRIVE_SAVED,
+                                    AMIGA_DRIVE_MOUNTED };
+  uint8_t pass;
+  uint8_t unit;
+
+  for (pass = 0; pass < 3; pass++) {
+    for (unit = 0; unit < AMIGA_DRIVE_COUNT; unit++) {
+      if (amiga_ctl_drive_state(ctl, unit) == order[pass] &&
+          amiga_ctl_drive_fit(ctl, unit) == AMIGA_FIT_OK)
+        return unit;
+    }
+  }
+  return amiga_ctl_first_empty_drive(ctl);
+}
+
 int amiga_ctl_drive_remount(amiga_ctl_t *ctl, uint8_t unit)
 {
   const char *label = amiga_drive_label(unit, ctl->kick13);
@@ -905,10 +970,26 @@ static void set_mount_name(amiga_ctl_t *ctl, const char *uri)
 
 static void enter_mount(amiga_ctl_t *ctl)
 {
+  uint8_t best;
+
   ctl->mount_return = ctl->page;
   ctl->page = AMIGA_PAGE_MOUNT;
-  amiga_list_select(&ctl->drives, amiga_ctl_first_empty_drive(ctl));
-  amiga_sprintf(ctl->msg, "Choose a drive for %s", ctl->mount_name);
+  ctl->mount_media.known = 0;
+  if (ctl->inspect && !ctl->inspect(ctl->mount_uri, &ctl->mount_media,
+                                    ctl->inspect_ctx))
+    ctl->mount_media.known = 0;
+  best = amiga_ctl_best_drive(ctl);
+  amiga_list_select(&ctl->drives, best);
+  if (!ctl->mount_media.known) {
+    amiga_sprintf(ctl->msg, "Choose a drive for %s", ctl->mount_name);
+  } else if (amiga_ctl_drive_fit(ctl, best) != AMIGA_FIT_OK) {
+    amiga_sprintf(ctl->msg, "%s is %s: no drive can take it",
+                  ctl->mount_name, amiga_media_name(&ctl->mount_media));
+  } else {
+    amiga_sprintf(ctl->msg, "%s is %s: suggested %s", ctl->mount_name,
+                  amiga_media_name(&ctl->mount_media),
+                  amiga_drive_label(best, ctl->kick13));
+  }
   status(ctl, ctl->msg);
 }
 
@@ -1075,6 +1156,15 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
     slot = (uint8_t) ctl->mount_slot;
   else if (!find_slot(ctl, ctl->mount_uri, &slot))
     return 0;
+  /* Refuse before touching the saved slot: a drive that cannot take the image
+   * must not leave a changed slot behind. */
+  if (amiga_ctl_drive_fit(ctl, unit) != AMIGA_FIT_OK) {
+    amiga_sprintf(ctl->msg, "%s is %s; %s cannot take it",
+                  ctl->mount_name, amiga_media_name(&ctl->mount_media),
+                  amiga_drive_label(unit, ctl->kick13));
+    status(ctl, ctl->msg);
+    return 0;
+  }
   s = amiga_ctl_slot(ctl, slot);
   if (!s)
     return 0;

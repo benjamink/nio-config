@@ -43,28 +43,23 @@ test-amiga-host:
 	$(MAKE) -f makefiles/test-amiga-host.mk FUJINET_NIO_LIB=$(or $(FUJINET_NIO_LIB),../fujinet-nio-lib) ONLY=$(ONLY)
 
 # Amiga is built on demand (not part of all-targets), always into a named
-# Workbench profile.  Plain `make amiga` builds every supported profile;
+# Workbench profile (the same single binary for all of them; profiles only
+# keep the harness's per-profile output directories).  Plain `make amiga`
+# builds every supported profile;
 # AMIGA_PROFILE selects one for staging or focused development.
 AMIGA_PROFILES := wb13 wb31 wb32
 AMIGA_PROFILE ?=
-AMIGA_CRT_wb13 := nix13
-AMIGA_CRT_wb31 := clib2
-AMIGA_CRT_wb32 := clib2
 
 amiga:
 
 ifeq ($(AMIGA_PROFILE),)
 	@for profile in $(AMIGA_PROFILES); do \
 		$(MAKE) -f makefiles/build.mk TARGET=amiga \
-			TARGET_BUILD_DIR=build/amiga/$$profile \
-			AMIGA_CRT=$$(if [ "$$profile" = wb13 ]; then echo nix13; else echo clib2; fi) \
-			AMIGA_WB13=$$(if [ "$$profile" = wb13 ]; then echo 1; else echo 0; fi) || exit $$?; \
+			TARGET_BUILD_DIR=build/amiga/$$profile || exit $$?; \
 	done
 else
 	$(MAKE) -f makefiles/build.mk TARGET=amiga \
-		TARGET_BUILD_DIR=build/amiga/$(AMIGA_PROFILE) \
-		AMIGA_CRT=$(AMIGA_CRT_$(AMIGA_PROFILE)) \
-		AMIGA_WB13=$(if $(filter wb13,$(AMIGA_PROFILE)),1,0)
+		TARGET_BUILD_DIR=build/amiga/$(AMIGA_PROFILE)
 endif
 
 # Regenerate the checked-in Workbench icon (needs Python; Pillow for preview).

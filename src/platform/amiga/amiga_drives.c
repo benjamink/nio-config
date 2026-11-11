@@ -21,6 +21,107 @@ const char *amiga_drive_label(uint8_t unit, uint8_t kick13)
   return kick13 ? labels_kick13[unit] : labels_v36[unit];
 }
 
+uint8_t amiga_handler_pins_media(uint16_t dos_version)
+{
+  return dos_version == 40;
+}
+
+amiga_media_t amiga_drive_kick13_media(uint8_t unit)
+{
+  amiga_media_t m;
+
+  /* Units 0-1 DD/FFS, 2-3 HD/FFS, 4-5 DD/OFS, 6-7 HD/OFS. */
+  m.known = 1;
+  m.hd = (uint8_t) ((unit >> 1) & 1);
+  m.ofs = (uint8_t) ((unit >> 2) & 1);
+  return m;
+}
+
+void amiga_media_classify(amiga_media_t *media, uint16_t sector_size,
+                          uint32_t sector_count, const uint8_t *boot,
+                          uint16_t boot_len)
+{
+  uint32_t bytes;
+
+  media->known = media->hd = media->ofs = 0;
+  if (sector_size != 512 || !boot || boot_len < 4 || boot[0] != 'D' ||
+      boot[1] != 'O' || boot[2] != 'S' || boot[3] > 1)
+    return;
+  bytes = sector_count;            /* 512-byte sectors: 1760 DD, 3520 HD */
+  if (bytes == 1760UL)
+    media->hd = 0;
+  else if (bytes == 3520UL)
+    media->hd = 1;
+  else
+    return;
+  media->ofs = (uint8_t) (boot[3] == 0);
+  media->known = 1;
+}
+
+const char *amiga_media_name(const amiga_media_t *media)
+{
+  if (!media || !media->known)
+    return "?";
+  if (media->hd)
+    return media->ofs ? "HD OFS" : "HD FFS";
+  return media->ofs ? "DD OFS" : "DD FFS";
+}
+
+uint8_t amiga_drive_fit(uint8_t unit, uint8_t kick13,
+                        const amiga_media_t *media,
+                        const amiga_media_t *pinned)
+{
+  amiga_media_t fixed;
+
+  if (!media || !media->known)
+    return AMIGA_FIT_OK;
+  if (kick13) {
+    fixed = amiga_drive_kick13_media(unit);
+    pinned = &fixed;
+  }
+  if (!pinned || !pinned->known)
+    return AMIGA_FIT_OK;
+  if (pinned->hd != media->hd)
+    return AMIGA_FIT_DENSITY;
+  if (pinned->ofs != media->ofs)
+    return AMIGA_FIT_FS;
+  return AMIGA_FIT_OK;
+}
+
+uint8_t amiga_fmount_flavour(const char *usage_line)
+{
+  if (!usage_line || !strstr(usage_line, "FMOUNT"))
+    return AMIGA_TOOLS_UNKNOWN;
+  if (strstr(usage_line, "HN0:"))
+    return AMIGA_TOOLS_KICK13;
+  if (strstr(usage_line, "DN0:"))
+    return AMIGA_TOOLS_STANDARD;
+  return AMIGA_TOOLS_UNKNOWN;
+}
+
+int amiga_tools_mismatch(uint8_t kick13, uint8_t flavour, char *msg,
+                         uint16_t cap)
+{
+  const char *text;
+
+  if (kick13 && flavour == AMIGA_TOOLS_STANDARD)
+    text = "This is Workbench 1.3, which needs the Workbench 1.3 FMOUNT, "
+           "FUMOUNT and fujinet-disk.device, but the standard FMOUNT is "
+           "installed.\nInstall the Workbench 1.3 versions of those files.";
+  else if (!kick13 && flavour == AMIGA_TOOLS_KICK13)
+    text = "This is Workbench 2.0 or newer, which uses drives DN0: to DN7:, "
+           "but the installed FMOUNT is the Workbench 1.3 build.\nInstall "
+           "the standard (Workbench 2.0 and newer) versions of FMOUNT, "
+           "FUMOUNT and fujinet-disk.device.";
+  else
+    return 0;
+  if (msg && cap) {
+    strncpy(msg, text, cap - 1);
+    msg[cap - 1] = 0;
+  }
+  return 1;
+}
+
 static char upper(char c)
 {
   return (char) ((c >= 'a' && c <= 'z') ? c - 32 : c);

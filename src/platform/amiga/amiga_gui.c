@@ -28,18 +28,14 @@
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
-#ifndef __KICK13__
 #include <proto/wb.h>
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern struct IntuitionBase *IntuitionBase;
-#ifndef __KICK13__
 struct Library *WorkbenchBase;
-#endif
 
 #define FONT_W 8
 #define FONT_H 8
@@ -267,33 +263,36 @@ static void make_itext(struct IntuiText *t, WORD left, WORD top,
   t->NextText = next;
 }
 
+#define REQ_LINES 8
+#define REQ_COLS 50
+
 static int requester(struct Window *w, const char *message, const char *yes,
                      const char *no)
 {
-  static char lines[3][80];
-  struct IntuiText body[3];
+  static char lines[REQ_LINES][REQ_COLS + 1];
+  struct IntuiText body[REQ_LINES];
   struct IntuiText pos;
   struct IntuiText neg;
-  const char *p;
   int n;
   int i;
+  int longest = 0;
 
-  p = message;
-  for (n = 0; *p && n < 3; n++) {
-    i = 0;
-    while (*p && *p != '\n' && i < (int) sizeof(lines[0]) - 1)
-      lines[n][i++] = *p++;
-    lines[n][i] = 0;
-    if (*p == '\n')
-      p++;
-  }
-  for (i = 0; i < n; i++)
+  n = amiga_wrap_text(&lines[0][0], REQ_COLS + 1, REQ_LINES, REQ_COLS,
+                      message);
+  for (i = 0; i < n; i++) {
+    int len = (int) strlen(lines[i]);
+
+    if (len > longest)
+      longest = len;
     make_itext(&body[i], 8, (WORD) (4 + i * 10), lines[i],
                i + 1 < n ? &body[i + 1] : NULL);
+  }
   make_itext(&pos, 6, 3, yes ? yes : "", NULL);
   make_itext(&neg, 6, 3, no, NULL);
   return (int) AutoRequest(w, n ? &body[0] : NULL, yes ? &pos : NULL, &neg,
-                           0, 0, 320, (WORD) (50 + 10 * n));
+                           0, 0, (WORD) (longest * FONT_W + 32 > 320
+                                         ? longest * FONT_W + 32 : 320),
+                           (WORD) (50 + 10 * n));
 }
 
 void amiga_gui_fatal(const char *message)
@@ -605,6 +604,13 @@ static void row_string(uint16_t idx, uint8_t cols)
   default: {
     config_nio_mapping_t m;
     const char *label = amiga_drive_label((uint8_t) idx, gctl->kick13);
+    char note[16];
+
+    /* The mount picker says which drives are fixed to a media type and
+     * which of those cannot take the image being mounted. */
+    note[0] = 0;
+    if (gctl->page == AMIGA_PAGE_MOUNT)
+      amiga_ctl_drive_note(gctl, (uint8_t) idx, note, sizeof(note));
 
     if (config_nio_mapping_get(s, (uint8_t) idx, &m) && m.valid) {
       const config_nio_slot_t *ds = amiga_ctl_drive_slot(gctl, (uint8_t) idx);
@@ -616,12 +622,15 @@ static void row_string(uint16_t idx, uint8_t cols)
       name = strrchr(uri, '/');
       name = name && name[1] ? name + 1 : uri;
       amiga_clip_head(uri_text, sizeof(uri_text), name,
-                      (uint8_t) (cols - (saved ? 32 : 17)));
-      amiga_sprintf(tmp_text, "%-5s %s %6u  %s%s", label,
+                      (uint8_t) (cols - (saved ? 32 : 17) -
+                                 (note[0] ? 17 : 0)));
+      amiga_sprintf(tmp_text, "%-5s %s %6u  %s%s%s%s", label,
                     m.readonly ? "RO" : "RW", (unsigned) m.slot, uri_text,
-                    saved ? "  (not mounted)" : "");
+                    saved ? "  (not mounted)" : "", note[0] ? "  " : "",
+                    note);
     } else {
-      amiga_sprintf(tmp_text, "%-5s (empty)", label);
+      amiga_sprintf(tmp_text, "%-5s (empty)%s%s", label,
+                    note[0] ? "  " : "", note);
     }
     break;
   }
@@ -2229,7 +2238,6 @@ static void gui_open_drive_window(void)
     return;
   }
   strcpy(tmp_text, "Opening drive windows needs Workbench 3.5 or later");
-#ifndef __KICK13__
   WorkbenchBase = OpenLibrary((CONST_STRPTR) "workbench.library", 44);
   if (WorkbenchBase) {
     int tries;
@@ -2253,7 +2261,6 @@ static void gui_open_drive_window(void)
     CloseLibrary(WorkbenchBase);
     WorkbenchBase = NULL;
   }
-#endif
   config_nio_set_status(gctl->state, tmp_text);
   gui_paint_status();
 }
@@ -2706,12 +2713,11 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
 
 static void load_theme(void)
 {
-  /* The WB1.3 build cannot read DrawInfo, but may run on Kickstart 2.0+,
-   * whose pens differ from 1.x; pick them by the running Intuition. */
+  /* Kickstart 1.x has no DrawInfo and different pens from 2.0+; pick them
+   * by the running Intuition. */
   amiga_theme_for_version(&theme,
                           (uint16_t) IntuitionBase->LibNode.lib_Version);
   new_look = 0;
-#ifndef __KICK13__
   if (IntuitionBase->LibNode.lib_Version >= 36) {
     struct DrawInfo *dri = GetScreenDrawInfo(win->WScreen);
 
@@ -2721,7 +2727,6 @@ static void load_theme(void)
       FreeScreenDrawInfo(win->WScreen, dri);
     }
   }
-#endif
 }
 
 static void wait_newsize(void)

@@ -75,4 +75,30 @@ void test_format(void)
   CHECK_STR(buf, "fmount: Unknown command");
   amiga_last_line(buf, sizeof(buf), "SYS:C/fmount failed returncode 20\n");
   CHECK_STR(buf, "SYS:C/fmount failed returncode 20");
+
+  /* Requester text wraps on words and keeps explicit line breaks. */
+  {
+    char rows[8][21];
+    uint8_t n;
+
+    n = amiga_wrap_text(&rows[0][0], 21, 8, 20,
+                        "This config-nio is built for Workbench 1.3.\nOn 2.04 use the other one.");
+    CHECK(n == 5);
+    CHECK_STR(rows[0], "This config-nio is");
+    CHECK_STR(rows[1], "built for Workbench");
+    CHECK_STR(rows[2], "1.3.");
+    CHECK_STR(rows[3], "On 2.04 use the");
+    CHECK_STR(rows[4], "other one.");
+    n = amiga_wrap_text(&rows[0][0], 21, 8, 20, "On 2.04 use the other one.");
+    CHECK(n == 2);
+    CHECK_STR(rows[1], "other one.");
+    n = amiga_wrap_text(&rows[0][0], 21, 8, 10, "abcdefghijklmnop qrs");
+    CHECK(n == 2);
+    CHECK_STR(rows[0], "abcdefghij");
+    CHECK_STR(rows[1], "klmnop qrs");
+    CHECK(amiga_wrap_text(&rows[0][0], 21, 2, 5, "a b c d e f g h") == 2);
+    CHECK(amiga_wrap_text(&rows[0][0], 21, 8, 20, "") == 0);
+    CHECK(amiga_wrap_text(&rows[0][0], 21, 8, 20, "one\n\ntwo") == 3);
+    CHECK_STR(rows[1], "");
+  }
 }

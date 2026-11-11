@@ -384,6 +384,13 @@ int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly,
   return 1;
 }
 
+int fnsvc_disk_inspect(const char *uri, fnsvc_disk_inspection_t *out)
+{
+  (void) uri;
+  (void) out;
+  return 0;
+}
+
 uint8_t fnsvc_disk_last_error(void)
 {
   return FN_DISK_ERR_NONE;
