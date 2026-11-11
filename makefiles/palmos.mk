@@ -1,9 +1,13 @@
 # Native Palm-only UI; other platform source lists/flags remain unchanged.
 FUJINET_NIO_LIB ?= ../fujinet-nio-lib
-NIOLIB_BUILD ?= $(FUJINET_NIO_LIB)/build/palmos-shared-usb
+PALMOS_SDK_VERSION ?= 3.5
+NIOLIB_BUILD ?= $(FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION)
 PALMOS_BUILD ?= build/palmos-usb
 CC = m68k-palmos-gcc
-FLAGS = -O2 -Wall -Werror -palmos3.5 -I$(FUJINET_NIO_LIB)/include/palmos
+FLAGS = -O2 -Wall -Werror -palmos$(PALMOS_SDK_VERSION) -I$(FUJINET_NIO_LIB)/include/palmos
+ifeq ($(PALMOS_SDK_VERSION),3.1)
+FLAGS += -DNIO_PALMOS_SDK31
+endif
 .PHONY: all
 all: $(PALMOS_BUILD)/NioConfig.prc
 $(PALMOS_BUILD):

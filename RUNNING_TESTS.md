@@ -251,17 +251,20 @@ from the command line with a key script and screenshots (see `docs/atari-config.
 
 ## Palm shared-library configuration
 
-Build with the existing Palm Docker image as described in
-[palmos-config.md](docs/palmos-config.md), then run:
+Build NioLib and then the app as described in [palmos-config.md](docs/palmos-config.md),
+and install the library's test requirements into its venv:
 
 ```sh
-make test-palmos PALMOS_PYTHON=../fujinet-nio-lib/build/palmos-shared/venv/bin/python
+cd ../fujinet-nio-lib
+python3 -m venv build/palmos-test-venv
+build/palmos-test-venv/bin/pip install -r tests/requirements-palmos-shared.txt
+cd ../nio-config
+make test-palmos PALMOS_PYTHON=../fujinet-nio-lib/build/palmos-test-venv/bin/python
 ```
 
 The focused suite executes the compiled m68k app and installed-library code
 with mocked Palm OS/transport peers. No hardware, live serial ports or running
-NIO backend are used. The library defaults to `build/palmos-shared-usb`; override
-`PALMOS_SHARED_BUILD` and `PALMOS_CONFIG_BUILD` with absolute paths when using
-other build outputs. Install the library's `tests/requirements-palmos-shared.txt`
-in the selected Python environment first. A missing Unicorn or build artifact
-is not a passed compiled-code test.
+NIO backend are used. `make test-palmos` points the tests at
+`$(FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION)` and
+`build/palmos-usb`; override `NIOLIB_BUILD` and `PALMOS_BUILD` for other build
+outputs. A missing Unicorn or build artifact is not a passed compiled-code test.

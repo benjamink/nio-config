@@ -74,8 +74,17 @@ regen-amiga-icons:
 	cd amiga && python3 tools/mkinfo.py --preview ../build/amiga-icon-preview.png
 
 # Palm is opt-in and uses the installed NioLib, not the static platform core.
+# It builds through the library's launcher: native prc-tools when they are on PATH,
+# otherwise the installed palmdev-toolchain container (docs/palmos-config.md).
+# NioLib must be built first with the same PALMOS_SDK_VERSION.
+PALMOS_SDK_VERSION ?= 3.5
+export PALMOS_SDK_VERSION
+PALMOS_FUJINET_NIO_LIB = $(or $(FUJINET_NIO_LIB),../fujinet-nio-lib)
+PALMOS_NIOLIB_BUILD = $(or $(NIOLIB_BUILD),$(PALMOS_FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION))
+PALMOS_OUT = $(or $(PALMOS_BUILD),build/palmos-usb)
 .PHONY: palmos test-palmos
 palmos:
-	$(MAKE) -f makefiles/palmos.mk FUJINET_NIO_LIB=$(or $(FUJINET_NIO_LIB),../fujinet-nio-lib) $(if $(NIOLIB_BUILD),NIOLIB_BUILD=$(NIOLIB_BUILD)) $(if $(PALMOS_BUILD),PALMOS_BUILD=$(PALMOS_BUILD))
+	bash $(PALMOS_FUJINET_NIO_LIB)/scripts/palmos-build.sh $(MAKE) -f makefiles/palmos.mk FUJINET_NIO_LIB=$(PALMOS_FUJINET_NIO_LIB) NIOLIB_BUILD=$(PALMOS_NIOLIB_BUILD) PALMOS_BUILD=$(PALMOS_OUT)
 test-palmos:
-	$(or $(PALMOS_PYTHON),python3) -m unittest discover -s tests/palmos -v
+	FUJINET_NIO_LIB=$(abspath $(PALMOS_FUJINET_NIO_LIB)) PALMOS_SHARED_BUILD=$(abspath $(PALMOS_NIOLIB_BUILD)) PALMOS_CONFIG_BUILD=$(abspath $(PALMOS_OUT)) \
+		$(or $(PALMOS_PYTHON),python3) -m unittest discover -s tests/palmos -v
