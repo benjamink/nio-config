@@ -70,7 +70,7 @@ void test_help(void)
   CHECK(strstr(amiga_help_text(amiga_help_find("Browsing and mounting")),
                "FIN then FMOUNT") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Browsing and mounting")),
-               "Add to Slot") != NULL);
+               "Catalogue") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Catalogue")), "FOUT") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Drives and ejecting")),
                "FUMOUNT") != NULL);

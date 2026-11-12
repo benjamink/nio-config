@@ -58,7 +58,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "- Refresh reads the listing again.\n"
   "- Double-click a disk image, or select it and press Mount..., to mount "
   "it.\n"
-  "- Add to Slot puts the selected image in the catalogue without "
+  "- Catalogue puts the selected image in the catalogue without "
   "mounting it, like FIN. It lists all 256 slots with the cursor on the "
   "slot that already holds the image, else the first empty one. Move to "
   "the slot you want, tick or untick RO, and press Add (or double-click, "
@@ -167,7 +167,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "with Alt they go to the top or bottom.\n"
   "- Return, or a double-click, runs the page's main action.\n"
   "- Backspace goes to the parent drawer on the Browse page.\n"
-  "- On the Add to Slot list, typing a number jumps to that slot.\n"
+  "- On the Catalogue prompt, typing a number jumps to that slot.\n"
   "- Tab and Shift-Tab change page: Hosts, Browse, Catalogue, Drives.\n"
   "- Help opens this help. Esc closes help, cancels Mount, or quits.\n"
   "- Right-Amiga-? shows About and Right-Amiga-Q quits.",

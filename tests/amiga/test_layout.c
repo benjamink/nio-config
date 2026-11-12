@@ -17,8 +17,11 @@ static void check_geometry(const amiga_layout_in_t *in, const amiga_layout_t *o)
   CHECK(o->win_w <= in->screen_w && o->win_h <= in->screen_h);
   for (i = 0; i < AMIGA_TAB_COUNT; i++)
     CHECK(inside(in, o, o->tab[i]));
-  for (i = 0; i < AMIGA_BUTTON_COUNT; i++)
+  for (i = 0; i < AMIGA_BUTTON_COUNT; i++) {
     CHECK(inside(in, o, o->button[i]));
+    /* The longest label fits with the bevel and padding to spare. */
+    CHECK(o->button[i].width >= AMIGA_BUTTON_LABEL_MAX * in->font_w + 6);
+  }
   CHECK(inside(in, o, o->info) && inside(in, o, o->list) &&
         inside(in, o, o->scroller) && inside(in, o, o->edit) &&
         inside(in, o, o->slot) && inside(in, o, o->ro) &&

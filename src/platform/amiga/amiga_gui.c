@@ -101,7 +101,7 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { "Move Up", ACT_HOST_UP }, { "Move Down", ACT_HOST_DOWN } },
   { { "Open", ACT_BROWSE_OPEN }, { "Parent", ACT_BROWSE_PARENT },
     { "Refresh", ACT_BROWSE_REFRESH }, { "Mount...", ACT_BROWSE_MOUNT },
-    { "Add to Slot", ACT_BROWSE_ADD }, { NULL, ACT_NONE } },
+    { "Catalogue", ACT_BROWSE_ADD }, { NULL, ACT_NONE } },
   { { "Mount...", ACT_SLOT_MOUNT }, { "Set", ACT_SLOT_SET },
     { "Clear", ACT_SLOT_CLEAR }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },

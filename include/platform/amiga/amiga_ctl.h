@@ -13,7 +13,7 @@ typedef enum {
   AMIGA_PAGE_DRIVES,
   AMIGA_PAGE_MOUNT,   /* drive picker; entered only via mount_begin_* */
   AMIGA_PAGE_HELP,    /* built-in help; entered only via help_open */
-  AMIGA_PAGE_ADD,     /* Browse > Add to Slot prompt; via add_begin */
+  AMIGA_PAGE_ADD,     /* Browse > Catalogue prompt; via add_begin */
   AMIGA_PAGE_COUNT
 } amiga_page_t;
 
@@ -89,7 +89,7 @@ typedef struct {
   amiga_list_t hosts;
   amiga_list_t entries;
   amiga_list_t catalogue;
-  amiga_list_t slots;      /* all 256 slots, for the Add to Slot prompt */
+  amiga_list_t slots;      /* all 256 slots, for the Catalogue prompt */
   amiga_list_t drives;
   uint8_t browse_host;
   uint8_t browse_open;
@@ -172,11 +172,11 @@ config_nio_entry_t *amiga_ctl_browse_row_entry(amiga_ctl_t *ctl, uint16_t row);
 int amiga_ctl_browse_uri(amiga_ctl_t *ctl, char *out, uint16_t cap);
 int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot,
                             uint8_t readonly);
-/* Browse > Add to Slot (FIN image): reuses the image's slot, else the
+/* Browse > Catalogue (FIN image): reuses the image's slot, else the
  * first empty one. */
 int amiga_ctl_browse_add(amiga_ctl_t *ctl, uint8_t readonly);
 
-/* The Add to Slot prompt lists all 256 slots (slots, rows from cat_*).
+/* The Catalogue prompt lists all 256 slots (slots, rows from cat_*).
  * begin puts the cursor on add_slot (the image's slot, else the first
  * empty one; -1 and slot 0 when full); replaces says the slot holds a
  * different image; commit writes and returns to Browse. */

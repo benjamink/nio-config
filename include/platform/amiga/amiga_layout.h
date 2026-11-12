@@ -12,6 +12,9 @@
 #define AMIGA_SCROLLER_W 16
 #define AMIGA_TAB_COUNT 4
 #define AMIGA_BUTTON_COUNT 6
+/* The longest label on a page button, in characters.  Buttons share the
+ * row, so a label must leave room for the bevel and a pixel of padding. */
+#define AMIGA_BUTTON_LABEL_MAX 10
 
 typedef struct {
   int16_t left;

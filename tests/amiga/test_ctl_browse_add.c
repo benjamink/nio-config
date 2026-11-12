@@ -24,7 +24,7 @@ static void out(const char *line, void *ctx)
   strcat(transcript, "\n");
 }
 
-/* Browse > Add to Slot is FIN without a slot number: the image goes in the
+/* Browse > Catalogue is FIN without a slot number: the image goes in the
  * slot that already holds it, else the first empty one. */
 void test_ctl_browse_add(void)
 {
@@ -85,7 +85,7 @@ void test_ctl_browse_add(void)
   CHECK(strstr(transcript, "OK\n") != NULL);
   CHECK_STR(state.status, "work.adf is already in slot 3 (RO)");
 
-  /* The GUI asks for the slot first: Add to Slot lists all 256 slots with
+  /* The GUI asks for the slot first: the Catalogue prompt lists all 256 slots with
    * the cursor on the image's slot, else the first empty one. */
   CHECK(amiga_ctl_browse_select_name(&ctl, "GAMES"));
   CHECK(!amiga_ctl_add_begin(&ctl));

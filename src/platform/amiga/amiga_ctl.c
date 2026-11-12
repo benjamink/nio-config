@@ -555,7 +555,7 @@ int amiga_ctl_browse_assign(amiga_ctl_t *ctl, uint8_t slot, uint8_t readonly)
 
 static int find_slot(amiga_ctl_t *ctl, const char *uri, uint8_t *slot);
 
-/* Writes `uri` to `slot` for Add to Slot, or reports it is already there. */
+/* Writes `uri` to `slot` for the Catalogue button, or reports it is already there. */
 static int add_write(amiga_ctl_t *ctl, const char *uri, uint8_t slot,
                      uint8_t readonly)
 {

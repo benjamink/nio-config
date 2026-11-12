@@ -10,7 +10,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | BBC / MS-DOS config | Amiga |
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list of up to 64 hosts, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
-| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Add to Slot**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
+| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Catalogue**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
@@ -22,7 +22,7 @@ side by side:
 | Window | Shell |
 | --- | --- |
 | Mount… (Browse) | `FIN` into a slot (the one already holding the image, else the first empty one), then `FMOUNT slot drive RO\|RW` |
-| Add to Slot (Browse) | `FIN slot image`; pick the slot from the list of all 256 |
+| Catalogue (Browse) | `FIN slot image`; pick the slot from the list of all 256 |
 | Catalogue page | `FLS` |
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
@@ -106,7 +106,7 @@ To mount an image:
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
 To put an image in the catalogue without mounting it, select it on
-**Browse** and press **Add to Slot**. The list then shows all 256 slots
+**Browse** and press **Catalogue**. The list then shows all 256 slots
 with what each holds, the cursor on the slot that already holds the image,
 otherwise the first empty one, and `RO` ticked. Move to the slot you want
 and press **Add** (or double-click, or Return); **Cancel** or Esc goes
@@ -247,7 +247,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
-| `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is Add to Slot |
+| `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is the Catalogue button |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
