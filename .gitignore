@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 test-evidence/
 tests/atari/golden/_actual/
+trs80/*.o
+trs80/*.map
+trs80/*.bin
+trs80/*.lis
+tests/trs80/build/
