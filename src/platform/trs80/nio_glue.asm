@@ -1,4 +1,4 @@
-; nio_glue.asm -- C-callable access to the fujinet-nio client (nioclient, entry table at 8000h,
+; nio_glue.asm -- C-callable access to the fujinet-nio client (nioclient, entry table at D000h,
 ; shared with FMOUNT/FLS; see fujinet/z80/nioclient.asm in the boot repo).
 ; Values go through globals, not the C stack. Interrupts are off for the exchange (the UART has
 ; no FIFO) and are turned back on afterwards.
@@ -7,7 +7,7 @@
         PUBLIC  _nio_err, _nio_stat, _nio_rptr, _nio_rlen
         PUBLIC  _nio_request_raw, _nio_uart_init
 
-NIO_REQUEST equ 0x8003
+NIO_REQUEST equ 0xD003      ; nioclient_config.asm (boot repo): the client lives at D000h
 
 ; in: _nio_dev, _nio_cmd, _nio_ptr (payload), _nio_len
 ; out: _nio_err = 0 ok, else 1 timeout 2 bad SLIP 3 bad length 4 bad checksum 5 unsupported;
