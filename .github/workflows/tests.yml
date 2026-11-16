@@ -1,0 +1,42 @@
+name: Tests
+
+# The host-side tests for this repository: plain gcc and make, no emulator and
+# no cross toolchain. The library it builds against is checked out beside it, as
+# in a workspace.
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: repos/nio-config
+
+      - name: Checkout fujinet-nio-lib
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          repository: fujinet-nio/fujinet-nio-lib
+          path: repos/fujinet-nio-lib
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -o Acquire::Retries=3 build-essential python3
+
+      - name: Test
+        working-directory: repos/nio-config
+        run: |
+          make test-amiga-host
