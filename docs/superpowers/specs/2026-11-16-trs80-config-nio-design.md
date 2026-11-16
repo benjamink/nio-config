@@ -46,10 +46,10 @@ Matches MS-DOS: letters are actions, arrows move, ENTER acts, TAB switches pane 
 | Key | Action |
 |---|---|
 | Up / Down | move selection |
-| Left / Right | previous / next tab, or page at list edges **(my call)** |
+| SHIFT+Left / SHIFT+Right | previous / next tab. Plain Left is the Backspace code (08h) and Right is the Tab code (09h): Left = go up a folder in Browse, Right = TAB below. **(measured in MAME; revised from the first draft)** |
 | SHIFT+Up / SHIFT+Down | page up / down (4P has no PgUp/PgDn) |
 | ENTER | open folder, mount selected image, accept |
-| TAB | switch Files / Slots pane focus |
+| TAB (the Right arrow, code 09h; the 4P has no TAB key) | switch Files / Slots pane focus |
 | BREAK | cancel dialog, go back, quit from top level (stands in for MS-DOS ESC; the 4P has no ESC) |
 | Q | quit, as on MS-DOS |
 | H / B / S / W | jump to Hosts / Browse / Slots / Setup **(my call on letters)** |
@@ -59,8 +59,10 @@ Matches MS-DOS: letters are actions, arrows move, ENTER acts, TAB switches pane 
 | F | name filter (`*` and `?` wildcards, as on Atari/MS-DOS) |
 | ? | help for the current tab **(my call)** |
 
-Text fields (URI, SSID, filter) take every letter; BREAK cancels, ENTER accepts, BACKSPACE
-deletes, CTRL-A/E/K as MS-DOS for home/end/kill if the key codes exist. F1-F3 are unused.
+Text fields (URI, SSID, filter) take every letter; BREAK cancels, ENTER accepts, Left (Backspace)
+deletes the last character, SHIFT+Left clears the field. Editing is at the end of the text only
+(no cursor movement; CTRL-K collides with the Up arrow's code) **(my call)**. F1-F3 are unused.
+No reverse video: the selected row is marked with `>` **(my call)**.
 
 ## Constraints
 

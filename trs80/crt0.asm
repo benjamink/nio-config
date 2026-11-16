@@ -3,14 +3,14 @@
         MODULE  crt0
         EXTERN  _main
         EXTERN  l_dcal
-        PUBLIC  __Exit
+        PUBLIC  ls_exit
         PUBLIC  _cmdline
         SECTION CODE
 start:
         ld      (_cmdline),hl
         ld      (saved_sp),sp
         call    _main
-__Exit:
+ls_exit:
         ld      sp,(saved_sp)
         ld      a,22            ; @EXIT, HL = return code
         rst     0x28
