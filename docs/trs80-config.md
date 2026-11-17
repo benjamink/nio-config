@@ -44,6 +44,17 @@ install the LS-DOS serial driver: only drive `:0` has it from boot (`nioboot`). 
 once from LS-DOS; CONFIG shows that as a hint after mounting. (Detecting an installed driver needs LS-DOS
 drive-table access from C and is not implemented.)
 
+### Drive `:0` is protected
+
+`:0` holds the boot disk (LS-DOS, the F* commands and CONFIG itself). CONFIG shows it as `(boot disk)`, starts with
+`:1` selected, and refuses to mount, eject, edit or flip read-only on `:0`. Use `FMOUNT :0 <uri>` to replace
+the boot disk deliberately.
+
+## Screen updates
+
+Moving a selection (Up/Down) repaints only the old and new rows (plus the `n/total` counter), not the screen.
+A scroll, a page change or any other key repaints the whole screen. Each row is written as one string.
+
 ## Memory map
 
 The program loads at 3000h and must end below D000h, where the boot repo's `nioclient_config.asm` (the

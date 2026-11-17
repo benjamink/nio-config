@@ -90,6 +90,9 @@ static const char *base_name(const char *uri)
   return last;
 }
 
+/* Set by a key handler that repainted just what it changed; the main loop then skips draw_all(). */
+static uint8_t redraw = 1;
+
 static void message(const char *text)
 {
   msg_draw(ROW_MSG, text);
@@ -107,6 +110,17 @@ static uint8_t drive_mounted(uint8_t unit)
   return st.slots[unit].enabled && st.slots[unit].uri[0];
 }
 
+/* Drive :0 holds the boot disk (LS-DOS, the F* commands and CONFIG itself). Replacing it from inside
+ * CONFIG would strand the user without them until a full restart, so CONFIG leaves it alone; FMOUNT
+ * can still change it deliberately. */
+static uint8_t boot_drive_guard(uint8_t unit)
+{
+  if (unit != 0)
+    return 0;
+  message("Drive :0 is the boot disk; use FMOUNT :0 to change it");
+  return 1;
+}
+
 static const char *drive_item(uint16_t unit, void *ctx)
 {
   uint8_t n = 0;
@@ -116,7 +130,11 @@ static const char *drive_item(uint16_t unit, void *ctx)
   linebuf[n++] = ':';
   linebuf[n++] = (char) ('0' + unit);
   linebuf[n++] = ' ';
-  if (drive_mounted((uint8_t) unit)) {
+  if (unit == 0) {
+    const char *b = "(boot disk)";
+    while (*b)
+      linebuf[n++] = *b++;
+  } else if (drive_mounted((uint8_t) unit)) {
     name = base_name(st.slots[unit].uri);
     while (*name && n < 14)
       linebuf[n++] = *name++;
@@ -142,6 +160,7 @@ static void drives_init(void)
   drives.count = FNCTL_MAX_UNITS;
   drives.item = drive_item;
   drives.ctx = 0;
+  drives.sel = 1;                          /* :0 is the boot disk */
 }
 
 static int mount_failure_text(void)
@@ -162,6 +181,8 @@ static int mount_drive(uint8_t unit, const char *uri, uint8_t readonly)
 {
   config_nio_mapping_t m;
 
+  if (boot_drive_guard(unit))
+    return 0;
   if (!fnsvc_disk_mount(unit, uri, readonly, SECTOR_SIZE_HINT))
     return mount_failure_text();
   if (!config_nio_write_slot(&st, unit, uri, readonly ? "r" : "rw")) {
@@ -181,6 +202,8 @@ static int mount_drive(uint8_t unit, const char *uri, uint8_t readonly)
 
 static void eject_drive(uint8_t unit)
 {
+  if (boot_drive_guard(unit))
+    return;
   if (!drive_mounted(unit)) {
     message("Nothing to eject");
     return;
@@ -202,6 +225,8 @@ static void toggle_readonly(uint8_t unit)
   char uri[CONFIG_NIO_URI_MAX + 1];
   uint8_t ro;
 
+  if (boot_drive_guard(unit))
+    return;
   if (!drive_mounted(unit)) {
     message("Drive is empty");
     return;
@@ -385,6 +410,8 @@ static void enter_folder(const char *name)
   st.browse_path[len + nlen + 1] = 0;
 }
 
+static void draw_counter(void);
+
 static void draw_browse(void)
 {
   uint8_t n;
@@ -412,7 +439,13 @@ static void draw_browse(void)
     con_fill(ROW_LIST, 1, FILES_W, ' ');
   list_draw(&drives);
   con_fill(ROW_INFO, 0, CON_COLS, '-');
-  n = 0;
+  draw_counter();
+}
+
+static void draw_counter(void)
+{
+  uint8_t n = 0;
+
   if (listed && folder_total) {
     put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* no 32-bit add: sccz80's l_long_add is broken here */
     linebuf[n++] = '/';
@@ -427,6 +460,7 @@ static void draw_browse(void)
 
 static void files_move(int key)
 {
+  uint16_t old_sel = files.sel;
   int r = list_key(&files, key);
   uint16_t want;
 
@@ -436,8 +470,16 @@ static void files_move(int key)
   if (want != page_base && paged) {
     if (!load_page(want, 0))
       return;
+    files.top = page_base;
+    return;                              /* a new page: repaint everything */
   }
   files.top = page_base;
+  if (old_sel >= files.top && old_sel < files.top + files.height) {
+    list_draw_row(&files, (uint8_t) (old_sel - files.top));
+    list_draw_row(&files, (uint8_t) (files.sel - files.top));
+    draw_counter();
+    redraw = 0;
+  }
 }
 
 static void files_enter(void)
@@ -483,7 +525,8 @@ static void browse_key(int key)
     return;
   }
   if (pane == PANE_DRIVES) {
-    list_key(&drives, key);
+    if (list_key_draw(&drives, key) == LIST_MOVED)
+      redraw = 0;
     if (key == KEY_ENTER)
       pane = PANE_FILES;
     else if (key == 'x' || key == 'X')
@@ -544,6 +587,8 @@ static void slots_key(int key)
     toggle_readonly((uint8_t) drives.sel);
   else if (key == 'e' || key == 'E' || key == KEY_ENTER) {
     name_buf[0] = 0;
+    if (boot_drive_guard((uint8_t) drives.sel))
+      return;
     if (drive_mounted((uint8_t) drives.sel))
       strcpy(name_buf, st.slots[drives.sel].uri);
     message("Image URI (ENTER mounts, BREAK cancels):");
@@ -627,7 +672,8 @@ static void hosts_key(int key)
     tab = TAB_BROWSE;
     open_folder(0);
   } else {
-    list_key(&hostlist, key);
+    if (list_key_draw(&hostlist, key) == LIST_MOVED)
+      redraw = 0;
   }
 }
 
@@ -755,7 +801,8 @@ static void setup_key(int key)
     st.prefs.size_format = st.prefs.size_format == CONFIG_NIO_PREF_SIZE_FULL ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
     message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
   } else {
-    list_key(&netlist, key);
+    if (list_key_draw(&netlist, key) == LIST_MOVED)
+      redraw = 0;
   }
 }
 
@@ -864,7 +911,9 @@ int config_ui_run(void)
   open_folder(0);
   message("");
   while (!quit) {
-    draw_all();
+    if (redraw)
+      draw_all();
+    redraw = 1;
     key = con_getkey();
     message("");
     if (key == 'q' || key == 'Q' || (key == KEY_BREAK)) {

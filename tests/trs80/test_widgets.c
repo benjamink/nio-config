@@ -98,8 +98,26 @@ static void test_list_empty(void)
   list_draw(&l);                                  /* must not read item 0 */
 }
 
+static void test_list_key_draw_repaints_only_what_moved(void)
+{
+  list_t l = {2, 0, 40, 5, 9, 0, 0, item, 0};
+  fake_reset(0, 0);
+  list_draw(&l);
+  scr[5][0] = '#';                                /* a sentinel on a row a plain move must leave alone */
+  CHECK(list_key_draw(&l, KEY_DOWN) == LIST_MOVED);
+  CHECK(scr[2][0] == ' ' && scr[3][0] == '>');    /* old and new rows repainted */
+  CHECK(scr[5][0] == '#');                        /* untouched */
+  CHECK(list_key_draw(&l, 'x') == LIST_NONE);
+  l.sel = 4;
+  fake_reset(0, 0);
+  list_draw(&l);
+  CHECK(list_key_draw(&l, KEY_DOWN) == LIST_MOVED);   /* scrolls: the whole window repaints */
+  CHECK(l.top == 1 && scr[2][0] == ' ' && memcmp(&scr[2][2], "item 1", 6) == 0 && scr[6][0] == '>');
+}
+
 int main(void)
 {
+  test_list_key_draw_repaints_only_what_moved();
   test_field_edit_max_length();
   test_field_edit_break_cancels();
   test_field_edit_backspace_and_clear();
