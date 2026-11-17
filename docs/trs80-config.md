@@ -37,6 +37,13 @@ There is no reverse video: the selected row is marked `>`. Text fields edit at t
 - Build limits (`trs80/Makefile`): 4 hosts, 12 browse entries per page, 127-byte URIs.
 - `make trs80` builds `trs80/build/config.bin`; `make test-trs80-host` runs the host widget tests.
 
+## Mounting and FUJIDRV
+
+CONFIG asks the FujiNet to mount the image and records it in the slot catalogue and drive map. It does not
+install the LS-DOS serial driver: only drive `:0` has it from boot (`nioboot`). For `:1`-`:7` run `FUJIDRV :n`
+once from LS-DOS; CONFIG shows that as a hint after mounting. (Detecting an installed driver needs LS-DOS
+drive-table access from C and is not implemented.)
+
 ## Memory map
 
 The program loads at 3000h and must end below D000h, where the boot repo's `nioclient_config.asm` (the
