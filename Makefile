@@ -77,9 +77,16 @@ export PALMOS_SDK_VERSION
 PALMOS_FUJINET_NIO_LIB = $(or $(FUJINET_NIO_LIB),../fujinet-nio-lib)
 PALMOS_NIOLIB_BUILD = $(or $(NIOLIB_BUILD),$(PALMOS_FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION))
 PALMOS_OUT = $(or $(PALMOS_BUILD),build/palmos-usb)
-.PHONY: palmos test-palmos
+.PHONY: palmos test-palmos trs80 test-trs80-host
 palmos:
 	bash $(PALMOS_FUJINET_NIO_LIB)/scripts/palmos-build.sh $(MAKE) -f makefiles/palmos.mk FUJINET_NIO_LIB=$(PALMOS_FUJINET_NIO_LIB) NIOLIB_BUILD=$(PALMOS_NIOLIB_BUILD) PALMOS_BUILD=$(PALMOS_OUT)
 test-palmos:
 	FUJINET_NIO_LIB=$(abspath $(PALMOS_FUJINET_NIO_LIB)) PALMOS_SHARED_BUILD=$(abspath $(PALMOS_NIOLIB_BUILD)) PALMOS_CONFIG_BUILD=$(abspath $(PALMOS_OUT)) \
 		$(or $(PALMOS_PYTHON),python3) -m unittest discover -s tests/palmos -v
+
+# TRS-80 Model 4/4P (LS-DOS): opt-in, needs z88dk. Produces trs80/build/config.bin; the /CMD with its client
+# is assembled by the boot-disk repo's tools/make_boot_image.py. See docs/trs80-config.md.
+trs80:
+	$(MAKE) -C trs80 build/config.bin
+test-trs80-host:
+	$(MAKE) -C tests/trs80 test
