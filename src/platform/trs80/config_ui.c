@@ -499,22 +499,27 @@ static void browse_key(int key)
 
 /* ---------------------------------------------------------------- slots tab */
 
+static char slotbuf[CON_COLS + 1];     /* separate from linebuf: drive_item() returns linebuf */
+
 static void draw_slots(void)
 {
   uint8_t u, n;
 
   for (u = 0; u < FNCTL_MAX_UNITS; u++) {
     con_fill(ROW_LIST + u * 2, 0, CON_COLS, ' ');
-    n = 0;
-    linebuf[n++] = u == drives.sel ? '>' : ' ';
-    linebuf[n++] = ' ';
-    strcpy(&linebuf[n], drive_item(u, 0));
-    con_put(ROW_LIST + u * 2, 0, linebuf);
+    slotbuf[0] = u == drives.sel ? '>' : ' ';
+    slotbuf[1] = ' ';
+    strcpy(&slotbuf[2], drive_item(u, 0));
+    con_put(ROW_LIST + u * 2, 0, slotbuf);
     con_fill(ROW_LIST + u * 2 + 1, 0, CON_COLS, ' ');
     if (drive_mounted(u)) {
-      strncpy(linebuf, st.slots[u].uri, 70);
-      linebuf[70] = 0;
-      con_put(ROW_LIST + u * 2 + 1, 6, linebuf);
+      n = 0;
+      while (st.slots[u].uri[n] && n < 70) {
+        slotbuf[n] = st.slots[u].uri[n];
+        n++;
+      }
+      slotbuf[n] = 0;
+      con_put(ROW_LIST + u * 2 + 1, 6, slotbuf);
     }
   }
 }
