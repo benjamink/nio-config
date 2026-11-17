@@ -14,29 +14,35 @@ static void list_scroll(list_t *l)
     l->top = l->sel - l->height + 1;
 }
 
-void list_draw(const list_t *l)
+/* One list row as a single padded string: a row costs `width` console calls, not about twice that. */
+void list_draw_row(const list_t *l, uint8_t r)
 {
-  uint8_t r, n;
-  uint16_t idx;
+  uint8_t n = 0;
+  uint16_t idx = l->top + r;
   const char *s;
 
-  for (r = 0; r < l->height; r++) {
-    idx = l->top + r;
-    con_fill(l->row + r, l->col, l->width, ' ');
-    if (idx >= l->count)
-      continue;
-    linebuf[0] = (idx == l->sel) ? '>' : ' ';
-    linebuf[1] = 0;
-    con_put(l->row + r, l->col, linebuf);
+  if (r >= l->height)
+    return;
+  if (idx < l->count) {
+    linebuf[n++] = (idx == l->sel) ? '>' : ' ';
+    linebuf[n++] = ' ';
     s = l->item(idx, l->ctx);
-    n = 0;
-    while (s[n] && n < l->width - 2) {
-      linebuf[n] = s[n];
-      n++;
+    while (*s && n < l->width) {
+      linebuf[n++] = *s++;
     }
-    linebuf[n] = 0;
-    con_put(l->row + r, l->col + 2, linebuf);
   }
+  while (n < l->width)
+    linebuf[n++] = ' ';
+  linebuf[n] = 0;
+  con_put(l->row + r, l->col, linebuf);
+}
+
+void list_draw(const list_t *l)
+{
+  uint8_t r;
+
+  for (r = 0; r < l->height; r++)
+    list_draw_row(l, r);
 }
 
 int list_key(list_t *l, int key)
@@ -135,4 +141,20 @@ void msg_draw(uint8_t row, const char *text)
 {
   con_fill(row, 0, CON_COLS, ' ');
   con_put(row, 1, text);
+}
+
+int list_key_draw(list_t *l, int key)
+{
+  uint16_t old_sel = l->sel, old_top = l->top;
+  int r = list_key(l, key);
+
+  if (r != LIST_MOVED)
+    return r;
+  if (l->top != old_top) {
+    list_draw(l);
+  } else {
+    list_draw_row(l, (uint8_t) (old_sel - l->top));
+    list_draw_row(l, (uint8_t) (l->sel - l->top));
+  }
+  return r;
 }

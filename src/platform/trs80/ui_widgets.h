@@ -20,10 +20,13 @@ typedef struct {
 enum { LIST_NONE = 0, LIST_MOVED = 1, LIST_EDGE_UP = 2, LIST_EDGE_DOWN = 3 };
 
 void list_draw(const list_t *l);
+void list_draw_row(const list_t *l, uint8_t r);      /* row r of the window (0..height-1) */
 /* Up/Down move one, SHIFT+Up/Down move height-1 (clamped). Returns LIST_MOVED when the
  * selection changed, LIST_EDGE_UP / LIST_EDGE_DOWN for Up on the first / Down on the last
  * item (the caller may then load the previous / next page), LIST_NONE for any other key. */
 int list_key(list_t *l, int key);
+/* list_key, then redraws only what moved: the two rows involved, or the whole list when it scrolled. */
+int list_key_draw(list_t *l, int key);
 
 /* ---- text field ---- */
 /* Edits buf (room for max+1 bytes) at row/col, shown through a `width` window that scrolls to
