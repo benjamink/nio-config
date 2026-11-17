@@ -14,4 +14,8 @@ void con_fill(uint8_t row, uint8_t col, uint8_t n, char c);
 void con_cursor(uint8_t row, uint8_t col);
 int con_getkey(void);
 
+/* LS-DOS services beyond the screen (trs80_console.c; not part of the host-test fake). */
+uint8_t dos_drive_enabled(uint8_t unit);   /* 0 while the drive's DCT is still the disabled stub nioboot leaves */
+void dos_exec(const char *cmd);            /* leave CONFIG and run a CR-terminated LS-DOS command; does not return */
+
 #endif

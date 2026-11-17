@@ -4,6 +4,9 @@ extern uint8_t con_r, con_c, con_ch;
 extern void con_putc_raw(void);
 extern void con_cursor_raw(void);
 extern int con_key_raw(void);
+extern const char *con_cmdp;
+extern uint8_t dos_drive_enabled_raw(void);
+extern void dos_exec_raw(void);
 
 void con_fill(uint8_t row, uint8_t col, uint8_t n, char c)
 {
@@ -43,4 +46,16 @@ void con_cursor(uint8_t row, uint8_t col)
 int con_getkey(void)
 {
     return con_key_raw();
+}
+
+uint8_t dos_drive_enabled(uint8_t unit)
+{
+    con_c = unit;
+    return (uint8_t) dos_drive_enabled_raw();
+}
+
+void dos_exec(const char *cmd)
+{
+    con_cmdp = cmd;
+    dos_exec_raw();
 }
