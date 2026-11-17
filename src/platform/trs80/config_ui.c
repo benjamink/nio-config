@@ -38,6 +38,7 @@ static uint8_t paged;                   /* 0 when the firmware has no ListPages:
 static uint8_t listed;                  /* a folder has been loaded for cur_host/browse_path */
 static list_t files;
 static list_t drives;
+static list_t hostlist;
 
 static char linebuf[CON_COLS + 1];
 static char uri_buf[FNSVC_MAX_URI + 1];
@@ -536,6 +537,95 @@ static void slots_key(int key)
   }
 }
 
+/* ---------------------------------------------------------------- hosts tab */
+
+static const char *host_item(uint16_t i, void *ctx)
+{
+  (void) ctx;
+  strncpy(linebuf, st.hosts[i], 72);
+  linebuf[72] = 0;
+  return linebuf;
+}
+
+static void hosts_init(void)
+{
+  hostlist.row = ROW_LIST;
+  hostlist.col = 1;
+  hostlist.width = 76;
+  hostlist.height = CONFIG_NIO_MAX_HOSTS;
+  hostlist.count = st.host_count;
+  hostlist.sel = 0;
+  hostlist.top = 0;
+  hostlist.item = host_item;
+  hostlist.ctx = 0;
+}
+
+static void hosts_save(void)
+{
+  hostlist.count = st.host_count;
+  if (hostlist.sel >= st.host_count && st.host_count)
+    hostlist.sel = st.host_count - 1;
+  if (!config_nio_save_hosts(&st))
+    message("Could not save the host list");
+}
+
+static void host_edit(uint8_t index, uint8_t is_new)
+{
+  message(is_new ? "New host URI (ENTER saves, BREAK cancels):" : "Host URI (ENTER saves, BREAK cancels):");
+  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  strcpy(name_buf, is_new ? "" : st.hosts[index]);
+  if (!field_edit(name_buf, CONFIG_NIO_URI_MAX, ROW_INFO + 2, 1, 76) || !name_buf[0]) {
+    message("Cancelled");
+    return;
+  }
+  config_nio_host_set(&st, index, name_buf);
+  if (is_new)
+    st.host_count++;
+  hosts_save();
+  message("Saved");
+}
+
+static void hosts_key(int key)
+{
+  uint8_t i;
+
+  if (key == 'a' || key == 'A') {
+    if (st.host_count >= CONFIG_NIO_MAX_HOSTS)
+      message("The host list is full");
+    else
+      host_edit(st.host_count, 1);
+  } else if ((key == 'e' || key == 'E') && st.host_count) {
+    host_edit((uint8_t) hostlist.sel, 0);
+  } else if ((key == 'd' || key == 'D') && st.host_count) {
+    for (i = (uint8_t) hostlist.sel; (uint8_t) (i + 1) < st.host_count; i++)
+      config_nio_host_set(&st, i, st.hosts[i + 1]);
+    config_nio_host_clear(&st, (uint8_t) (st.host_count - 1));
+    st.host_count--;
+    hosts_save();
+    message("Deleted");
+  } else if (key == KEY_ENTER && st.host_count) {
+    cur_host = (uint8_t) hostlist.sel;
+    st.browse_path[0] = 0;
+    tab = TAB_BROWSE;
+    open_folder(0);
+  } else {
+    list_key(&hostlist, key);
+  }
+}
+
+static void draw_hosts(void)
+{
+  uint8_t r;
+
+  for (r = ROW_PATH; r < ROW_INFO; r++)
+    con_fill(r, 0, CON_COLS, ' ');
+  con_put(ROW_PATH, 1, "HOSTS");
+  if (!st.host_count)
+    con_put(ROW_LIST, 3, "(none yet - press A to add, e.g. tnfs://host or sd0:/)");
+  else
+    list_draw(&hostlist);
+}
+
 /* ---------------------------------------------------------------- tabs */
 
 static void draw_tab_placeholder(const char *what)
@@ -565,7 +655,11 @@ static void draw_all(void)
     con_fill(ROW_HINT, 0, CON_COLS, ' ');
     con_put(ROW_HINT, 1, "E/ENTER edit URI  X eject  R read-only on/off  H B S W tabs  Q quit");
   } else if (tab == TAB_HOSTS) {
-    draw_tab_placeholder("Hosts: not built yet");
+    draw_hosts();
+    con_fill(ROW_INFO, 0, CON_COLS, '-');
+    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+    con_fill(ROW_HINT, 0, CON_COLS, ' ');
+    con_put(ROW_HINT, 1, "A add  E edit  D delete  ENTER browse  H B S W tabs  Q quit");
   } else {
     draw_tab_placeholder("Setup: not built yet");
   }
@@ -610,6 +704,7 @@ int config_ui_run(void)
   }
   files_init();
   drives_init();
+  hosts_init();
   open_folder(0);
   message("");
   while (!quit) {
@@ -625,6 +720,8 @@ int config_ui_run(void)
       browse_key(key);
     } else if (tab == TAB_SLOTS) {
       slots_key(key);
+    } else if (tab == TAB_HOSTS) {
+      hosts_key(key);
     }
   }
   con_clear();

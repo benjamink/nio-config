@@ -108,11 +108,15 @@ static int appstore_read_text(const char *key, char *buf, uint16_t cap,
 static int appstore_write_text(const char *key, const char *buf)
 {
   fn_appstore_write_t wr;
+  fn_appstore_delete_t del;
   uint16_t len;
   uint16_t off;
 
   len = (uint16_t) strlen(buf);
   off = 0;
+  /* Writes are offset writes (docs/app_store_service_protocol.md): delete first so a shorter value
+   * does not keep the old tail. A missing key is fine. */
+  (void) fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, key, &del);
   if (len == 0) {
     return fn_appstore_write(&appstore_io, CONFIG_NIO_NS, key, 0,
                              (const uint8_t *) "", 0, &wr) == FN_OK;
