@@ -177,6 +177,10 @@ static int mount_failure_text(void)
 }
 
 /* Put `uri` on LS-DOS drive :unit: remember it in the catalogue slot and the drive map, then mount it. */
+/* Drives whose LS-DOS disk driver is not installed yet (bit n = drive :n). The driver cannot be installed from
+ * inside CONFIG (it lowers HIGH$ over memory CONFIG's client occupies), so quitting runs FUJIDRV for them. */
+static uint8_t driver_wanted;
+
 static int mount_drive(uint8_t unit, const char *uri, uint8_t readonly)
 {
   config_nio_mapping_t m;
@@ -197,6 +201,8 @@ static int mount_drive(uint8_t unit, const char *uri, uint8_t readonly)
     message("Mounted, but the drive map could not be saved");
     return 0;
   }
+  if (unit > 0 && !dos_drive_enabled(unit))
+    driver_wanted |= (uint8_t) (1 << unit);
   return 1;
 }
 
@@ -508,12 +514,8 @@ static void files_enter(void)
     strcat(linebuf, " on :");
     linebuf[strlen(linebuf) + 1] = 0;
     linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
-    if (drives.sel > 0) {                /* only drive :0 has the serial driver from boot */
-      strcat(linebuf, "  (run FUJIDRV :");
-      linebuf[strlen(linebuf) + 1] = 0;
-      linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
-      strcat(linebuf, " once to use it)");
-    }
+    if (driver_wanted & (1 << drives.sel))     /* :0 has the driver from boot */
+      strcat(linebuf, "  (FUJIDRV runs when you quit)");
     message(linebuf);
   }
 }
@@ -932,5 +934,24 @@ int config_ui_run(void)
     }
   }
   con_clear();
+  {
+    static char cmd[32];
+    uint8_t d, n = 0;
+
+    strcpy(cmd, "FUJIDRV");
+    n = 7;
+    for (d = 1; d < FNCTL_MAX_UNITS; d++) {
+      if ((driver_wanted & (1 << d)) && drive_mounted(d)) {
+        cmd[n++] = ' ';
+        cmd[n++] = ':';
+        cmd[n++] = (char) ('0' + d);
+      }
+    }
+    if (n > 7) {
+      cmd[n++] = '\r';
+      cmd[n] = 0;
+      dos_exec(cmd);                       /* installs the drivers, then LS-DOS Ready; does not return */
+    }
+  }
   return 0;
 }

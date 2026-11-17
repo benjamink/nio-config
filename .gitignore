@@ -8,3 +8,4 @@ trs80/*.map
 trs80/*.bin
 trs80/*.lis
 tests/trs80/build/
+src/platform/trs80/*.o

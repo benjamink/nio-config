@@ -39,10 +39,12 @@ There is no reverse video: the selected row is marked `>`. Text fields edit at t
 
 ## Mounting and FUJIDRV
 
-CONFIG asks the FujiNet to mount the image and records it in the slot catalogue and drive map. It does not
-install the LS-DOS serial driver: only drive `:0` has it from boot (`nioboot`). For `:1`-`:7` run `FUJIDRV :n`
-once from LS-DOS; CONFIG shows that as a hint after mounting. (Detecting an installed driver needs LS-DOS
-drive-table access from C and is not implemented.)
+CONFIG asks the FujiNet to mount the image and records it in the slot catalogue and drive map. Drives `:1`-`:7`
+also need the LS-DOS serial driver (`FUJIDRV :n`). CONFIG checks each mounted drive's DCT (`@GTDCT`): if it is still
+the disabled stub `nioboot` leaves, the drive is remembered, and when you quit CONFIG runs
+`FUJIDRV :a :b ...` for those drives itself (`@CMNDI`). It cannot install the driver while running, because the
+driver lowers HIGH$ over memory CONFIG's client occupies. The mount message says "FUJIDRV runs when you quit".
+`FUJIDRV` accepts several drives in one command for this reason. Drives that already have a driver are not touched.
 
 ### Drive `:0` is protected
 
