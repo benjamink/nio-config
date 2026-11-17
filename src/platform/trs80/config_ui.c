@@ -7,6 +7,7 @@
 #include "trs80_console.h"
 #include "trs80_keys.h"
 #include "ui_widgets.h"
+#include "wifi_trs80.h"
 
 #include <string.h>
 
@@ -39,6 +40,10 @@ static uint8_t listed;                  /* a folder has been loaded for cur_host
 static list_t files;
 static list_t drives;
 static list_t hostlist;
+static list_t netlist;
+static wifi_net_t nets[WIFI_SCAN_MAX];
+static uint8_t net_count;
+static char wifi_line[40];
 
 static char linebuf[CON_COLS + 1];
 static char uri_buf[FNSVC_MAX_URI + 1];
@@ -626,6 +631,138 @@ static void draw_hosts(void)
     list_draw(&hostlist);
 }
 
+/* ---------------------------------------------------------------- setup tab */
+
+static const char *net_item(uint16_t i, void *ctx)
+{
+  uint8_t n = 0;
+  const char *p = nets[i].ssid;
+
+  (void) ctx;
+  while (*p && n < 34)
+    linebuf[n++] = *p++;
+  while (n < 36)
+    linebuf[n++] = ' ';
+  linebuf[n++] = nets[i].auth ? '*' : ' ';
+  linebuf[n] = 0;
+  return linebuf;
+}
+
+static void setup_init(void)
+{
+  netlist.row = ROW_LIST + 2;
+  netlist.col = 1;
+  netlist.width = 44;
+  netlist.height = WIFI_SCAN_MAX;
+  netlist.count = 0;
+  netlist.sel = 0;
+  netlist.top = 0;
+  netlist.item = net_item;
+  netlist.ctx = 0;
+}
+
+static void wifi_refresh_status(void)
+{
+  uint8_t link;
+  char ip[20];
+
+  strcpy(wifi_line, "Wi-Fi: status unavailable");
+  if (wifi_status(&link, ip, sizeof(ip))) {
+    strcpy(wifi_line, link == 2 ? "Wi-Fi: connected " : link == 1 ? "Wi-Fi: connecting" : "Wi-Fi: not connected");
+    if (link == 2)
+      strcat(wifi_line, ip);
+  }
+}
+
+static void do_join(const char *ssid, const char *password)
+{
+  uint8_t state = 1, tries = 0;
+
+  message("Joining...");
+  if (!wifi_join(ssid, password)) {
+    message("The FujiNet refused the join request");
+    return;
+  }
+  while (tries++ < 40 && wifi_join_state(&state) && state == 1)
+    ;
+  wifi_refresh_status();
+  message(state == 2 ? "Connected" : state == 3 ? "Join failed (check the password)" : "Join still pending");
+}
+
+static void ask_password_and_join(const char *ssid)
+{
+  char pw[65];
+
+  message("Password (ENTER joins, BREAK cancels):");
+  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  pw[0] = 0;
+  if (!field_edit(pw, 64, ROW_INFO + 2, 1, 76)) {
+    message("Cancelled");
+    return;
+  }
+  do_join(ssid, pw);
+}
+
+static void scan_networks(void)
+{
+  uint8_t more = 0;
+
+  message("Scanning...");
+  net_count = 0;
+  if (!wifi_scan(0, nets, &net_count, &more)) {
+    message("Scan failed");
+    net_count = 0;
+  } else {
+    message(net_count ? "Select a network and press ENTER" : "No networks found");
+  }
+  netlist.count = net_count;
+  netlist.sel = 0;
+  netlist.top = 0;
+}
+
+static void setup_key(int key)
+{
+  if (key == 'n' || key == 'N') {
+    scan_networks();
+  } else if (key == 'j' || key == 'J') {
+    message("Network name (ENTER continues, BREAK cancels):");
+    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+    name_buf[0] = 0;
+    if (field_edit(name_buf, WIFI_SSID_MAX, ROW_INFO + 2, 1, 40) && name_buf[0])
+      ask_password_and_join(name_buf);
+    else
+      message("Cancelled");
+  } else if (key == KEY_ENTER && net_count) {
+    strcpy(name_buf, nets[netlist.sel].ssid);
+    ask_password_and_join(name_buf);
+  } else if (key == 'd' || key == 'D') {
+    st.prefs.date_format = st.prefs.date_format == CONFIG_NIO_PREF_DATE_YMD ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
+    message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
+  } else if (key == 'z' || key == 'Z') {
+    st.prefs.size_format = st.prefs.size_format == CONFIG_NIO_PREF_SIZE_FULL ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
+    message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
+  } else {
+    list_key(&netlist, key);
+  }
+}
+
+static void draw_setup(void)
+{
+  uint8_t r;
+
+  for (r = ROW_PATH; r < ROW_INFO; r++)
+    con_fill(r, 0, CON_COLS, ' ');
+  con_put(ROW_PATH, 1, "WI-FI");
+  con_put(ROW_PATH + 1, 1, wifi_line);
+  if (net_count)
+    list_draw(&netlist);
+  else
+    con_put(ROW_LIST + 2, 3, "(press N to scan for networks, J to type one)");
+  con_put(ROW_INFO - 4, 1, "PREFERENCES");
+  con_put(ROW_INFO - 3, 1, st.prefs.date_format == CONFIG_NIO_PREF_DATE_YDM ? "Date order: YDM   (D toggles)" : "Date order: YMD   (D toggles)");
+  con_put(ROW_INFO - 2, 1, st.prefs.size_format == CONFIG_NIO_PREF_SIZE_COMPACT ? "File sizes: compact (Z toggles)" : "File sizes: full    (Z toggles)");
+}
+
 /* ---------------------------------------------------------------- tabs */
 
 static void draw_tab_placeholder(const char *what)
@@ -661,7 +798,11 @@ static void draw_all(void)
     con_fill(ROW_HINT, 0, CON_COLS, ' ');
     con_put(ROW_HINT, 1, "A add  E edit  D delete  ENTER browse  H B S W tabs  Q quit");
   } else {
-    draw_tab_placeholder("Setup: not built yet");
+    draw_setup();
+    con_fill(ROW_INFO, 0, CON_COLS, '-');
+    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+    con_fill(ROW_HINT, 0, CON_COLS, ' ');
+    con_put(ROW_HINT, 1, "N scan  J join by name  ENTER join  D date  Z sizes  H B S W tabs  Q quit");
   }
 }
 
@@ -705,6 +846,8 @@ int config_ui_run(void)
   files_init();
   drives_init();
   hosts_init();
+  setup_init();
+  wifi_refresh_status();
   open_folder(0);
   message("");
   while (!quit) {
@@ -722,6 +865,8 @@ int config_ui_run(void)
       slots_key(key);
     } else if (tab == TAB_HOSTS) {
       hosts_key(key);
+    } else if (tab == TAB_SETUP) {
+      setup_key(key);
     }
   }
   con_clear();

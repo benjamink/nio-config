@@ -44,8 +44,8 @@ $(BUILD)/nio_selftest.bin: crt0.asm $(BUILD)/nio_selftest.o $(NIO)
 $(BUILD)/store_selftest.bin: crt0.asm $(BUILD)/store_selftest.o $(STORE) $(NIO)
 	$(call link,$(STORE) $(NIO))
 # CONFIG/CMD: console + widgets + the shared service, state and store layers + the screens.
-$(BUILD)/config.bin: crt0.asm $(BUILD)/config.o $(BUILD)/config_ui.o $(COMMON) $(STORE) $(NIO)
-	$(call link,$(BUILD)/config_ui.o $(COMMON) $(STORE) $(NIO))
+$(BUILD)/config.bin: crt0.asm $(BUILD)/config.o $(BUILD)/config_ui.o $(BUILD)/wifi_trs80.o $(COMMON) $(STORE) $(NIO)
+	$(call link,$(BUILD)/config_ui.o $(BUILD)/wifi_trs80.o $(COMMON) $(STORE) $(NIO))
 clean:
 	rm -rf $(BUILD)
 .PHONY: all clean
