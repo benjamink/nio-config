@@ -43,6 +43,7 @@ class BrowserMachine(ConfigMachine):
         self.read_limit = None
         self.read_ticks = 0
         self.eof_read_error = False
+        self.empty_without_eof = False
         self.force_read_recovery = False
         self.packet_limit = None
         self.status_return = None
@@ -251,6 +252,8 @@ class BrowserMachine(ConfigMachine):
                     return reply(dev, cmd, b'', self.read_failure_code)
                 if self.eof_read_error and offset >= len(self.files.get(name, b'')):
                     return reply(dev, cmd, b'', 5)
+                if self.empty_without_eof:
+                    return reply(dev, cmd, struct.pack('<BBHIH', 1, 0, 0, offset, 0))
                 data = self.files.get(name, b'')[offset:offset+count]
                 self.now = (self.now + self.read_ticks) & 0xffffffff
                 # FileDevice marks a full read TRUNCATED, even at exact EOF.
@@ -734,6 +737,31 @@ class BrowserTests(unittest.TestCase):
         m.uc.mem_write(0x96000, struct.pack('>I', 1024))
         self.assertEqual(m.app('install_read', struct.pack('>III', 0x98000, 0x96000, 0x94000)) & 0xffff, 0)
         self.assertEqual(m.read32(0x96000), 0); self.assertEqual(len(m.requests), before)
+        m.app('config_end_services'); m.clean()
+
+    def test_install_stops_with_an_error_when_the_device_makes_no_progress(self):
+        # A reply with no bytes and no EOF would repeat for ever without the guard.
+        m = BrowserMachine(); m.app('config_start'); m.empty_without_eof = True
+        uri, data = b'tnfs://host/App.prc', bytes(range(256)) * 2
+        m.files[uri] = data; m.uc.mem_write(m.variable('currentUri'), uri + b'\0')
+        self.assertTrue(m.app('begin'))
+        m.uc.mem_write(0x94000, install_state(len(data)))
+        m.uc.mem_write(0x96000, struct.pack('>I', 64))
+        self.assertNotEqual(m.app('install_read', struct.pack('>III', 0x95000, 0x96000, 0x94000)) & 0xffff, 0)
+        self.assertEqual(m.read32(0x96000), 0)
+        self.assertEqual(len([r for r in m.requests if r[:2] == b'\xfe\x03']), 1)  # no replay
+        m.app('config_end_services'); m.clean()
+
+    def test_install_fails_when_the_file_ends_before_its_stat_size(self):
+        # The device says EOF at 100 bytes while stat promised 150: a truncated file must
+        # fail the install, not hand the OS a short stream as if it were complete.
+        m = BrowserMachine(); m.app('config_start')
+        uri, data = b'tnfs://host/App.prc', bytes(range(100))
+        m.files[uri] = data; m.uc.mem_write(m.variable('currentUri'), uri + b'\0')
+        self.assertTrue(m.app('begin'))
+        m.uc.mem_write(0x94000, install_state(150))
+        m.uc.mem_write(0x96000, struct.pack('>I', 4096))
+        self.assertNotEqual(m.app('install_read', struct.pack('>III', 0x98000, 0x96000, 0x94000)) & 0xffff, 0)
         m.app('config_end_services'); m.clean()
 
     def test_install_retries_io_only_when_transport_needs_no_recovery(self):
