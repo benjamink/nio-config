@@ -73,6 +73,12 @@ make test-amiga-host              # host-side logic tests (gcc only)
 
 See [docs/amiga-config.md](docs/amiga-config.md).
 
+## TRS-80 Model 4/4P
+
+`make trs80` (needs [z88dk](https://z88dk.org)) builds `trs80/build/config.bin`, the LS-DOS 6.3 `CONFIG/CMD`
+screens: Hosts, Browse, Slots and Setup in 80x24 ASCII. See [TRS-80 configuration](docs/trs80-config.md)
+for keys, memory map, tests and the boot-disk build. It is not part of the default targets.
+
 ## Palm OS 3.5
 
 `PALMOS_BUILDER=container PALMDEV_TOOLCHAIN=../palmdev-toolchain make palmos`
