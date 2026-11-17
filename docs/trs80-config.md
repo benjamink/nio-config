@@ -49,7 +49,7 @@ driver lowers HIGH$ over memory CONFIG's client occupies. The mount message says
 ### Drive `:0` is protected
 
 `:0` holds the boot disk (LS-DOS, the F* commands and CONFIG itself). CONFIG shows it as `(boot disk)`, starts with
-`:1` selected, and refuses to mount, eject, edit or flip read-only on `:0`. Use `FMOUNT :0 <uri>` to replace
+`:2` selected (`:1` stays free for a second physical floppy: `SYSTEM (DRIVE=1,ENABLE)`), and refuses to mount, eject, edit or flip read-only on `:0`. Use `FMOUNT :0 <uri>` to replace
 the boot disk deliberately.
 
 ## Screen updates

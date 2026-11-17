@@ -160,7 +160,7 @@ static void drives_init(void)
   drives.count = FNCTL_MAX_UNITS;
   drives.item = drive_item;
   drives.ctx = 0;
-  drives.sel = 1;                          /* :0 is the boot disk */
+  drives.sel = 2;                          /* :0 is the boot disk; :1 is left for a physical floppy */
 }
 
 static int mount_failure_text(void)
