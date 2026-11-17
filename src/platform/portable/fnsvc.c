@@ -214,6 +214,21 @@ int fnsvc_list_directory_flags(const char *uri, fnsvc_list_cb cb, void *ctx)
 #define FNSVC_PAGES_RESP_MORE 0x01
 #define FNSVC_STATUS_UNSUPPORTED 8
 
+/* first_entry / FNSVC_PAGE_SIZE for first_entry < 0x40000, without a 32-bit shift: z88dk sccz80's
+ * l_long_asr_u (used for an unsigned long divide by 4) unbalances the stack on the Z80. */
+static uint16_t first_page(uint32_t first_entry)
+{
+  uint16_t page = (uint16_t) first_entry / FNSVC_PAGE_SIZE;
+
+  if (first_entry > 0xFFFFUL)
+    page += 0x4000;
+  if (first_entry > 0x1FFFFUL)
+    page += 0x4000;
+  if (first_entry > 0x2FFFFUL)
+    page += 0x4000;
+  return page;
+}
+
 int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
                      fnsvc_list_cb cb, void *ctx, uint32_t *total,
                      uint16_t *delivered)
@@ -228,7 +243,7 @@ int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
   uint16_t count = 0;
 
   if (!cb || !total || !delivered || (first_entry % FNSVC_PAGE_SIZE) != 0 ||
-      first_entry / FNSVC_PAGE_SIZE > 0xFFFFUL)
+      first_entry > 0x3FFFFUL)
     return fail(FNSVC_ERR_INVALID_ARG);
   uri_len = (uint16_t) strlen(uri);
   if ((size_t) uri_len + 12 > sizeof(req_buf))
@@ -245,7 +260,7 @@ int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
   off += 2;
   memcpy(&req_buf[off], uri, uri_len);
   off += uri_len;
-  put_u16le(&req_buf[off], (uint16_t) (first_entry / FNSVC_PAGE_SIZE));
+  put_u16le(&req_buf[off], first_page(first_entry));
   off += 2;
   req_buf[off++] = FNSVC_PAGE_SIZE;
   put_u16le(&req_buf[off], FNSVC_PAGE_BUDGET);
