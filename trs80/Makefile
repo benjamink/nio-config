@@ -24,7 +24,7 @@ LIBSRC  = fn_appstore_common fn_appstore_default fn_appstore_read fn_appstore_wr
 STORE   = $(BUILD)/config_nio_store.o $(BUILD)/config_nio_state.o $(BUILD)/config_nio_tables.o \
           $(LIBSRC:%=$(BUILD)/%.o)
 
-PROGS   = hello keyprobe uidemo nio_selftest store_selftest
+PROGS   = hello keyprobe uidemo nio_selftest store_selftest config
 all: $(PROGS:%=$(BUILD)/%.bin)
 
 .SECONDARY:
@@ -43,6 +43,9 @@ $(BUILD)/nio_selftest.bin: crt0.asm $(BUILD)/nio_selftest.o $(NIO)
 	$(call link,$(NIO))
 $(BUILD)/store_selftest.bin: crt0.asm $(BUILD)/store_selftest.o $(STORE) $(NIO)
 	$(call link,$(STORE) $(NIO))
+# CONFIG/CMD: console + widgets + the shared service, state and store layers + the screens.
+$(BUILD)/config.bin: crt0.asm $(BUILD)/config.o $(BUILD)/config_ui.o $(COMMON) $(STORE) $(NIO)
+	$(call link,$(BUILD)/config_ui.o $(COMMON) $(STORE) $(NIO))
 clean:
 	rm -rf $(BUILD)
 .PHONY: all clean

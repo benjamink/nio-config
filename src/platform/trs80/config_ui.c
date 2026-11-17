@@ -1,0 +1,632 @@
+/* config_ui.c -- config-nio screens for the TRS-80 Model 4/4P (80x24 text, keys as in the design:
+ * docs/superpowers/specs/2026-11-16-trs80-config-nio-design.md). State, store and FujiNet calls come
+ * from the portable layer (config_nio_*, fnsvc_*); this file only draws and handles keys. */
+#include "config_ui.h"
+#include "config_nio.h"
+#include "fujinet-nio.h"
+#include "trs80_console.h"
+#include "trs80_keys.h"
+#include "ui_widgets.h"
+
+#include <string.h>
+
+#define SECTOR_SIZE_HINT 256            /* LS-DOS images are 256-byte sectors */
+#define PAGE CONFIG_NIO_MAX_ENTRIES     /* entries per Browse page; a multiple of FNSVC_PAGE_SIZE (4) */
+#define FILES_W 58
+#define DRIVES_COL 62
+#define ROW_PATH 3
+#define ROW_LIST 4
+#define ROW_INFO 17
+#define ROW_HINT 22
+#define ROW_MSG 23
+
+enum { TAB_HOSTS, TAB_BROWSE, TAB_SLOTS, TAB_SETUP, TAB_COUNT };
+enum { PANE_FILES, PANE_DRIVES };
+
+static const char *const tab_names[TAB_COUNT] = {"Hosts", "Browse", "Slots", "Setup"};
+
+static config_nio_state_t st;
+static uint8_t tab = TAB_BROWSE;
+static uint8_t pane = PANE_FILES;
+static uint8_t cur_host;
+static uint8_t quit;
+
+/* Browse: the current page of the folder is in st.entries; page_base is the absolute index of its first entry. */
+static uint16_t page_base;
+static uint32_t folder_total;
+static uint8_t paged;                   /* 0 when the firmware has no ListPages: only the first PAGE entries are reachable */
+static uint8_t listed;                  /* a folder has been loaded for cur_host/browse_path */
+static list_t files;
+static list_t drives;
+
+static char linebuf[CON_COLS + 1];
+static char uri_buf[FNSVC_MAX_URI + 1];
+static char name_buf[CONFIG_NIO_URI_MAX + 1];
+
+/* ---------------------------------------------------------------- helpers */
+
+static void put_uint(char *out, uint32_t v, uint8_t *pos)
+{
+  char tmp[11];
+  uint8_t n = 0;
+
+  do {
+    tmp[n++] = (char) ('0' + v % 10);
+    v /= 10;
+  } while (v);
+  while (n)
+    out[(*pos)++] = tmp[--n];
+}
+
+static void put_size(char *out, uint32_t size, uint8_t *pos)
+{
+  if (size >= 1048576UL) {
+    put_uint(out, size / 1048576UL, pos);
+    out[(*pos)++] = 'M';
+  } else if (size >= 1024) {
+    put_uint(out, size / 1024, pos);
+    out[(*pos)++] = 'K';
+  } else {
+    put_uint(out, size, pos);
+    out[(*pos)++] = 'B';
+  }
+}
+
+static const char *base_name(const char *uri)
+{
+  const char *p = uri, *last = uri;
+
+  while (*p) {
+    if (*p == '/' || *p == '\\' || *p == ':')
+      last = p + 1;
+    p++;
+  }
+  return last;
+}
+
+static void message(const char *text)
+{
+  msg_draw(ROW_MSG, text);
+}
+
+static void say_status(void)
+{
+  message(st.status);
+}
+
+/* ---------------------------------------------------------------- drives */
+
+static uint8_t drive_mounted(uint8_t unit)
+{
+  return st.slots[unit].enabled && st.slots[unit].uri[0];
+}
+
+static const char *drive_item(uint16_t unit, void *ctx)
+{
+  uint8_t n = 0;
+  const char *name;
+
+  (void) ctx;
+  linebuf[n++] = ':';
+  linebuf[n++] = (char) ('0' + unit);
+  linebuf[n++] = ' ';
+  if (drive_mounted((uint8_t) unit)) {
+    name = base_name(st.slots[unit].uri);
+    while (*name && n < 14)
+      linebuf[n++] = *name++;
+    while (n < 15)
+      linebuf[n++] = ' ';
+    linebuf[n++] = strcmp(st.slots[unit].mode, "r") == 0 ? 'R' : 'W';
+    linebuf[n++] = strcmp(st.slots[unit].mode, "r") == 0 ? 'O' : ' ';
+  } else {
+    const char *e = "(empty)";
+    while (*e)
+      linebuf[n++] = *e++;
+  }
+  linebuf[n] = 0;
+  return linebuf;
+}
+
+static void drives_init(void)
+{
+  drives.row = ROW_LIST;
+  drives.col = DRIVES_COL;
+  drives.width = 17;
+  drives.height = FNCTL_MAX_UNITS;
+  drives.count = FNCTL_MAX_UNITS;
+  drives.item = drive_item;
+  drives.ctx = 0;
+}
+
+static int mount_failure_text(void)
+{
+  switch (fnsvc_disk_last_error()) {
+  case FN_DISK_ERR_GEOMETRY_REQUIRED: message("Mount: sector size needed"); break;
+  case FN_DISK_ERR_INVALID_GEOMETRY:  message("Mount: wrong sector size"); break;
+  case FN_DISK_ERR_FILE_NOT_FOUND:    message("Mount: image not found"); break;
+  case FN_DISK_ERR_BAD_IMAGE:         message("Mount: bad image"); break;
+  case FN_DISK_ERR_UNSUPPORTED_TYPE:  message("Mount: unsupported type"); break;
+  default:                            message("Mount failed"); break;
+  }
+  return 0;
+}
+
+/* Put `uri` on LS-DOS drive :unit: remember it in the catalogue slot and the drive map, then mount it. */
+static int mount_drive(uint8_t unit, const char *uri, uint8_t readonly)
+{
+  config_nio_mapping_t m;
+
+  if (!fnsvc_disk_mount(unit, uri, readonly, SECTOR_SIZE_HINT))
+    return mount_failure_text();
+  if (!config_nio_write_slot(&st, unit, uri, readonly ? "r" : "rw")) {
+    message("Mounted, but the slot could not be saved");
+    return 0;
+  }
+  m.valid = 1;
+  m.slot = unit;
+  m.readonly = readonly;
+  config_nio_mapping_set(&st, unit, &m);
+  if (!config_nio_save_mappings(&st)) {
+    message("Mounted, but the drive map could not be saved");
+    return 0;
+  }
+  return 1;
+}
+
+static void eject_drive(uint8_t unit)
+{
+  if (!drive_mounted(unit)) {
+    message("Nothing to eject");
+    return;
+  }
+  if (!fnsvc_disk_unmount(unit)) {
+    message("Eject failed");
+    return;
+  }
+  config_nio_mapping_clear(&st, unit);
+  config_nio_save_mappings(&st);
+  config_nio_delete_slot(&st, unit);
+  message("Ejected");
+}
+
+static void toggle_readonly(uint8_t unit)
+{
+  char uri[CONFIG_NIO_URI_MAX + 1];
+  uint8_t ro;
+
+  if (!drive_mounted(unit)) {
+    message("Drive is empty");
+    return;
+  }
+  strcpy(uri, st.slots[unit].uri);
+  ro = strcmp(st.slots[unit].mode, "r") != 0;
+  fnsvc_disk_unmount(unit);
+  if (mount_drive(unit, uri, ro))
+    message(ro ? "Now read-only" : "Now read-write");
+}
+
+/* ---------------------------------------------------------------- browse */
+
+static void collect(uint8_t is_dir, const char *name, uint32_t size, uint32_t mtime, void *ctx)
+{
+  config_nio_entry_t *e;
+  uint16_t n;
+
+  (void) ctx;
+  if (st.entry_count >= CONFIG_NIO_MAX_ENTRIES) {
+    st.entries_truncated = 1;
+    return;
+  }
+  e = &st.entries[st.entry_count++];
+  e->is_dir = is_dir;
+  e->size = size;
+  e->mtime = mtime;
+  n = (uint16_t) strlen(name);
+  if (n > CONFIG_NIO_NAME_MAX)
+    n = CONFIG_NIO_NAME_MAX;
+  memcpy(e->name, name, n);
+  e->name[n] = 0;
+}
+
+/* "Browse failed: error E status S" (fnsvc_last_error / fnsvc_last_status), as MS-DOS reports it. */
+static void browse_failed(void)
+{
+  uint8_t n = 0;
+  const char *t = "Browse failed: error ";
+
+  while (*t)
+    linebuf[n++] = *t++;
+  put_uint(linebuf, fnsvc_last_error(), &n);
+  t = " status ";
+  while (*t)
+    linebuf[n++] = *t++;
+  put_uint(linebuf, fnsvc_last_status(), &n);
+  linebuf[n] = 0;
+  message(linebuf);
+}
+
+static int folder_uri(void)
+{
+  if (!st.host_count) {
+    message("No hosts: add one on the Hosts tab (H)");
+    return 0;
+  }
+  if (!config_nio_compose_uri(st.hosts[cur_host], st.browse_path, "", uri_buf, sizeof(uri_buf))) {
+    message("Path is too long");
+    return 0;
+  }
+  return 1;
+}
+
+static const char *file_item(uint16_t idx, void *ctx)
+{
+  const config_nio_entry_t *e;
+  uint8_t n = 0, len, pad;
+
+  (void) ctx;
+  if (idx < page_base || idx >= page_base + st.entry_count) {
+    linebuf[0] = 0;
+    return linebuf;
+  }
+  e = &st.entries[idx - page_base];
+  len = (uint8_t) strlen(e->name);
+  if (len > 40)
+    len = 40;
+  memcpy(linebuf, e->name, len);
+  n = len;
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)
+    linebuf[n++] = '/';
+  pad = (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) ? 0 : 1;
+  while (n < 44)
+    linebuf[n++] = ' ';
+  if (pad)
+    put_size(linebuf, e->size, &n);
+  linebuf[n] = 0;
+  return linebuf;
+}
+
+static void files_init(void)
+{
+  files.row = ROW_LIST;
+  files.col = 1;
+  files.width = FILES_W;
+  files.height = PAGE;
+  files.count = 0;
+  files.sel = 0;
+  files.top = 0;
+  files.item = file_item;
+  files.ctx = 0;
+}
+
+/* Load the page that holds absolute index `at` (a multiple of PAGE). Returns 0 on failure, with a message. */
+static int load_page(uint16_t at, uint8_t refresh)
+{
+  uint16_t delivered;
+  uint32_t total = 0;
+
+  if (!folder_uri())
+    return 0;
+  st.entry_count = 0;
+  st.entries_truncated = 0;
+  page_base = at;
+  if (paged) {
+    do {
+      delivered = 0;
+      if (!fnsvc_list_pages(uri_buf, (uint32_t) (uint16_t) (at + st.entry_count), refresh, collect, 0, &total, &delivered))
+        break;
+      refresh = 0;
+    } while (delivered && st.entry_count < PAGE && (uint32_t) (uint16_t) (at + st.entry_count) < total);
+    if (fnsvc_last_error() == FNSVC_ERR_NONE) {
+      folder_total = total;
+      files.count = (uint16_t) total;
+      return 1;
+    }
+    if (fnsvc_last_error() != FNSVC_ERR_UNSUPPORTED) {
+      browse_failed();
+      return 0;
+    }
+    paged = 0;                           /* firmware without ListPages: fall back to the first PAGE entries */
+    st.entry_count = 0;
+  }
+  page_base = 0;
+  if (!fnsvc_list_directory_flags(uri_buf, collect, 0)) {
+    browse_failed();
+    return 0;
+  }
+  folder_total = st.entry_count;
+  files.count = st.entry_count;
+  if (st.entries_truncated)
+    message("Only the first entries are shown (this firmware cannot page)");
+  return 1;
+}
+
+static void open_folder(uint8_t refresh)
+{
+  paged = 1;
+  files.sel = 0;
+  files.top = 0;
+  listed = load_page(0, refresh);
+  if (!listed) {
+    st.entry_count = 0;
+    files.count = 0;
+    page_base = 0;
+  }
+}
+
+static void path_up(void)
+{
+  uint16_t len = (uint16_t) strlen(st.browse_path);
+
+  while (len > 0 && st.browse_path[len - 1] == '/')
+    st.browse_path[--len] = 0;
+  while (len > 0 && st.browse_path[len - 1] != '/')
+    st.browse_path[--len] = 0;
+}
+
+static void enter_folder(const char *name)
+{
+  uint16_t len = (uint16_t) strlen(st.browse_path);
+  uint16_t nlen = (uint16_t) strlen(name);
+
+  if ((uint16_t) (len + nlen + 2) > CONFIG_NIO_PATH_MAX) {
+    message("Path is too long");
+    return;
+  }
+  memcpy(&st.browse_path[len], name, nlen);
+  st.browse_path[len + nlen] = '/';
+  st.browse_path[len + nlen + 1] = 0;
+}
+
+static void draw_browse(void)
+{
+  uint8_t n;
+
+  con_fill(ROW_PATH, 0, CON_COLS, ' ');
+  n = 0;
+  if (st.host_count) {
+    const char *h = st.hosts[cur_host];
+    while (*h && n < FILES_W - 2)
+      linebuf[n++] = *h++;
+    h = st.browse_path;
+    if (n && linebuf[n - 1] != '/' && *h)
+      linebuf[n++] = '/';
+    while (*h && n < FILES_W)
+      linebuf[n++] = *h++;
+  }
+  linebuf[n] = 0;
+  con_put(ROW_PATH, 1, linebuf);
+  con_put(ROW_PATH, DRIVES_COL, "DRIVES");
+  for (n = ROW_PATH; n < ROW_INFO; n++)
+    con_put(n, 60, "|");
+  if (listed)
+    list_draw(&files);
+  else
+    con_fill(ROW_LIST, 1, FILES_W, ' ');
+  list_draw(&drives);
+  con_fill(ROW_INFO, 0, CON_COLS, '-');
+  n = 0;
+  if (listed && folder_total) {
+    put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* no 32-bit add: sccz80's l_long_add is broken here */
+    linebuf[n++] = '/';
+    put_uint(linebuf, folder_total, &n);
+  }
+  linebuf[n] = 0;
+  con_fill(ROW_INFO + 1, 0, CON_COLS, ' ');
+  con_put(ROW_INFO + 1, 1, linebuf);
+  con_put(ROW_INFO + 1, DRIVES_COL, pane == PANE_DRIVES ? "[drives]" : " drives ");
+  con_put(ROW_INFO + 1, 40, pane == PANE_FILES ? "[files]" : " files ");
+}
+
+static void files_move(int key)
+{
+  int r = list_key(&files, key);
+  uint16_t want;
+
+  if (r != LIST_MOVED)
+    return;
+  want = (uint16_t) ((files.sel / PAGE) * PAGE);
+  if (want != page_base && paged) {
+    if (!load_page(want, 0))
+      return;
+  }
+  files.top = page_base;
+}
+
+static void files_enter(void)
+{
+  const config_nio_entry_t *e;
+
+  if (!listed || files.sel < page_base || files.sel >= page_base + st.entry_count)
+    return;
+  e = &st.entries[files.sel - page_base];
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
+    message("Name too long for this client");
+    return;
+  }
+  if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) {
+    enter_folder(e->name);
+    open_folder(0);
+    return;
+  }
+  if (!config_nio_compose_uri(st.hosts[cur_host], st.browse_path, e->name, name_buf, sizeof(name_buf))) {
+    message("URI is too long");
+    return;
+  }
+  if (mount_drive((uint8_t) drives.sel, name_buf, 0)) {
+    strcpy(linebuf, "Mounted ");
+    strncat(linebuf, e->name, 40);
+    strcat(linebuf, " on :");
+    linebuf[strlen(linebuf) + 1] = 0;
+    linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
+    message(linebuf);
+  }
+}
+
+static void browse_key(int key)
+{
+  if (key == KEY_TAB) {
+    pane = pane == PANE_FILES ? PANE_DRIVES : PANE_FILES;
+    return;
+  }
+  if (pane == PANE_DRIVES) {
+    list_key(&drives, key);
+    if (key == KEY_ENTER)
+      pane = PANE_FILES;
+    else if (key == 'x' || key == 'X')
+      eject_drive((uint8_t) drives.sel);
+    else if (key == 'r' || key == 'R')
+      toggle_readonly((uint8_t) drives.sel);
+    return;
+  }
+  if (key == KEY_ENTER)
+    files_enter();
+  else if (key == KEY_BKSP) {            /* Left arrow: up one folder */
+    if (st.browse_path[0]) {
+      path_up();
+      open_folder(0);
+    }
+  } else if (key == 'r' || key == 'R')
+    open_folder(1);
+  else
+    files_move(key);
+}
+
+/* ---------------------------------------------------------------- slots tab */
+
+static void draw_slots(void)
+{
+  uint8_t u, n;
+
+  for (u = 0; u < FNCTL_MAX_UNITS; u++) {
+    con_fill(ROW_LIST + u * 2, 0, CON_COLS, ' ');
+    n = 0;
+    linebuf[n++] = u == drives.sel ? '>' : ' ';
+    linebuf[n++] = ' ';
+    strcpy(&linebuf[n], drive_item(u, 0));
+    con_put(ROW_LIST + u * 2, 0, linebuf);
+    con_fill(ROW_LIST + u * 2 + 1, 0, CON_COLS, ' ');
+    if (drive_mounted(u)) {
+      strncpy(linebuf, st.slots[u].uri, 70);
+      linebuf[70] = 0;
+      con_put(ROW_LIST + u * 2 + 1, 6, linebuf);
+    }
+  }
+}
+
+static void slots_key(int key)
+{
+  if (key == KEY_UP && drives.sel > 0)
+    drives.sel--;
+  else if (key == KEY_DOWN && drives.sel + 1 < FNCTL_MAX_UNITS)
+    drives.sel++;
+  else if (key == 'x' || key == 'X')
+    eject_drive((uint8_t) drives.sel);
+  else if (key == 'r' || key == 'R')
+    toggle_readonly((uint8_t) drives.sel);
+  else if (key == 'e' || key == 'E' || key == KEY_ENTER) {
+    name_buf[0] = 0;
+    if (drive_mounted((uint8_t) drives.sel))
+      strcpy(name_buf, st.slots[drives.sel].uri);
+    message("Image URI (ENTER mounts, BREAK cancels):");
+    if (field_edit(name_buf, CONFIG_NIO_URI_MAX, ROW_MSG, 1, 76) && name_buf[0]) {
+      fnsvc_disk_unmount((uint8_t) drives.sel);
+      if (mount_drive((uint8_t) drives.sel, name_buf, 0))
+        message("Mounted");
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- tabs */
+
+static void draw_tab_placeholder(const char *what)
+{
+  uint8_t r;
+
+  for (r = ROW_PATH; r < ROW_INFO; r++)
+    con_fill(r, 0, CON_COLS, ' ');
+  con_put(8, 10, what);
+}
+
+static void draw_all(void)
+{
+  uint8_t r;
+
+  con_put(0, 1, "CONFIG NIO v1.0  TRS-80 4P");
+  tabs_draw(1, tab_names, TAB_COUNT, tab);
+  con_fill(2, 0, CON_COLS, '=');
+  if (tab == TAB_BROWSE) {
+    draw_browse();
+    con_fill(ROW_HINT, 0, CON_COLS, ' ');
+    con_put(ROW_HINT, 1, "ENTER mount/open  LEFT up  R reload  TAB pane  X eject  H B S W tabs  Q quit");
+  } else if (tab == TAB_SLOTS) {
+    for (r = ROW_PATH; r < ROW_INFO; r++)
+      con_fill(r, 0, CON_COLS, ' ');
+    draw_slots();
+    con_fill(ROW_HINT, 0, CON_COLS, ' ');
+    con_put(ROW_HINT, 1, "E/ENTER edit URI  X eject  R read-only on/off  H B S W tabs  Q quit");
+  } else if (tab == TAB_HOSTS) {
+    draw_tab_placeholder("Hosts: not built yet");
+  } else {
+    draw_tab_placeholder("Setup: not built yet");
+  }
+}
+
+static int tab_key(int key)
+{
+  if (key == KEY_SLEFT && tab > 0)
+    tab--;
+  else if (key == KEY_SRIGHT && tab + 1 < TAB_COUNT)
+    tab++;
+  else if (key == 'h' || key == 'H')
+    tab = TAB_HOSTS;
+  else if (key == 'b' || key == 'B')
+    tab = TAB_BROWSE;
+  else if (key == 's' || key == 'S')
+    tab = TAB_SLOTS;
+  else if (key == 'w' || key == 'W')
+    tab = TAB_SETUP;
+  else
+    return 0;
+  return 1;
+}
+
+int config_ui_run(void)
+{
+  int key;
+
+  config_nio_set_status(&st, "");
+  con_clear();
+  message("Loading from the FujiNet...");
+  if (!config_nio_load(&st)) {
+    uint8_t code;
+    const char *step = config_nio_load_error(&code);
+    con_clear();
+    con_put(10, 2, "Cannot load the configuration from the FujiNet (failed step:");
+    con_put(11, 2, step);
+    con_put(13, 2, "Check the serial cable and that fujinet-nio is running. Press any key.");
+    con_getkey();
+    con_clear();
+    return 2;
+  }
+  files_init();
+  drives_init();
+  open_folder(0);
+  message("");
+  while (!quit) {
+    draw_all();
+    key = con_getkey();
+    message("");
+    if (key == 'q' || key == 'Q' || (key == KEY_BREAK)) {
+      quit = 1;
+    } else if (tab_key(key)) {
+      if (tab == TAB_BROWSE && !listed)
+        open_folder(0);
+    } else if (tab == TAB_BROWSE) {
+      browse_key(key);
+    } else if (tab == TAB_SLOTS) {
+      slots_key(key);
+    }
+  }
+  con_clear();
+  return 0;
+}
