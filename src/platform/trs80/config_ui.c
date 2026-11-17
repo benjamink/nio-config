@@ -190,8 +190,10 @@ static void eject_drive(uint8_t unit)
     return;
   }
   config_nio_mapping_clear(&st, unit);
-  config_nio_save_mappings(&st);
-  config_nio_delete_slot(&st, unit);
+  if (!config_nio_save_mappings(&st) || !config_nio_delete_slot(&st, unit)) {
+    message("Ejected, but the saved slot could not be cleared");
+    return;
+  }
   message("Ejected");
 }
 
@@ -460,10 +462,16 @@ static void files_enter(void)
   }
   if (mount_drive((uint8_t) drives.sel, name_buf, 0)) {
     strcpy(linebuf, "Mounted ");
-    strncat(linebuf, e->name, 40);
+    strncat(linebuf, e->name, 24);
     strcat(linebuf, " on :");
     linebuf[strlen(linebuf) + 1] = 0;
     linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
+    if (drives.sel > 0) {                /* only drive :0 has the serial driver from boot */
+      strcat(linebuf, "  (run FUJIDRV :");
+      linebuf[strlen(linebuf) + 1] = 0;
+      linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
+      strcat(linebuf, " once to use it)");
+    }
     message(linebuf);
   }
 }
