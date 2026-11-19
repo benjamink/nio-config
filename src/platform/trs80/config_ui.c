@@ -511,6 +511,8 @@ static void files_move(int key)
   }
 }
 
+static void drive_row_changed(void);
+
 static void files_enter(void)
 {
   const config_nio_entry_t *e;
@@ -541,6 +543,14 @@ static void files_enter(void)
       strcat(linebuf, "  (FUJIDRV runs when you quit)");
     message(linebuf);
   }
+  drive_row_changed();
+}
+
+/* Redraw only the selected drive's row (after an eject, read-only toggle or mount), not the whole screen. */
+static void drive_row_changed(void)
+{
+  list_draw_row(&drives, (uint8_t) (drives.sel - drives.top));
+  redraw = 0;
 }
 
 static void browse_key(int key)
@@ -554,10 +564,13 @@ static void browse_key(int key)
       redraw = 0;
     if (key == KEY_ENTER)
       pane = PANE_FILES;
-    else if (key == 'x' || key == 'X')
+    else if (key == 'x' || key == 'X') {
       eject_drive((uint8_t) drives.sel);
-    else if (key == 'r' || key == 'R')
+      drive_row_changed();
+    } else if (key == 'r' || key == 'R') {
       toggle_readonly((uint8_t) drives.sel);
+      drive_row_changed();
+    }
     return;
   }
   if (key == KEY_ENTER)
@@ -577,54 +590,68 @@ static void browse_key(int key)
 
 static char slotbuf[CON_COLS + 1];     /* separate from linebuf: drive_item() returns linebuf */
 
+/* One slot's two rows: ":2 <image> RW" and its URI. Used for a single slot when only it changed. */
+static void draw_slot(uint8_t u)
+{
+  uint8_t n;
+
+  con_fill(ROW_LIST + u * 2, 0, CON_COLS, ' ');
+  slotbuf[0] = u == drives.sel ? '>' : ' ';
+  slotbuf[1] = ' ';
+  strcpy(&slotbuf[2], drive_item(u, 0));
+  con_put(ROW_LIST + u * 2, 0, slotbuf);
+  con_fill(ROW_LIST + u * 2 + 1, 0, CON_COLS, ' ');
+  if (drive_mounted(u)) {
+    n = 0;
+    while (st.slots[u].uri[n] && n < 70) {
+      slotbuf[n] = st.slots[u].uri[n];
+      n++;
+    }
+    slotbuf[n] = 0;
+    con_put(ROW_LIST + u * 2 + 1, 6, slotbuf);
+  }
+}
+
 static void draw_slots(void)
 {
-  uint8_t u, n;
+  uint8_t u;
 
-  for (u = 0; u < FNCTL_MAX_UNITS; u++) {
-    con_fill(ROW_LIST + u * 2, 0, CON_COLS, ' ');
-    slotbuf[0] = u == drives.sel ? '>' : ' ';
-    slotbuf[1] = ' ';
-    strcpy(&slotbuf[2], drive_item(u, 0));
-    con_put(ROW_LIST + u * 2, 0, slotbuf);
-    con_fill(ROW_LIST + u * 2 + 1, 0, CON_COLS, ' ');
-    if (drive_mounted(u)) {
-      n = 0;
-      while (st.slots[u].uri[n] && n < 70) {
-        slotbuf[n] = st.slots[u].uri[n];
-        n++;
-      }
-      slotbuf[n] = 0;
-      con_put(ROW_LIST + u * 2 + 1, 6, slotbuf);
-    }
-  }
+  for (u = 0; u < FNCTL_MAX_UNITS; u++)
+    draw_slot(u);
 }
 
 static void slots_key(int key)
 {
+  uint8_t old = (uint8_t) drives.sel;
+
   if (key == KEY_UP && drives.sel > 0)
     drives.sel--;
   else if (key == KEY_DOWN && drives.sel + 1 < FNCTL_MAX_UNITS)
     drives.sel++;
   else if (key == 'x' || key == 'X')
-    eject_drive((uint8_t) drives.sel);
+    eject_drive(old);
   else if (key == 'r' || key == 'R')
-    toggle_readonly((uint8_t) drives.sel);
+    toggle_readonly(old);
   else if (key == 'e' || key == 'E' || key == KEY_ENTER) {
     name_buf[0] = 0;
-    if (boot_drive_guard((uint8_t) drives.sel))
+    if (boot_drive_guard(old))
       return;
-    if (drive_mounted((uint8_t) drives.sel))
-      strcpy(name_buf, st.slots[drives.sel].uri);
+    if (drive_mounted(old))
+      strcpy(name_buf, st.slots[old].uri);
     message("Image URI (ENTER mounts, BREAK cancels):");
     if (field_edit(name_buf, CONFIG_NIO_URI_MAX, ROW_MSG, 1, 76) && name_buf[0]) {
       /* keep an existing read-only setting; an empty drive mounts read-write */
-      uint8_t ro = drive_mounted((uint8_t) drives.sel) && strcmp(st.slots[drives.sel].mode, "r") == 0;
+      uint8_t ro = drive_mounted(old) && strcmp(st.slots[old].mode, "r") == 0;
 
-      if (remount_drive((uint8_t) drives.sel, name_buf, ro))
+      if (remount_drive(old, name_buf, ro))
         message("Mounted");
     }
-  }
+  } else
+    return;
+  /* Only the slot that was acted on and the one now selected change: redraw those rows, not the screen. */
+  draw_slot(old);
+  draw_slot((uint8_t) drives.sel);
+  redraw = 0;
 }
 
 /* ---------------------------------------------------------------- hosts tab */
