@@ -91,12 +91,15 @@ static const char *base_name(const char *uri)
   return last;
 }
 
-/* Set by a key handler that repainted just what it changed; the main loop then skips draw_all(). */
+/* Set by a key handler that changed more than it could repaint itself; the main loop then runs draw_all().
+ * Handlers repaint just the rows they change (a full repaint is thousands of console calls). */
 static uint8_t redraw = 1;
+static uint8_t msg_up;                  /* a message is on the message row: clear it at the next key */
 
 static void message(const char *text)
 {
   msg_draw(ROW_MSG, text);
+  msg_up = text[0] != 0;
 }
 
 static void say_status(void)
@@ -463,7 +466,8 @@ static void draw_browse(void)
   if (listed)
     list_draw(&files);
   else
-    con_fill(ROW_LIST, 1, FILES_W, ' ');
+    for (n = ROW_LIST; n < ROW_INFO; n++)
+      con_fill(n, 1, FILES_W, ' ');
   list_draw(&drives);
   con_fill(ROW_INFO, 0, CON_COLS, '-');
   draw_counter();
@@ -497,18 +501,19 @@ static void files_move(int key)
     return;
   want = (uint16_t) ((files.sel / PAGE) * PAGE);
   if (want != page_base && paged) {
+    redraw = 1;                          /* a new page: repaint everything */
     if (!load_page(want, 0))
       return;
     files.top = page_base;
-    return;                              /* a new page: repaint everything */
+    return;
   }
   files.top = page_base;
   if (old_sel >= files.top && old_sel < files.top + files.height) {
     list_draw_row(&files, (uint8_t) (old_sel - files.top));
     list_draw_row(&files, (uint8_t) (files.sel - files.top));
     draw_counter();
-    redraw = 0;
-  }
+  } else
+    redraw = 1;
 }
 
 static void drive_row_changed(void);
@@ -527,6 +532,7 @@ static void files_enter(void)
   if (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) {
     enter_folder(e->name);
     open_folder(0);
+    redraw = 1;
     return;
   }
   if (!config_nio_compose_uri(st.hosts[cur_host], st.browse_path, e->name, name_buf, sizeof(name_buf))) {
@@ -550,21 +556,21 @@ static void files_enter(void)
 static void drive_row_changed(void)
 {
   list_draw_row(&drives, (uint8_t) (drives.sel - drives.top));
-  redraw = 0;
 }
 
 static void browse_key(int key)
 {
   if (key == KEY_TAB) {
     pane = pane == PANE_FILES ? PANE_DRIVES : PANE_FILES;
+    draw_counter();                      /* only the [drives]/[files] markers change */
     return;
   }
   if (pane == PANE_DRIVES) {
-    if (list_key_draw(&drives, key) == LIST_MOVED)
-      redraw = 0;
-    if (key == KEY_ENTER)
+    list_key_draw(&drives, key);
+    if (key == KEY_ENTER) {
       pane = PANE_FILES;
-    else if (key == 'x' || key == 'X') {
+      draw_counter();
+    } else if (key == 'x' || key == 'X') {
       eject_drive((uint8_t) drives.sel);
       drive_row_changed();
     } else if (key == 'r' || key == 'R') {
@@ -579,36 +585,35 @@ static void browse_key(int key)
     if (st.browse_path[0]) {
       path_up();
       open_folder(0);
+      redraw = 1;
     }
-  } else if (key == 'r' || key == 'R')
+  } else if (key == 'r' || key == 'R') {
     open_folder(1);
-  else
+    redraw = 1;
+  } else
     files_move(key);
 }
 
 /* ---------------------------------------------------------------- slots tab */
 
-static char slotbuf[CON_COLS + 1];     /* separate from linebuf: drive_item() returns linebuf */
-
-/* One slot's two rows: ":2 <image> RW" and its URI. Used for a single slot when only it changed. */
+/* One slot's two rows: ":2 <image> RW" and its URI. Used for a single slot when only it changed.
+ * drive_item() returns linebuf; con_put() copies it out before linebuf is reused for the URI. */
 static void draw_slot(uint8_t u)
 {
   uint8_t n;
 
   con_fill(ROW_LIST + u * 2, 0, CON_COLS, ' ');
-  slotbuf[0] = u == drives.sel ? '>' : ' ';
-  slotbuf[1] = ' ';
-  strcpy(&slotbuf[2], drive_item(u, 0));
-  con_put(ROW_LIST + u * 2, 0, slotbuf);
+  con_put(ROW_LIST + u * 2, 0, u == drives.sel ? ">" : " ");
+  con_put(ROW_LIST + u * 2, 2, drive_item(u, 0));
   con_fill(ROW_LIST + u * 2 + 1, 0, CON_COLS, ' ');
   if (drive_mounted(u)) {
     n = 0;
     while (st.slots[u].uri[n] && n < 70) {
-      slotbuf[n] = st.slots[u].uri[n];
+      linebuf[n] = st.slots[u].uri[n];
       n++;
     }
-    slotbuf[n] = 0;
-    con_put(ROW_LIST + u * 2 + 1, 6, slotbuf);
+    linebuf[n] = 0;
+    con_put(ROW_LIST + u * 2 + 1, 6, linebuf);
   }
 }
 
@@ -651,7 +656,6 @@ static void slots_key(int key)
   /* Only the slot that was acted on and the one now selected change: redraw those rows, not the screen. */
   draw_slot(old);
   draw_slot((uint8_t) drives.sel);
-  redraw = 0;
 }
 
 /* ---------------------------------------------------------------- hosts tab */
@@ -702,6 +706,15 @@ static void host_edit(uint8_t index, uint8_t is_new)
   message("Saved");
 }
 
+static void draw_hosts(void);
+
+/* After an add, edit or delete: repaint the list and wipe the edit field's row, not the screen. */
+static void hosts_changed(void)
+{
+  draw_hosts();
+  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+}
+
 static void hosts_key(int key)
 {
   uint8_t i;
@@ -711,8 +724,10 @@ static void hosts_key(int key)
       message("The host list is full");
     else
       host_edit(st.host_count, 1);
+    hosts_changed();
   } else if ((key == 'e' || key == 'E') && st.host_count) {
     host_edit((uint8_t) hostlist.sel, 0);
+    hosts_changed();
   } else if ((key == 'd' || key == 'D') && st.host_count) {
     for (i = (uint8_t) hostlist.sel; (uint8_t) (i + 1) < st.host_count; i++)
       config_nio_host_set(&st, i, st.hosts[i + 1]);
@@ -720,28 +735,23 @@ static void hosts_key(int key)
     st.host_count--;
     hosts_save();
     message("Deleted");
+    hosts_changed();
   } else if (key == KEY_ENTER && st.host_count) {
     cur_host = (uint8_t) hostlist.sel;
     st.browse_path[0] = 0;
     tab = TAB_BROWSE;
     open_folder(0);
-  } else {
-    if (list_key_draw(&hostlist, key) == LIST_MOVED)
-      redraw = 0;
-  }
+    redraw = 1;
+  } else
+    list_key_draw(&hostlist, key);
 }
 
 static void draw_hosts(void)
 {
-  uint8_t r;
-
-  for (r = ROW_PATH; r < ROW_INFO; r++)
-    con_fill(r, 0, CON_COLS, ' ');
   con_put(ROW_PATH, 1, "HOSTS");
+  list_draw(&hostlist);                  /* pads the unused rows with blanks */
   if (!st.host_count)
     con_put(ROW_LIST, 3, "(none yet - press A to add, e.g. tnfs://host or sd0:/)");
-  else
-    list_draw(&hostlist);
 }
 
 /* ---------------------------------------------------------------- setup tab */
@@ -833,10 +843,38 @@ static void scan_networks(void)
   netlist.top = 0;
 }
 
+static void draw_wifi(void)
+{
+  con_fill(ROW_PATH + 1, 0, CON_COLS, ' ');
+  con_put(ROW_PATH + 1, 1, wifi_line);
+}
+
+static void draw_nets(void)
+{
+  list_draw(&netlist);                   /* pads the unused rows with blanks */
+  if (!net_count)
+    con_put(ROW_LIST + 2, 3, "(press N to scan for networks, J to type one)");
+}
+
+static void draw_prefs(void)
+{
+  con_put(ROW_INFO - 4, 1, "PREFERENCES");
+  con_put(ROW_INFO - 3, 1, st.prefs.date_format == CONFIG_NIO_PREF_DATE_YDM ? "Date order: YDM   (D toggles)" : "Date order: YMD   (D toggles)");
+  con_put(ROW_INFO - 2, 1, st.prefs.size_format == CONFIG_NIO_PREF_SIZE_COMPACT ? "File sizes: compact (Z toggles)" : "File sizes: full    (Z toggles)");
+}
+
+/* After a join attempt: the status line may have changed and the edit field's row holds the typed text. */
+static void setup_changed(void)
+{
+  draw_wifi();
+  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+}
+
 static void setup_key(int key)
 {
   if (key == 'n' || key == 'N') {
     scan_networks();
+    draw_nets();
   } else if (key == 'j' || key == 'J') {
     message("Network name (ENTER continues, BREAK cancels):");
     con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
@@ -845,39 +883,34 @@ static void setup_key(int key)
       ask_password_and_join(name_buf);
     else
       message("Cancelled");
+    setup_changed();
   } else if (key == KEY_ENTER && net_count) {
     strcpy(name_buf, nets[netlist.sel].ssid);
     ask_password_and_join(name_buf);
+    setup_changed();
   } else if (key == 'd' || key == 'D') {
     st.prefs.date_format = st.prefs.date_format == CONFIG_NIO_PREF_DATE_YMD ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
     message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
+    draw_prefs();
   } else if (key == 'z' || key == 'Z') {
     st.prefs.size_format = st.prefs.size_format == CONFIG_NIO_PREF_SIZE_FULL ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
     message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
-  } else {
-    if (list_key_draw(&netlist, key) == LIST_MOVED)
-      redraw = 0;
-  }
+    draw_prefs();
+  } else
+    list_key_draw(&netlist, key);
 }
 
 static void draw_setup(void)
 {
-  uint8_t r;
-
-  for (r = ROW_PATH; r < ROW_INFO; r++)
-    con_fill(r, 0, CON_COLS, ' ');
   con_put(ROW_PATH, 1, "WI-FI");
-  con_put(ROW_PATH + 1, 1, wifi_line);
-  if (net_count)
-    list_draw(&netlist);
-  else
-    con_put(ROW_LIST + 2, 3, "(press N to scan for networks, J to type one)");
-  con_put(ROW_INFO - 4, 1, "PREFERENCES");
-  con_put(ROW_INFO - 3, 1, st.prefs.date_format == CONFIG_NIO_PREF_DATE_YDM ? "Date order: YDM   (D toggles)" : "Date order: YMD   (D toggles)");
-  con_put(ROW_INFO - 2, 1, st.prefs.size_format == CONFIG_NIO_PREF_SIZE_COMPACT ? "File sizes: compact (Z toggles)" : "File sizes: full    (Z toggles)");
+  draw_wifi();
+  draw_nets();
+  draw_prefs();
 }
 
 /* ---------------------------------------------------------------- tabs */
+
+static uint8_t drawn_tab = 0xFF;
 
 static void draw_all(void)
 {
@@ -886,9 +919,12 @@ static void draw_all(void)
   con_put(0, 1, "CONFIG NIO v1.0  TRS-80 4P");
   tabs_draw(1, tab_names, TAB_COUNT, tab);
   con_fill(2, 0, CON_COLS, '=');
-  /* Start every tab from a blank body (all columns): rows a tab does not redraw would keep the last tab's text. */
-  for (r = ROW_PATH; r < ROW_HINT; r++)
-    con_fill(r, 0, CON_COLS, ' ');
+  /* A new tab starts from a blank body (all columns): rows it does not draw would keep the last tab's text. */
+  if (tab != drawn_tab) {
+    for (r = ROW_PATH; r < ROW_HINT; r++)
+      con_fill(r, 0, CON_COLS, ' ');
+    drawn_tab = tab;
+  }
   if (tab == TAB_BROWSE) {
     draw_browse();
     con_fill(ROW_HINT, 0, CON_COLS, ' ');
@@ -934,6 +970,7 @@ static int tab_key(int key)
 int config_ui_run(void)
 {
   int key;
+  uint8_t old_tab;
 
   config_nio_set_status(&st, "");
   con_clear();
@@ -957,14 +994,18 @@ int config_ui_run(void)
   open_folder(0);
   message("");
   while (!quit) {
-    if (redraw)
+    if (redraw) {
       draw_all();
-    redraw = 1;
+      redraw = 0;
+    }
     key = con_getkey();
-    message("");
+    if (msg_up)
+      message("");
+    old_tab = tab;
     if (key == 'q' || key == 'Q' || (key == KEY_BREAK)) {
       quit = 1;
     } else if (tab_key(key)) {
+      redraw = tab != old_tab;
       if (tab == TAB_BROWSE && !listed)
         open_folder(0);
     } else if (tab == TAB_BROWSE) {
