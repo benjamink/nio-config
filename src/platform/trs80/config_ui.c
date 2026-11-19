@@ -473,9 +473,9 @@ static void draw_counter(void)
   if (listed && folder_total) {
     put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* 16-bit add; see "z88dk pitfalls" in docs/trs80-config.md */
     linebuf[n++] = '/';
-    if (folder_total > 0xFFFFUL)           /* only the first 65535 entries are listed */
-      linebuf[n++] = '>';
     put_uint(linebuf, folder_total > 0xFFFFUL ? 0xFFFFUL : folder_total, &n);
+    if (folder_total > 0xFFFFUL)           /* only the first 65535 entries are listed */
+      linebuf[n++] = '+';
   }
   linebuf[n] = 0;
   con_fill(ROW_INFO + 1, 0, CON_COLS, ' ');
