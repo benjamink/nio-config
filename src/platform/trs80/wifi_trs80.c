@@ -22,6 +22,8 @@ static int call(uint8_t cmd, uint16_t req_len, uint16_t *len)
   return status == 0 && *len >= 1 && reply[0] == PROTO;
 }
 
+uint8_t wifi_scan_supported = 1;           /* until a status reply says otherwise */
+
 int wifi_status(uint8_t *link_state, char *ip, uint8_t ip_cap)
 {
   uint16_t len;
@@ -31,6 +33,7 @@ int wifi_status(uint8_t *link_state, char *ip, uint8_t ip_cap)
   if (!call(CMD_GET_STATUS, 1, &len) || len < 13)
     return 0;
   *link_state = reply[1];
+  wifi_scan_supported = reply[4];
   n = reply[12];
   if (12 + 1 + n > len || n >= ip_cap)
     return 0;
