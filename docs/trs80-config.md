@@ -67,9 +67,13 @@ SP near 02DCh; `crt0.asm` moves the stack to D000h. Interrupts are off while a r
 ## z88dk pitfalls (found the hard way)
 
 - `-O0` fixes nothing and makes the image 44 KB. Do not use it.
-- 32-bit `+` and unsigned `>>`/`/ 4` on `uint32_t` (`l_long_add`, `l_long_asr_u`) unbalance the stack
-  on the Z80 with this library: arguments after them read the wrong slot. `fnsvc_list_pages` and
-  `config_ui.c` do page arithmetic in 16 bits for that reason. 32-bit compare, `%`, `/ 10` work.
+- 32-bit `+` and unsigned `>>`/`/ 4` on `uint32_t` (`l_long_add`, `l_long_asr_u`): an early build showed
+  the stack unbalanced after them (arguments after them read the wrong slot). **Not reproduced**: running
+  the original expressions in z88dk's Z80 emulator with z88dk v23854 and v27081 (the boot repo's CI image,
+  `z88dk/z88dk:20261116`) gave correct results and a balanced stack. `fnsvc_list_pages` and `config_ui.c`
+  still do page arithmetic in 16 bits: it is equivalent (checked for all 65,536 `first_entry` values and
+  at the 0x10000 boundaries in `tests/amiga/test_fnsvc_wire.c`) and cheaper. If someone reproduces the
+  imbalance, record the z88dk version and a minimal case here. 32-bit compare, `%`, `/ 10` work.
 - Library code placed after `bss` in `crt0.asm`'s section list is cut from the `/CMD`; keep that order.
 - `fujinet-nio-lib`'s `fn_wifi.c` does not compile under sccz80, so Wi-Fi uses `wifi_trs80.c`.
 

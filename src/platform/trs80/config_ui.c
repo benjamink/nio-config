@@ -471,7 +471,7 @@ static void draw_counter(void)
   uint8_t n = 0;
 
   if (listed && folder_total) {
-    put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* no 32-bit add: sccz80's l_long_add is broken here */
+    put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* 16-bit add; see "z88dk pitfalls" in docs/trs80-config.md */
     linebuf[n++] = '/';
     put_uint(linebuf, folder_total, &n);
   }
