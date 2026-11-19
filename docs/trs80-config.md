@@ -18,7 +18,7 @@ The 4P has no ESC or TAB key, and its arrows are control codes (measured in MAME
 | SHIFT+Up / SHIFT+Down | page up / down |
 | SHIFT+Left / SHIFT+Right | previous / next tab |
 | Right arrow (code 09h) | TAB: switch Files / Drives pane |
-| Left arrow (code 08h, Backspace) | up a folder in Browse; deletes a character in text fields |
+| Left arrow (code 08h, Backspace) | up a folder in Browse (from the Drives pane: back to the Files pane); deletes a character in text fields |
 | ENTER | open folder, mount the image on the selected drive, accept |
 | BREAK | cancel a prompt; quit |
 | H B S W | jump to Hosts / Browse / Slots / Setup |
