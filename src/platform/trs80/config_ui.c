@@ -375,7 +375,7 @@ static int load_page(uint16_t at, uint8_t refresh)
     } while (delivered && st.entry_count < PAGE && (uint32_t) (uint16_t) (at + st.entry_count) < total);
     if (fnsvc_last_error() == FNSVC_ERR_NONE) {
       folder_total = total;
-      files.count = (uint16_t) total;
+      files.count = total > 0xFFFFUL ? 0xFFFF : (uint16_t) total;   /* list indexes are 16-bit */
       return 1;
     }
     if (fnsvc_last_error() != FNSVC_ERR_UNSUPPORTED) {
@@ -473,7 +473,9 @@ static void draw_counter(void)
   if (listed && folder_total) {
     put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* 16-bit add; see "z88dk pitfalls" in docs/trs80-config.md */
     linebuf[n++] = '/';
-    put_uint(linebuf, folder_total, &n);
+    if (folder_total > 0xFFFFUL)           /* only the first 65535 entries are listed */
+      linebuf[n++] = '>';
+    put_uint(linebuf, folder_total > 0xFFFFUL ? 0xFFFFUL : folder_total, &n);
   }
   linebuf[n] = 0;
   con_fill(ROW_INFO + 1, 0, CON_COLS, ' ');
