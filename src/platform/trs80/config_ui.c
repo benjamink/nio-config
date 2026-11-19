@@ -102,9 +102,9 @@ static void message(const char *text)
   msg_up = text[0] != 0;
 }
 
-static void say_status(void)
+static void clear_edit_row(void)
 {
-  message(st.status);
+  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
 }
 
 /* ---------------------------------------------------------------- drives */
@@ -442,9 +442,20 @@ static void enter_folder(const char *name)
 
 static void draw_counter(void);
 
+/* Which pane has the keyboard: ">" beside its heading, and '>' (not '-') on its selected row. */
+static void pane_marks(void)
+{
+  files.inactive = pane != PANE_FILES;
+  drives.inactive = pane != PANE_DRIVES;
+  con_put(ROW_PATH, 0, files.inactive ? " " : ">");
+  con_put(ROW_PATH, DRIVES_COL - 1, drives.inactive ? " " : ">");
+}
+
 static void draw_browse(void)
 {
   uint8_t n;
+
+  pane_marks();
 
   con_fill(ROW_PATH, 0, CON_COLS, ' ');
   n = 0;
@@ -541,7 +552,8 @@ static void files_enter(void)
   }
   if (mount_drive((uint8_t) drives.sel, name_buf, 0)) {
     strcpy(linebuf, "Mounted ");
-    strncat(linebuf, e->name, 24);
+    strncpy(&linebuf[8], e->name, 24);      /* not terminated if the name is 24+ characters */
+    linebuf[32] = 0;
     strcat(linebuf, " on :");
     linebuf[strlen(linebuf) + 1] = 0;
     linebuf[strlen(linebuf)] = (char) ('0' + drives.sel);
@@ -558,18 +570,27 @@ static void drive_row_changed(void)
   list_draw_row(&drives, (uint8_t) (drives.sel - drives.top));
 }
 
+/* Move the keyboard to another pane, repainting only the marks and each pane's selected row. */
+static void pane_switch(uint8_t to)
+{
+  pane = to;
+  pane_marks();
+  if (listed && files.sel >= files.top && files.sel - files.top < files.height)
+    list_draw_row(&files, (uint8_t) (files.sel - files.top));
+  list_draw_row(&drives, (uint8_t) (drives.sel - drives.top));
+  draw_counter();
+}
+
 static void browse_key(int key)
 {
   if (key == KEY_TAB) {
-    pane = pane == PANE_FILES ? PANE_DRIVES : PANE_FILES;
-    draw_counter();                      /* only the [drives]/[files] markers change */
+    pane_switch(pane == PANE_FILES ? PANE_DRIVES : PANE_FILES);
     return;
   }
   if (pane == PANE_DRIVES) {
     list_key_draw(&drives, key);
     if (key == KEY_ENTER) {
-      pane = PANE_FILES;
-      draw_counter();
+      pane_switch(PANE_FILES);
     } else if (key == 'x' || key == 'X') {
       eject_drive((uint8_t) drives.sel);
       drive_row_changed();
@@ -693,7 +714,7 @@ static void hosts_save(void)
 static void host_edit(uint8_t index, uint8_t is_new)
 {
   message(is_new ? "New host URI (ENTER saves, BREAK cancels):" : "Host URI (ENTER saves, BREAK cancels):");
-  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  clear_edit_row();
   strcpy(name_buf, is_new ? "" : st.hosts[index]);
   if (!field_edit(name_buf, CONFIG_NIO_URI_MAX, ROW_INFO + 2, 1, 76) || !name_buf[0]) {
     message("Cancelled");
@@ -712,7 +733,7 @@ static void draw_hosts(void);
 static void hosts_changed(void)
 {
   draw_hosts();
-  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  clear_edit_row();
 }
 
 static void hosts_key(int key)
@@ -817,7 +838,7 @@ static void ask_password_and_join(const char *ssid)
   char pw[65];
 
   message("Password (ENTER joins, BREAK cancels):");
-  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  clear_edit_row();
   pw[0] = 0;
   if (!field_edit(pw, 64, ROW_INFO + 2, 1, 76)) {
     message("Cancelled");
@@ -867,7 +888,13 @@ static void draw_prefs(void)
 static void setup_changed(void)
 {
   draw_wifi();
-  con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+  clear_edit_row();
+}
+
+static void prefs_saved(void)
+{
+  message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
+  draw_prefs();
 }
 
 static void setup_key(int key)
@@ -877,7 +904,7 @@ static void setup_key(int key)
     draw_nets();
   } else if (key == 'j' || key == 'J') {
     message("Network name (ENTER continues, BREAK cancels):");
-    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
+    clear_edit_row();
     name_buf[0] = 0;
     if (field_edit(name_buf, WIFI_SSID_MAX, ROW_INFO + 2, 1, 40) && name_buf[0])
       ask_password_and_join(name_buf);
@@ -890,12 +917,10 @@ static void setup_key(int key)
     setup_changed();
   } else if (key == 'd' || key == 'D') {
     st.prefs.date_format = st.prefs.date_format == CONFIG_NIO_PREF_DATE_YMD ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
-    message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
-    draw_prefs();
+    prefs_saved();
   } else if (key == 'z' || key == 'Z') {
     st.prefs.size_format = st.prefs.size_format == CONFIG_NIO_PREF_SIZE_FULL ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
-    message(config_nio_save_prefs(&st) ? "Saved" : "Could not save the preferences");
-    draw_prefs();
+    prefs_saved();
   } else
     list_key_draw(&netlist, key);
 }
@@ -912,6 +937,12 @@ static void draw_setup(void)
 
 static uint8_t drawn_tab = 0xFF;
 
+static void hint(const char *text)
+{
+  con_fill(ROW_HINT, 0, CON_COLS, ' ');
+  con_put(ROW_HINT, 1, text);
+}
+
 static void draw_all(void)
 {
   uint8_t r;
@@ -927,24 +958,20 @@ static void draw_all(void)
   }
   if (tab == TAB_BROWSE) {
     draw_browse();
-    con_fill(ROW_HINT, 0, CON_COLS, ' ');
-    con_put(ROW_HINT, 1, "ENTER mount/open  LEFT up  R reload  TAB pane  X eject  H B S W tabs  Q quit");
+    hint("ENTER mount/open  LEFT up  R reload  TAB pane  X eject  H B S W tabs  Q quit");
   } else if (tab == TAB_SLOTS) {
     draw_slots();
-    con_fill(ROW_HINT, 0, CON_COLS, ' ');
-    con_put(ROW_HINT, 1, "E/ENTER edit URI  X eject  R read-only on/off  H B S W tabs  Q quit");
+    hint("E/ENTER edit URI  X eject  R read-only on/off  H B S W tabs  Q quit");
   } else if (tab == TAB_HOSTS) {
     draw_hosts();
     con_fill(ROW_INFO, 0, CON_COLS, '-');
-    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
-    con_fill(ROW_HINT, 0, CON_COLS, ' ');
-    con_put(ROW_HINT, 1, "A add  E edit  D delete  ENTER browse  H B S W tabs  Q quit");
+    clear_edit_row();
+    hint("A add  E edit  D delete  ENTER browse  H B S W tabs  Q quit");
   } else {
     draw_setup();
     con_fill(ROW_INFO, 0, CON_COLS, '-');
-    con_fill(ROW_INFO + 2, 0, CON_COLS, ' ');
-    con_fill(ROW_HINT, 0, CON_COLS, ' ');
-    con_put(ROW_HINT, 1, "N scan  J join by name  ENTER join  D date  Z sizes  H B S W tabs  Q quit");
+    clear_edit_row();
+    hint("N scan  J join by name  ENTER join  D date  Z sizes  H B S W tabs  Q quit");
   }
 }
 

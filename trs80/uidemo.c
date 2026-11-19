@@ -23,7 +23,7 @@ int main(void)
     int key;
 
     l.row = 3; l.col = 2; l.width = 40; l.height = 18;
-    l.count = 50; l.sel = 0; l.top = 0; l.item = item; l.ctx = 0;
+    l.count = 50; l.sel = 0; l.top = 0; l.item = item; l.ctx = 0; l.inactive = 0;
     con_clear();
     tabs_draw(1, tabs, 4, 1);
     for (;;) {

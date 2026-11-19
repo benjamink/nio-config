@@ -15,6 +15,7 @@ typedef struct {
   uint16_t sel, top;                 /* selected index, first visible index */
   list_item_fn item;
   void *ctx;
+  uint8_t inactive;                  /* not the focused pane: the selected row is marked '-' instead of '>' */
 } list_t;
 
 enum { LIST_NONE = 0, LIST_MOVED = 1, LIST_EDGE_UP = 2, LIST_EDGE_DOWN = 3 };
