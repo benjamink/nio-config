@@ -34,7 +34,8 @@ static uint8_t quit;
 
 /* Browse: the current page of the folder is in st.entries; page_base is the absolute index of its first entry. */
 static uint16_t page_base;
-static uint32_t folder_total;
+static uint32_t folder_total;           /* entries in the folder, capped at 65535 (list indexes are 16-bit) */
+static uint8_t folder_over;             /* the folder really has more than 65535 entries */
 static uint8_t paged;                   /* 0 when the firmware has no ListPages: only the first PAGE entries are reachable */
 static uint8_t listed;                  /* a folder has been loaded for cur_host/browse_path */
 static list_t files;
@@ -374,8 +375,9 @@ static int load_page(uint16_t at, uint8_t refresh)
       refresh = 0;
     } while (delivered && st.entry_count < PAGE && (uint32_t) (uint16_t) (at + st.entry_count) < total);
     if (fnsvc_last_error() == FNSVC_ERR_NONE) {
-      folder_total = total;
-      files.count = total > 0xFFFFUL ? 0xFFFF : (uint16_t) total;   /* list indexes are 16-bit */
+      folder_over = total > 0xFFFFUL;
+      folder_total = folder_over ? 0xFFFFUL : total;
+      files.count = (uint16_t) folder_total;
       return 1;
     }
     if (fnsvc_last_error() != FNSVC_ERR_UNSUPPORTED) {
@@ -390,6 +392,7 @@ static int load_page(uint16_t at, uint8_t refresh)
     browse_failed();
     return 0;
   }
+  folder_over = 0;
   folder_total = st.entry_count;
   files.count = st.entry_count;
   if (st.entries_truncated)
@@ -473,8 +476,8 @@ static void draw_counter(void)
   if (listed && folder_total) {
     put_uint(linebuf, (uint32_t) (uint16_t) (files.sel + 1), &n); /* 16-bit add; see "z88dk pitfalls" in docs/trs80-config.md */
     linebuf[n++] = '/';
-    put_uint(linebuf, folder_total > 0xFFFFUL ? 0xFFFFUL : folder_total, &n);
-    if (folder_total > 0xFFFFUL)           /* only the first 65535 entries are listed */
+    put_uint(linebuf, folder_total, &n);
+    if (folder_over)                       /* only the first 65535 entries are listed */
       linebuf[n++] = '+';
   }
   linebuf[n] = 0;
