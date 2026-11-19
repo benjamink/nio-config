@@ -59,9 +59,10 @@ A scroll, a page change or any other key repaints the whole screen. Each row is 
 
 ## Memory map
 
-The program loads at 3000h and must end below D000h, where the boot repo's `nioclient_config.asm` (the
+The program loads at 3000h and must end below D000h, where the boot-disk repo's `nioclient_config.asm` (the
 SLIP/UART transport, entry `nio_request` at D003h) is loaded in the same `/CMD`. `trimbss.sh` cuts the
-uninitialised data from the file and fails the build if the image would pass D000h. LS-DOS enters at
+uninitialised data from the file and fails the build if the image would leave less than 384 bytes (`STACK_RESERVE`) below D000h: the stack grows
+down from D000h into the top of the uninitialised data. LS-DOS enters at
 SP near 02DCh; `crt0.asm` moves the stack to D000h. Interrupts are off while a request is in flight.
 
 ## z88dk pitfalls (found the hard way)
@@ -79,14 +80,17 @@ SP near 02DCh; `crt0.asm` moves the stack to D000h. Interrupts are off while a r
 
 ## Tests
 
-The cheapest test that fails for each layer. The boot repo (`~/dev/boot-trs80-4p`) holds the end-to-end
-ones: `MAME_TESTS=1 python3 -m unittest tests.test_mame_config` boots LS-DOS in MAME, runs the `/CMD` with a
+The cheapest test that fails for each layer. Anyone with z88dk and gcc can run `make trs80` (build and
+memory-map check) and `make test-trs80-host` (console and widget tests); CI runs the latter.
+
+The end-to-end tests live in the boot-disk repo (`boot-trs80-4p`), which is **not published yet** (its
+licensing is unresolved), so they cannot be run from this repository alone. They are: `MAME_TESTS=1 python3 -m unittest tests.test_mame_config` boots LS-DOS in MAME, runs the `/CMD` with a
 fake fujinet-nio on the serial pty and asserts on screen text and recorded requests (hello, widgets,
 fnsvc, store, browse/mount/eject, hosts, Wi-Fi/prefs). `tools/demo_config.py` there opens a MAME window with
-CONFIG running against the fake.
+CONFIG running against the fake. Link that repo here once it is public.
 
 ## Boot disk
 
-`tools/make_boot_image.py` (boot repo) adds `CONFIG/CMD` (program + client). It needs about 22 granules, so it
+`tools/make_boot_image.py` (boot-disk repo, not published yet) adds `CONFIG/CMD` (program + client). It needs about 22 granules, so it
 drops LS-DOS BASIC (`BASIC/CMD`, `BASIC/OV1`, `BASIC/OV2`, `BREF/CMD`) on top of `HELP/CMD` and `DOS/HLP`;
 `--no-config` keeps BASIC, `--drop NAME/EXT` removes more. It fails loudly if CONFIG does not fit.
