@@ -791,10 +791,10 @@ static void scan_networks(void)
   message("Scanning...");
   net_count = 0;
   if (!wifi_scan(0, nets, &net_count, &more)) {
-    message("Scan failed");
+    message(wifi_scan_supported ? "Scan failed" : "This FujiNet can't scan; press J to join by name");
     net_count = 0;
   } else {
-    message(net_count ? "Select a network and press ENTER" : "No networks found");
+    message(!net_count ? "No networks found" : more ? "First networks only; J joins by name" : "Select a network and press ENTER");
   }
   netlist.count = net_count;
   netlist.sel = 0;
@@ -854,13 +854,14 @@ static void draw_all(void)
   con_put(0, 1, "CONFIG NIO v1.0  TRS-80 4P");
   tabs_draw(1, tab_names, TAB_COUNT, tab);
   con_fill(2, 0, CON_COLS, '=');
+  /* Start every tab from a blank body (all columns): rows a tab does not redraw would keep the last tab's text. */
+  for (r = ROW_PATH; r < ROW_HINT; r++)
+    con_fill(r, 0, CON_COLS, ' ');
   if (tab == TAB_BROWSE) {
     draw_browse();
     con_fill(ROW_HINT, 0, CON_COLS, ' ');
     con_put(ROW_HINT, 1, "ENTER mount/open  LEFT up  R reload  TAB pane  X eject  H B S W tabs  Q quit");
   } else if (tab == TAB_SLOTS) {
-    for (r = ROW_PATH; r < ROW_INFO; r++)
-      con_fill(r, 0, CON_COLS, ' ');
     draw_slots();
     con_fill(ROW_HINT, 0, CON_COLS, ' ');
     con_put(ROW_HINT, 1, "E/ENTER edit URI  X eject  R read-only on/off  H B S W tabs  Q quit");

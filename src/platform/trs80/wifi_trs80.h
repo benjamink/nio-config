@@ -14,6 +14,8 @@ typedef struct {
   uint8_t auth;
 } wifi_net_t;
 
+/* Set by wifi_status() from the adapter's reply: 0 when this FujiNet cannot scan (e.g. the Pico 2 W). */
+extern uint8_t wifi_scan_supported;
 int wifi_status(uint8_t *link_state, char *ip, uint8_t ip_cap);
 /* Fills nets[0..*count); *more is set when the adapter has more networks. */
 int wifi_scan(uint16_t offset, wifi_net_t *nets, uint8_t *count, uint8_t *more);
