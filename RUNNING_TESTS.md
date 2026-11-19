@@ -274,7 +274,12 @@ make test-palmos PALMOS_PYTHON=../fujinet-nio-lib/build/palmos-test-venv/bin/pyt
 ```
 
 The focused suite executes the compiled m68k app and installed-library code
-with mocked Palm OS/transport peers. No hardware, live serial ports or running
+with mocked Palm OS/transport peers. The browser tests also execute shared
+host storage, directory pages past 100 entries over CS1/serial/USB, malformed
+and truncated names/replies, buffered installation reads, and Wi-Fi trial
+submission/status polling, offline Hosts startup, native scrollbar mapping,
+release-only directory fetching, EOF bounds, and guarded read retries. GUI rendering and Exchange Manager installation
+still require Palm acceptance. No hardware, live serial ports or running
 NIO backend are used. `make test-palmos` points the tests at
 `$(FUJINET_NIO_LIB)/build/palmos-shared-$(PALMOS_SDK_VERSION)` and
 `build/palmos-usb`; override `NIOLIB_BUILD` and `PALMOS_BUILD` for other build
