@@ -12,6 +12,7 @@
         SECTION code_clib
         SECTION code_string
         SECTION code_l_sccz80
+        SECTION code_l          ; l_lsl_hl, l_neg_hl, ...: left out, the linker puts it after bss and trimbss.sh cuts it from the /CMD
         SECTION code_math
         SECTION code_error
         SECTION code_stdlib
