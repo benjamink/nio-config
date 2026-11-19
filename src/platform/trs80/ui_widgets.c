@@ -24,7 +24,7 @@ void list_draw_row(const list_t *l, uint8_t r)
   if (r >= l->height)
     return;
   if (idx < l->count) {
-    linebuf[n++] = (idx == l->sel) ? '>' : ' ';
+    linebuf[n++] = (idx == l->sel) ? (l->inactive ? '-' : '>') : ' ';
     linebuf[n++] = ' ';
     s = l->item(idx, l->ctx);
     while (*s && n < l->width) {
