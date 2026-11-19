@@ -589,7 +589,7 @@ static void browse_key(int key)
   }
   if (pane == PANE_DRIVES) {
     list_key_draw(&drives, key);
-    if (key == KEY_ENTER) {
+    if (key == KEY_ENTER || key == KEY_BKSP) {      /* Left arrow also goes back to the files pane */
       pane_switch(PANE_FILES);
     } else if (key == 'x' || key == 'X') {
       eject_drive((uint8_t) drives.sel);
