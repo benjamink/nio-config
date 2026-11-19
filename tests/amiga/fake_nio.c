@@ -143,8 +143,7 @@ uint8_t fn_appstore_write(fn_appstore_io_t *io, const char *ns,
   k = find_key(ns, key, 1);
   if (!k || offset + len > FAKE_VALUE_MAX)
     return FN_ERR_IO;
-  if (offset == 0)
-    k->len = 0;
+  /* Offset writes never shorten a value (docs/app_store_service_protocol.md): only a delete does. */
   memcpy(k->data + offset, data, len);
   if (offset + len > k->len)
     k->len = (uint16_t) (offset + len);

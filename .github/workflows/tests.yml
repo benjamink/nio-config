@@ -40,3 +40,4 @@ jobs:
         working-directory: repos/nio-config
         run: |
           make test-amiga-host
+          make test-trs80-host
