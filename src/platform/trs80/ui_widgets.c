@@ -72,7 +72,8 @@ int list_key(list_t *l, int key)
   return LIST_MOVED;
 }
 
-static char undo[256];
+/* Largest field is a URI (CONFIG_NIO_URI_MAX = 127); every caller's `max` is at most that. */
+static char undo[128];
 
 static void field_draw(const char *buf, uint8_t len, uint8_t row, uint8_t col, uint8_t width)
 {
@@ -91,7 +92,8 @@ int field_edit(char *buf, uint8_t max, uint8_t row, uint8_t col, uint8_t width)
   uint8_t len;
   int key;
 
-  strcpy(undo, buf);
+  strncpy(undo, buf, sizeof(undo) - 1);
+  undo[sizeof(undo) - 1] = 0;
   len = (uint8_t) strlen(buf);
   for (;;) {
     field_draw(buf, len, row, col, width);

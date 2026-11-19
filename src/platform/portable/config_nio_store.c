@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__CC65__)
+#if defined(__CC65__) || defined(__Z88DK)
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 512
 #else
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 1024
@@ -115,7 +115,8 @@ static int appstore_write_text(const char *key, const char *buf)
   len = (uint16_t) strlen(buf);
   off = 0;
   /* Writes are offset writes (docs/app_store_service_protocol.md): delete first so a shorter value
-   * does not keep the old tail. A missing key is fine. */
+   * does not keep the old tail. A missing key is fine. Not atomic: the protocol has no truncate, so a
+   * failed write after the delete loses the old value. */
   (void) fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, key, &del);
   if (len == 0) {
     return fn_appstore_write(&appstore_io, CONFIG_NIO_NS, key, 0,
