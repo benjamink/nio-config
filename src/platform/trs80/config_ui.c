@@ -226,9 +226,28 @@ static void eject_drive(uint8_t unit)
   message("Ejected");
 }
 
+/* Replace what is mounted on `unit` with `uri`. `uri` must not point into st.slots (the slot is rewritten).
+ * If the new mount fails, put the previous image back (the saved slot still names it), so a failed attempt
+ * (restored from the saved slot, which a failed mount leaves untouched) does not leave the drive unmounted on the FujiNet while the saved slot says it is mounted. If even that
+ * fails, clear the saved state so it matches the device. Returns 1 when `uri` is mounted. */
+static int remount_drive(uint8_t unit, const char *uri, uint8_t readonly)
+{
+  uint8_t old_ro = strcmp(st.slots[unit].mode, "r") == 0;
+
+  fnsvc_disk_unmount(unit);
+  if (mount_drive(unit, uri, readonly))
+    return 1;
+  if (!fnsvc_disk_mount(unit, st.slots[unit].uri, old_ro, SECTOR_SIZE_HINT)) {
+    config_nio_mapping_clear(&st, unit);
+    config_nio_save_mappings(&st);
+    config_nio_delete_slot(&st, unit);
+    message("Mount failed; drive is now empty");
+  }
+  return 0;
+}
+
 static void toggle_readonly(uint8_t unit)
 {
-  char uri[CONFIG_NIO_URI_MAX + 1];
   uint8_t ro;
 
   if (boot_drive_guard(unit))
@@ -237,10 +256,9 @@ static void toggle_readonly(uint8_t unit)
     message("Drive is empty");
     return;
   }
-  strcpy(uri, st.slots[unit].uri);
   ro = strcmp(st.slots[unit].mode, "r") != 0;
-  fnsvc_disk_unmount(unit);
-  if (mount_drive(unit, uri, ro))
+  strcpy(name_buf, st.slots[unit].uri);      /* static buffer: keep the 129-byte copy off the small stack */
+  if (remount_drive(unit, name_buf, ro))
     message(ro ? "Now read-only" : "Now read-write");
 }
 
@@ -595,8 +613,10 @@ static void slots_key(int key)
       strcpy(name_buf, st.slots[drives.sel].uri);
     message("Image URI (ENTER mounts, BREAK cancels):");
     if (field_edit(name_buf, CONFIG_NIO_URI_MAX, ROW_MSG, 1, 76) && name_buf[0]) {
-      fnsvc_disk_unmount((uint8_t) drives.sel);
-      if (mount_drive((uint8_t) drives.sel, name_buf, 0))
+      /* keep an existing read-only setting; an empty drive mounts read-write */
+      uint8_t ro = drive_mounted((uint8_t) drives.sel) && strcmp(st.slots[drives.sel].mode, "r") == 0;
+
+      if (remount_drive((uint8_t) drives.sel, name_buf, ro))
         message("Mounted");
     }
   }
@@ -826,15 +846,6 @@ static void draw_setup(void)
 }
 
 /* ---------------------------------------------------------------- tabs */
-
-static void draw_tab_placeholder(const char *what)
-{
-  uint8_t r;
-
-  for (r = ROW_PATH; r < ROW_INFO; r++)
-    con_fill(r, 0, CON_COLS, ' ');
-  con_put(8, 10, what);
-}
 
 static void draw_all(void)
 {

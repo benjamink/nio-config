@@ -1,5 +1,5 @@
 /* The fnctl interface (include/common/fnctl.h) for the Model 4/4P: a call to the fujinet-nio
- * device over the serial port, through the nioclient code at 8000h. MS-DOS reaches the same
+ * device over the serial port, through the nioclient code at D000h. MS-DOS reaches the same
  * device through its resident driver; the portable fnsvc/store code only needs fnctl_nio_call. */
 #include "fnctl.h"
 
