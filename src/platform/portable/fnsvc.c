@@ -214,8 +214,10 @@ int fnsvc_list_directory_flags(const char *uri, fnsvc_list_cb cb, void *ctx)
 #define FNSVC_PAGES_RESP_MORE 0x01
 #define FNSVC_STATUS_UNSUPPORTED 8
 
-/* first_entry / FNSVC_PAGE_SIZE for first_entry < 0x40000, without a 32-bit shift: z88dk sccz80's
- * l_long_asr_u (used for an unsigned long divide by 4) unbalances the stack on the Z80. */
+/* first_entry / FNSVC_PAGE_SIZE for first_entry < 0x40000, in 16-bit arithmetic. The TRS-80 build avoids
+ * 32-bit `/ 4` (sccz80 l_long_asr_u) after a stack imbalance seen in an early build; the emulator checks in
+ * docs/trs80-config.md could not reproduce it with z88dk v23854 or v27081, so this is kept as a cheap,
+ * equivalent form (test_fnsvc_wire covers the 0x10000 boundaries), not as a known compiler bug. */
 static uint16_t first_page(uint32_t first_entry)
 {
   uint16_t page = (uint16_t) first_entry / FNSVC_PAGE_SIZE;
