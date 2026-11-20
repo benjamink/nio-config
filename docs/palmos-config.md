@@ -142,10 +142,15 @@ an Internet connection.
 
 ## Setup
 
-The transport row directly below the page tabs is **Springboard | USB | Serial**.
+The transport row directly below the page tabs is **Springboard | USB | Serial | Network**.
+**Network** needs NioLib ABI 1.7 with `nioLibCapNetLib`: the NIO runs inside NioLib
+and uses the Palm's own NetLib (for example PPP over Bluetooth on a Sony Clie), so no
+FujiNet hardware is needed. Hosts, Info and Wi-Fi work through it as far as that NIO
+serves them: device information and network status, no file services. With an older
+NioLib the button is disabled.
 Only Serial shows the **Baud** and **Flow** popup selectors below it, with
 9600/19200/38400/57600/115200 baud and None or RTS/CTS (8N1). Switching transport
-preserves the serial values but hides those controls for USB and Springboard.
+preserves the serial values but hides those controls for the other transports.
 The bottom row is **WiFi | Save | Test | Reset**; the area above it shows the
 latest message/test result and any Palm/NIO error codes.
 **Save** writes preferences through NioLib and verifies readback. **Test**

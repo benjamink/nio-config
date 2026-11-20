@@ -22,6 +22,7 @@ class ConfigMachine(USBMachine):
         self.missing = self.incompatible = self.no_caps = False
         self.bad_readback = False
         self.old_usb = False
+        self.version_caps = None  # (version tuple, caps) the library is made to report
         self.old_recovery = self.no_recovery_cap = False
         self.reset_calls = []
         self.reset_alerts = []
@@ -74,6 +75,12 @@ class ConfigMachine(USBMachine):
             if ((trap == 0xa805 and self.old_recovery) or
                     (trap == 0xa806 and self.no_recovery_cap)):
                 data = struct.pack('>4H', 8, 1, 4, 7) if trap == 0xa805 else struct.pack('>I', 0x8000017f)
+                uc.mem_write(self.read32(sp+2), data)
+                uc.reg_write(UC_M68K_REG_D0, 0); uc.reg_write(UC_M68K_REG_PC, pc+4)
+                return
+            if trap in (0xa805, 0xa806) and self.version_caps:
+                version, caps = self.version_caps
+                data = struct.pack('>4H', *version) if trap == 0xa805 else struct.pack('>I', caps)
                 uc.mem_write(self.read32(sp+2), data)
                 uc.reg_write(UC_M68K_REG_D0, 0); uc.reg_write(UC_M68K_REG_PC, pc+4)
                 return
@@ -260,6 +267,21 @@ class PalmConfigTests(unittest.TestCase):
         m.app('config_start'); self.assertEqual(m.draft(),config(3))
         m.app('config_test'); self.assertIn('PASS',m.text())
         self.assertFalse(m.usb_live); self.assertFalse(m.byte('clientOpen')); m.clean()
+
+    def test_network_saves_with_abi_17_and_needs_its_capability(self):
+        m=ConfigMachine(); m.app('config_start'); m.action(1009)
+        self.assertEqual(m.draft(),config(4)); m.app('config_save')
+        self.assertEqual(m.word('palmError'),0)
+        self.assertEqual(m.saved_preferences[(0x4e694c31,0x4e34)],(1,config(4)))
+        self.assertFalse(m.requests); self.assertEqual(m.mmio,0); m.clean()
+        m.app('config_start'); self.assertEqual(m.draft(),config(4)); m.clean()
+        # ABI 1.6 (no Network), and an unpublished 1.6 Network build whose traps from 19 on are not the services.
+        for version, caps, services in (((8,1,6,9),0x800001bf,1), ((8,1,6,12),0x800003bf,0)):
+            with self.subTest(version=version):
+                m=ConfigMachine(); m.version_caps=(version,caps); m.app('config_start')
+                self.assertTrue(m.byte('libraryOpen')); self.assertEqual(m.byte('servicesSupported'),services)
+                before=m.draft(); m.action(1009); self.assertEqual(m.draft(),before)
+                self.assertEqual(m.text(),'Network needs NioLib 1.7'); m.clean()
 
     def test_default_no_transport_open_or_implicit_save(self):
         m=ConfigMachine(); m.app('config_start')

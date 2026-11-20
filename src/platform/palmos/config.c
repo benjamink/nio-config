@@ -7,7 +7,7 @@ Boolean servicesSupported;
 static Boolean libraryLoaded;
 Boolean libraryOpen, clientOpen, dirty;
 UInt32 clientToken;
-static Boolean usbSupported;
+static Boolean usbSupported, netSupported;
 static Boolean recoverySupported;
 static const UInt32 serialBauds[] = {9600, 19200, 38400, 57600, 115200};
 NioLibConfig config;
@@ -41,7 +41,8 @@ static Boolean valid_config(const NioLibConfig *p)
 {
     return p->size == sizeof(*p) && p->version == nioConfigVersion &&
         (p->transport == nioTransportSpringboard || p->transport == nioTransportSerial ||
-         (p->transport == nioTransportUSB && usbSupported)) &&
+         (p->transport == nioTransportUSB && usbSupported) ||
+         (p->transport == nioTransportNetwork && netSupported)) &&
         !(p->serialOptions & ~nioSerialRTSCTS) &&
         (p->serialBaud == 9600 || p->serialBaud == 19200 || p->serialBaud == 38400 ||
          p->serialBaud == 57600 || p->serialBaud == 115200) &&
@@ -86,9 +87,13 @@ void config_start(void)
         return;
     }
     libraryVersion = version;
-    servicesSupported = version.abiMinor >= 6 && (caps & nioLibCapServices);
+    /* An unpublished Network-transport NioLib (implementations 9-12) said ABI 1.6 with nioLibCapNetLib's bit:
+     * its traps from 19 on are not the 1.6 services. */
+    servicesSupported = version.abiMinor >= 6 && (caps & nioLibCapServices) &&
+        (version.abiMinor >= 7 || !(caps & nioLibCapNetLib));
     usbSupported = (caps & nioLibCapUSB) != 0;
     recoverySupported = version.abiMinor >= 5 && (caps & nioLibCapRecovery);
+    netSupported = version.abiMinor >= 7 && (caps & nioLibCapNetLib) != 0;
     libraryOpen = true;
     config.size = sizeof(config);
     palmError = NioLibGetConfig(libraryRef, &config, &configFlags);
@@ -199,6 +204,9 @@ void config_action(UInt16 id)
     case 1007:
         if (!usbSupported) { message = "USB needs newer NioLib"; return; }
         config.transport = nioTransportUSB; break;
+    case 1009:
+        if (!netSupported) { message = "Network needs NioLib 1.7"; return; }
+        config.transport = nioTransportNetwork; break;
     case 1005: config_save(); return;
     case 1006: config_test(); return;
     case 1010: config_reset(); return;
@@ -285,7 +293,10 @@ static void draw(void)
                 config.transport == nioTransportSerial);
     CtlSetValue(FrmGetObjectPtr(FrmGetActiveForm(), FrmGetObjectIndex(FrmGetActiveForm(),1007)),
                 config.transport == nioTransportUSB);
+    CtlSetValue(FrmGetObjectPtr(form, FrmGetObjectIndex(form,1009)),
+                config.transport == nioTransportNetwork);
     CtlSetEnabled(FrmGetObjectPtr(form, FrmGetObjectIndex(form,1007)), libraryOpen && usbSupported);
+    CtlSetEnabled(FrmGetObjectPtr(form, FrmGetObjectIndex(form,1009)), libraryOpen && netSupported);
     CtlSetEnabled(FrmGetObjectPtr(form, FrmGetObjectIndex(form,1008)), libraryOpen && servicesSupported);
     CtlSetEnabled(FrmGetObjectPtr(form, FrmGetObjectIndex(form,1010)), libraryOpen && recoverySupported);
     for (i = 0; i < 4; i++) {
