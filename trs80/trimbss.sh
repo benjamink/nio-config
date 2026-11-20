@@ -10,6 +10,11 @@ tail=$((0x$(val __tail)))
 # the app-store client) needs about 221 bytes, and LS-DOS SVCs and interrupts share the stack: keep a reserve.
 reserve=${STACK_RESERVE:-384}
 [ "$tail" -le $((0xD000 - reserve)) ] || { echo "$1: image ends at $(printf %X $tail): less than $reserve bytes of stack below D000h" >&2; exit 1; }
+# Report the margin so a build creeping towards the limit shows up before it breaks: toolchain updates move it by tens of
+# bytes (z88dk releases between 20260105 and 20261116 differ by up to 0x60). Warn below MARGIN_WARN (default 128).
+margin=$((0xD000 - reserve - tail))
+echo "$1: image ends at $(printf %X $tail), $margin bytes above the $reserve-byte stack reserve" >&2
+[ "$margin" -ge "${MARGIN_WARN:-128}" ] || echo "$1: warning: only $margin bytes of headroom; free some bss before it grows" >&2
 [ "$tail" -le $((0xD000)) ] || { echo "$1: image ends at $(printf %X $tail), past the client at D000h" >&2; exit 1; }
 # Every stored section (code, rodata, data) must end at or before bss: the file stops at bss, and crt0 clears
 # whatever lies beyond it, so code placed there (the linker puts sections crt0.asm does not list after bss) is

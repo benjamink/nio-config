@@ -26,15 +26,16 @@ enum {
   NIO_FILE_RESOLVE_PATH = 0x05
 };
 
-#ifndef FNSVC_IO_BUF_SIZE
-#define FNSVC_IO_BUF_SIZE FNCTL_MAX_DATA
-#endif
-
 #ifndef FNSVC_LIST_NAME_MAX
 #define FNSVC_LIST_NAME_MAX 220
 #endif
 
+#ifdef FNSVC_SHARE_REQ_BUF
+uint8_t fnsvc_req_buf[FNSVC_IO_BUF_SIZE];
+#define req_buf fnsvc_req_buf
+#else
 static uint8_t req_buf[FNSVC_IO_BUF_SIZE];
+#endif
 static uint8_t resp_buf[FNSVC_IO_BUF_SIZE];
 static uint8_t last_error;
 static uint8_t last_status;

@@ -1,10 +1,13 @@
 #include "config_nio.h"
+#include "fnsvc.h"
 #include "fujinet-nio.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__CC65__) || defined(__Z88DK)
+#ifdef FNSVC_SHARE_REQ_BUF
+#define CONFIG_NIO_APPSTORE_BUF_SIZE FNSVC_IO_BUF_SIZE
+#elif defined(__CC65__) || defined(__Z88DK)
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 512
 #else
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 1024
@@ -18,7 +21,11 @@
 #define CONFIG_NIO_MAPPINGS_SIZE (1 + FNCTL_MAX_UNITS * 2)
 
 static uint8_t store_buf[CONFIG_NIO_STORE_BUF_SIZE];
+#ifdef FNSVC_SHARE_REQ_BUF
+#define appstore_buf fnsvc_req_buf /* shared with fnsvc, see fnsvc.h */
+#else
 static uint8_t appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
+#endif
 static fn_appstore_io_t appstore_io = { appstore_buf, sizeof(appstore_buf) };
 static fn_slot_catalog_io_t slot_io = { appstore_buf, sizeof(appstore_buf) };
 static char line_buf[CONFIG_NIO_URI_MAX + 10];

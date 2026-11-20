@@ -7,7 +7,7 @@ export ZCCCFG
 SRC     = ../src/platform/trs80
 FUJINET_NIO_LIB ?= ../../fujinet-nio-lib
 # State limits sized for the 4P's memory (see docs/trs80-config.md): fewer/shorter entries than MS-DOS.
-LIMITS  = -DCONFIG_NIO_URI_MAX=127 -DCONFIG_NIO_MAX_ENTRIES=12 -DCONFIG_NIO_NAME_MAX=47 -DCONFIG_NIO_TEXT_MAX=1100
+LIMITS  = -DCONFIG_NIO_URI_MAX=127 -DCONFIG_NIO_MAX_ENTRIES=12 -DCONFIG_NIO_NAME_MAX=47 -DCONFIG_NIO_TEXT_MAX=1100 -DFNSVC_SHARE_REQ_BUF
 ZCC     = zcc +z80 -clib=classic -compiler=sccz80 $(LIMITS) -I$(SRC) -I../include/common -I../include -I$(FUJINET_NIO_LIB)/include
 ASM     = z88dk-z80asm -b -mz80 -m -r0x3000 -L$(ZCCCFG)/../clibs/z80 -L$(ZCCCFG)/../clibs -lz80_clib -lndos -lz80_crt0
 BUILD   = build
