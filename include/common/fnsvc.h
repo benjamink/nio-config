@@ -3,8 +3,23 @@
 
 #include <stdint.h>
 
+#include "fnctl.h"
+
 #define FNSVC_MAX_URI   255
 #define FNSVC_MAX_PATH  127
+
+#ifndef FNSVC_IO_BUF_SIZE
+#define FNSVC_IO_BUF_SIZE FNCTL_MAX_DATA
+#endif
+
+/* Small targets (TRS-80) build with -DFNSVC_SHARE_REQ_BUF: the request buffer is
+ * not static but shared as fnsvc_req_buf, and config_nio_store.c uses it as its
+ * app-store scratch instead of a buffer of its own.  Safe because both are
+ * scratch for one blocking call: a request is built, sent and dead before the
+ * call returns, and no store call runs inside an fnsvc call or its callbacks. */
+#ifdef FNSVC_SHARE_REQ_BUF
+extern uint8_t fnsvc_req_buf[FNSVC_IO_BUF_SIZE];
+#endif
 
 enum {
   FNSVC_STATUS_OK = 0
