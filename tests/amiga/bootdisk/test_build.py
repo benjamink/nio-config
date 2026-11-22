@@ -157,6 +157,20 @@ class BootdiskTest(unittest.TestCase):
                 self.assertIn(key, prof)
             self.assertTrue(os.path.isfile(os.path.join(BOOTDISK, prof["installer"])))
 
+    def test_free_profiles_ship_no_commodore_files(self):
+        # Freely distributable disks: built from scratch (no base disk), and
+        # nothing from Workbench (Mount, Run, FastFileSystem, ...) is packaged.
+        project = {"fujinet-nio.device", "fujinet-disk.device",
+                   "fujinet-serial.device", "fujinet-nio-serial",
+                   "fujinet-load-resident", "fmount", "fumount"}
+        for name in ("config-only", "wb13-free"):
+            prof = build.load_profile(name)
+            self.assertTrue(prof.get("scratch"))
+            self.assertNotIn("base_volume", prof)
+            for item in prof["package"]:
+                self.assertIn(item["src"], project)
+            self.assertNotIn("Mount", prof["startup_sequence"])
+
 
 if __name__ == "__main__":
     unittest.main()

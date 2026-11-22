@@ -101,6 +101,7 @@ WB ?= wb204
 BOOTDISK_PKG_PROFILE_wb204 := wb32
 BOOTDISK_PKG_PROFILE_wb13 := wb13
 BOOTDISK_PKG_PROFILE_config-only := wb32
+BOOTDISK_PKG_PROFILE_wb13-free := wb13
 BOOTDISK_OUT ?= build/amiga-bootdisk
 NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
 CONFIG_NIO ?= build/amiga/$(BOOTDISK_PKG_PROFILE_$(WB))/bin/config-nio
@@ -112,6 +113,9 @@ DRIVER_DIR ?= $(NIO_WORKSPACE)/repos/fujinet-nio-driver
 CORE_APPS_DIR ?= $(NIO_WORKSPACE)/repos/nio-core-apps
 DRIVER_BUILD ?= $(DRIVER_DIR)/build/amiga/wb32
 FUJINET_NIO_LIB_DIR ?= $(NIO_WORKSPACE)/repos/fujinet-nio-lib
+
+# Profiles built from scratch (no BASE_ADF); they use the bare-system tools.
+BOOTDISK_SCRATCH := config-only wb13-free
 
 amiga-bootdisk-tools:
 	$(MAKE) -C "$(CORE_APPS_DIR)" -f makefiles/build.mk TARGET=amiga \
@@ -128,11 +132,11 @@ amiga-bootdisk-tools:
 		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-serial.c" -lamiga \
 		-o "$(BOOTDISK_TOOLS)/fujinet-nio-serial"
 
-amiga-bootdisk: $(if $(filter config-only,$(WB)),amiga-bootdisk-tools)
-	@test "$(WB)" = config-only || test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
+amiga-bootdisk: $(if $(filter $(BOOTDISK_SCRATCH),$(WB)),amiga-bootdisk-tools)
+	@test -n "$(filter $(BOOTDISK_SCRATCH),$(WB))" || test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
 	python3 amiga/bootdisk/build.py $(WB) $(if $(BASE_ADF),--base "$(BASE_ADF)") --pkg "$(NIO_PKG)" \
 		--config-nio "$(CONFIG_NIO)" --out "$(BOOTDISK_OUT)" \
-		$(if $(filter config-only,$(WB)),--tools "$(BOOTDISK_TOOLS)")
+		$(if $(filter $(BOOTDISK_SCRATCH),$(WB)),--tools "$(BOOTDISK_TOOLS)")
 
 test-amiga-bootdisk:
 	python3 -I -m unittest discover -s tests/amiga/bootdisk -v
