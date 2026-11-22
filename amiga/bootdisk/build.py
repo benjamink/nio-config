@@ -200,6 +200,35 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False,
             xdf(out, "delete", "S/Startup-Sequence")
             xdf(out, "write", seq, "S/Startup-Sequence")
 
+        # Generic text edits to files already on the disk: remove lines and
+        # insert lines before a marker line (both matched case-insensitively
+        # on the stripped line).  Each edit fails the build if it finds nothing.
+        for n, edit in enumerate(profile.get("edit", [])):
+            path = edit["file"]
+            if path not in entries:
+                raise BuildError(f"edit target not on the base disk: {path}")
+            text = os.path.join(workdir, f"edit{n}")
+            xdf(out, "read", path, text)
+            with open(text, encoding="latin-1") as f:
+                lines = f.read().split("\n")
+            drop = {l.strip().lower() for l in edit.get("remove", [])}
+            if drop:
+                kept = [l for l in lines if l.strip().lower() not in drop]
+                if len(kept) == len(lines):
+                    raise BuildError(f"{path} has none of the lines the profile removes")
+                lines = kept
+            if "insert" in edit:
+                marker = edit["before"].strip().lower()
+                at = next((i for i, l in enumerate(lines)
+                           if l.strip().lower() == marker), None)
+                if at is None:
+                    raise BuildError(f"{path} has no line {edit['before']!r} to insert before")
+                lines[at:at] = edit["insert"]
+            with open(text, "w", encoding="latin-1", newline="") as f:
+                f.write("\n".join(lines))
+            xdf(out, "delete", path)
+            xdf(out, "write", text, path)
+
         for key, dst in (("startup_sequence", "S/Startup-Sequence"),
                          ("user_startup", "S/User-Startup")):
             if key in profile:
@@ -228,6 +257,26 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False,
                                      "tool build); run make amiga-bootdisk")
                 root = tools
             put(os.path.join(root, item["src"]), item["dst"])
+        # Append a file from the package to one already on the disk (e.g. the
+        # FujiNet entries onto Devs/MountList).
+        for n, app in enumerate(profile.get("append", [])):
+            if app["dst"] not in entries:
+                raise BuildError(f"append target not on the base disk: {app['dst']}")
+            src = os.path.join(pkg, app["src"])
+            if not os.path.isfile(src):
+                raise BuildError(f"missing input file: {src}")
+            text = os.path.join(workdir, f"append{n}")
+            xdf(out, "read", app["dst"], text)
+            with open(text, "rb") as f:
+                data = f.read()
+            with open(src, "rb") as f:
+                extra = f.read()
+            if data and not data.endswith(b"\n"):
+                data += b"\n"
+            with open(text, "wb") as f:
+                f.write(data + extra)
+            xdf(out, "delete", app["dst"])
+            xdf(out, "write", text, app["dst"])
         put(config_nio, profile["config_nio_dst"])
         icons = os.path.join(AMIGA_DIR, "icons")
         empty = os.path.join(workdir, "empty")
