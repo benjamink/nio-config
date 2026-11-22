@@ -245,6 +245,13 @@ config-nio re-reads the stored mapping to decide whether it succeeded. On
 Kickstart 1.3 this is the only reliable check, because `Execute()` does not
 report a command's return code.
 
+On Kickstart 1.3, `Execute()` needs `C:Run`, a Workbench file. When it cannot
+start a command (a boot disk without `Run`, such as `wb13-free`), config-nio
+runs the command inside its own process, as the Shell does: it loads it from
+the command path or `C:`, runs it with its output captured, and unloads it.
+That needs a CLI, so it works when Config is started from a Shell or
+`S:Startup-Sequence`, not from a Workbench icon. Launch uses the same fallback.
+
 On Workbench 1.3 the drive names are the eight static MountList endpoints:
 `DN0: DN1: HN0: HN1: DO0: DO1: HO0: HO1:` (units 0–7): DD/FFS, HD/FFS, DD/OFS
 and HD/OFS, two of each. On Workbench 2.0 to 3.0 any `DN` drive takes any
