@@ -139,7 +139,8 @@ def create_scratch_disk(out, profile):
         f.write(boot_block(0))
 
 
-def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
+def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False,
+          tools=None):
     name = profile["name"]
     scratch = bool(profile.get("scratch"))
     checks = [("config-nio binary", config_nio)]
@@ -220,7 +221,13 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
 
         listing_dirs = {p for p, d in listing(out)[1].items() if d}
         for item in profile.get("package", []):
-            put(os.path.join(pkg, item["src"]), item["dst"])
+            root = pkg
+            if item.get("from") == "tools":
+                if not tools:
+                    raise BuildError("profile needs --tools (the bare-system "
+                                     "tool build); run make amiga-bootdisk")
+                root = tools
+            put(os.path.join(root, item["src"]), item["dst"])
         put(config_nio, profile["config_nio_dst"])
         icons = os.path.join(AMIGA_DIR, "icons")
         empty = os.path.join(workdir, "empty")
@@ -265,6 +272,8 @@ def main(argv=None):
     ap.add_argument("--pkg", required=True, help="staged NIO package directory")
     ap.add_argument("--config-nio", required=True, help="built config-nio binary")
     ap.add_argument("--out", default="build/amiga-bootdisk", help="output directory")
+    ap.add_argument("--tools", help="directory of bare-system (libnix) tools "
+                    "for profiles whose package items say from = \"tools\"")
     ap.add_argument("--allow-unknown-base", action="store_true",
                     help="skip the base disk checksum check")
     a = ap.parse_args(argv)
@@ -273,7 +282,7 @@ def main(argv=None):
         return 2
     try:
         out, free = build(load_profile(a.profile), a.base, a.pkg,
-                          a.config_nio, a.out, a.allow_unknown_base)
+                          a.config_nio, a.out, a.allow_unknown_base, a.tools)
     except BuildError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

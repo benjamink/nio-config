@@ -2,7 +2,7 @@ TARGETS := msdos bbc master linux atari c64
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
 .PHONY: atari-banked all all-targets clean disk confnio-bbc-disk confnio-master-disk \
-	splash-bbc splash-bbc-disk test-amiga-host test-amiga-bootdisk amiga amiga-bootdisk \
+	splash-bbc splash-bbc-disk test-amiga-host test-amiga-bootdisk amiga amiga-bootdisk amiga-bootdisk-tools \
 	regen-amiga-icons $(TARGETS)
 
 all: $(DEFAULT_TARGET)
@@ -104,10 +104,34 @@ BOOTDISK_OUT ?= build/amiga-bootdisk
 NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
 CONFIG_NIO ?= build/amiga/wb32/bin/config-nio
 
-amiga-bootdisk:
+# fmount, fumount and fujinet-nio-serial for a bare (no Workbench startup)
+# system: compiled against the 2.0 headers, linked with the nix13 runtime.
+BOOTDISK_TOOLS ?= build/amiga-bootdisk-tools
+DRIVER_DIR ?= $(NIO_WORKSPACE)/repos/fujinet-nio-driver
+CORE_APPS_DIR ?= $(NIO_WORKSPACE)/repos/nio-core-apps
+DRIVER_BUILD ?= $(DRIVER_DIR)/build/amiga/wb32
+FUJINET_NIO_LIB_DIR ?= $(NIO_WORKSPACE)/repos/fujinet-nio-lib
+
+amiga-bootdisk-tools:
+	$(MAKE) -C "$(CORE_APPS_DIR)" -f makefiles/build.mk TARGET=amiga \
+		TARGET_BUILD_DIR=build/amiga/bootdisk-tools AMIGA_CRT=nix13 \
+		AMIGA_COMPILE_CRT=nix20 AMIGA_WB13=0 \
+		FUJINET_NIO_DRIVER_BUILD="$(DRIVER_BUILD)" \
+		build/amiga/bootdisk-tools/bin/fmount build/amiga/bootdisk-tools/bin/fumount
+	mkdir -p "$(BOOTDISK_TOOLS)"
+	cp "$(CORE_APPS_DIR)/build/amiga/bootdisk-tools/bin/fmount" \
+		"$(CORE_APPS_DIR)/build/amiga/bootdisk-tools/bin/fumount" "$(BOOTDISK_TOOLS)/"
+	m68k-amigaos-gcc -std=c99 -Wall -O2 -mcpu=68000 -msoft-float -mcrt=nix13 \
+		-I"$(DRIVER_DIR)/amiga/include" -I"$(DRIVER_DIR)/amiga/public/include" \
+		-I"$(FUJINET_NIO_LIB_DIR)/include" \
+		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-serial.c" -lamiga \
+		-o "$(BOOTDISK_TOOLS)/fujinet-nio-serial"
+
+amiga-bootdisk: $(if $(filter config-only,$(WB)),amiga-bootdisk-tools)
 	@test "$(WB)" = config-only || test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
 	python3 amiga/bootdisk/build.py $(WB) $(if $(BASE_ADF),--base "$(BASE_ADF)") --pkg "$(NIO_PKG)" \
-		--config-nio "$(CONFIG_NIO)" --out "$(BOOTDISK_OUT)"
+		--config-nio "$(CONFIG_NIO)" --out "$(BOOTDISK_OUT)" \
+		$(if $(filter config-only,$(WB)),--tools "$(BOOTDISK_TOOLS)")
 
 test-amiga-bootdisk:
 	python3 -I -m unittest discover -s tests/amiga/bootdisk -v

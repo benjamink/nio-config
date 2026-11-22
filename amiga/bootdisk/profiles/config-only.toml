@@ -4,7 +4,15 @@
 # dos, intuition and graphics): the disk boots straight to FujiNet Config,
 # using the Workbench 3.x tool set (which needs 2.0+, e.g. an A500+).
 #
-# Built from scratch, so no BASE_ADF is needed.  fmountrestore is left off: on
+# Built from scratch, so no BASE_ADF is needed.
+#
+# Two things a bare system needs that a Workbench one hides:
+# - Stock serial.device is a Workbench file (Devs:), so the disk loads the
+#   project's own fujinet-serial.device and selects it with fujinet-nio-serial.
+# - The Workbench 3.x tools are built with clib2, whose startup crashes without a
+#   Workbench startup.  fmount, fumount and fujinet-nio-serial are therefore
+#   rebuilt against the 2.0 headers and linked with the libnix nix13 runtime
+#   (like config-nio): `make amiga-bootdisk-tools`.  fmountrestore is left off: on
 # a bare system (no Workbench startup) it crashed when no FujiNet answered, so
 # saved drives are not remounted at boot; mount from Config instead.
 
@@ -17,8 +25,12 @@ min_free_bytes = 65536
 dirs = ["C", "Devs", "S", "Tools"]
 config_nio_dst = "Tools/config-nio"
 
-startup_sequence = """; FujiNet NIO boot disk: load the drivers, restore saved drives, run Config.
+startup_sequence = """; FujiNet NIO boot disk: load the drivers and run Config.
 C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
+; Stock serial.device is a Workbench file, not in ROM, and is not on this disk:
+; use the project's own Paula UART driver for the RS-232 link instead.
+C:fujinet-load-resident DEVS:fujinet-serial.device fujinet-serial.device
+C:fujinet-nio-serial fujinet-serial.device
 C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
 Tools/config-nio
 """
@@ -30,11 +42,20 @@ dst = "Devs/fujinet-nio.device"
 src = "fujinet-disk.device"
 dst = "Devs/fujinet-disk.device"
 [[package]]
+src = "fujinet-serial.device"
+dst = "Devs/fujinet-serial.device"
+[[package]]
+src = "fujinet-nio-serial"
+dst = "C/fujinet-nio-serial"
+from = "tools"
+[[package]]
 src = "fujinet-load-resident"
 dst = "C/fujinet-load-resident"
 [[package]]
 src = "fmount"
 dst = "C/fmount"
+from = "tools"
 [[package]]
 src = "fumount"
 dst = "C/fumount"
+from = "tools"
