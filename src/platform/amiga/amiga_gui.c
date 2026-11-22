@@ -2683,22 +2683,27 @@ static void launch_refresh(void)
 
 /* The console Config leaves behind: clear it and say plainly what is
  * happening, so the wait does not look like a hang.  "\f" clears an
- * AmigaDOS console; CSI 1m / 0m switch bold on and off. */
+ * AmigaDOS console; CSI 1m / 0m switch bold on and off.  Written in pieces,
+ * with no formatting buffer: the notice once overflowed a 200-byte buffer
+ * into launch_run's command, so Run started the notice's last line. */
+static void con_write(BPTR con, const char *s)
+{
+  (void) Write(con, (APTR) s, (LONG) strlen(s));
+}
+
 static void launch_console_notice(const char *name)
 {
-  static char msg[200];
   BPTR con = Output();
 
   if (!con)
     return;
-  amiga_sprintf(msg,
-                "\f\n  \x9b" "1mFujiNet: loading %s\x9b" "0m\n\n"
-                "  Reading the program from the disk image over the\n"
-                "  FujiNet. This can take a few minutes, and nothing else\n"
-                "  will appear until it starts. Please wait...\n\n"
-                "  (Run Tools/config-nio to come back to Config.)\n",
-                name);
-  (void) Write(con, msg, (LONG) strlen(msg));
+  con_write(con, "\f\n  \x9b" "1mFujiNet: loading ");
+  con_write(con, name);
+  con_write(con, "\x9b" "0m\n\n"
+                 "  Reading the program from the disk image over the\n"
+                 "  FujiNet. This can take a few minutes, and nothing else\n"
+                 "  will appear until it starts. Please wait...\n\n"
+                 "  (Run Tools/config-nio to come back to Config.)\n");
 }
 
 /* Runs the selected program and quits Config, freeing its memory for the
