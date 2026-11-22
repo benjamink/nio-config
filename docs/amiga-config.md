@@ -116,7 +116,7 @@ executable header, so scripts, data and `.info` files are not listed.
   their own screen or window.
 
 Verified in Amiberry on Kickstart 2.04: KoiPond.adf mounted on DN0: and
-KoiPondECS started with Run from the config-only boot disk. Loading the
+KoiPondECS started with Run from the free boot disk (then `config-only`). Loading the
 game over the emulated serial line takes about two and a half minutes.
 
 To mount an image:
@@ -246,7 +246,7 @@ Kickstart 1.3 this is the only reliable check, because `Execute()` does not
 report a command's return code.
 
 On Kickstart 1.3, `Execute()` needs `C:Run`, a Workbench file. When it cannot
-start a command (a boot disk without `Run`, such as `wb13-free`), config-nio
+start a command (a boot disk without `Run`, such as `free`), config-nio
 runs the command inside its own process, as the Shell does: it loads it from
 the command path or `C:`, runs it with its output captured, and unloads it.
 That needs a CLI, so it works when Config is started from a Shell or

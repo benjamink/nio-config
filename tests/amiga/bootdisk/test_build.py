@@ -163,7 +163,7 @@ class BootdiskTest(unittest.TestCase):
         project = {"fujinet-nio.device", "fujinet-disk.device",
                    "fujinet-serial.device", "fujinet-nio-serial",
                    "fujinet-load-resident", "fmount", "fumount"}
-        for name in ("config-only", "wb13-free"):
+        for name in ("free",):
             prof = build.load_profile(name)
             self.assertTrue(prof.get("scratch"))
             self.assertNotIn("base_volume", prof)

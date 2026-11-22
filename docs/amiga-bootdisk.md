@@ -32,8 +32,7 @@ Each Workbench release is a file in `amiga/bootdisk/profiles/`:
 | --- | --- | --- |
 | `wb204` | Workbench 2.0x floppy ("Workbench2.0"), Kickstart 2.04 | built |
 | `wb13` | Workbench 1.3.3 floppy ("Workbench1.3"), Kickstart 1.3 | built; see below |
-| `config-only` | none: built from scratch, no Workbench (Kickstart 2.0+) | built; see below |
-| `wb13-free` | none: built from scratch, no Workbench (Kickstart 1.3) | built; see below |
+| `free` | none: built from scratch, no Workbench (Kickstart 1.3 and 2.0+) | built; see below |
 | `wb31`, `wb32` | | not yet written |
 
 A profile lists what to delete from the base disk to make room, lines to drop
@@ -61,15 +60,16 @@ and a few utilities (Ed, Edit, Clock, Display, More, DiskCopy and others).
 Add a Workbench release by writing a profile, then build it against a real base
 disk and check it boots on that Kickstart (Amiberry or hardware).
 
-## The freely distributable disk (`config-only`)
+## The freely distributable disk (`free`)
 
-`make amiga-bootdisk WB=config-only` needs no base disk. It builds a new floppy
-that contains only this project's own files and an original boot block, so it
-can be shared. The Kickstart ROM supplies exec, dos, intuition and graphics; the
-disk's `S/Startup-Sequence` loads the FujiNet devices, selects the FujiNet
+`make amiga-bootdisk WB=free` needs no base disk. It builds a new floppy that
+contains only this project's own files and an original boot block, so it can
+be shared. The same disk boots on every Kickstart from 1.3. The ROM supplies
+exec, dos, intuition and graphics, and its shell runs the disk's
+`S/Startup-Sequence`, which loads the FujiNet devices, selects the FujiNet
 serial driver and runs `Tools/config-nio`.
 
-A bare system differs from a Workbench one in two ways that matter here, both
+A bare system differs from a Workbench one in ways that matter here, all
 found by testing:
 
 - **Stock `serial.device` is a Workbench file** (`Devs:serial.device`), not in
@@ -81,24 +81,38 @@ found by testing:
   tool set cannot be used as built. `make amiga-bootdisk-tools` rebuilds
   `fmount`, `fumount` and `fujinet-nio-serial` against the 2.0 headers and links
   them with the libnix `nix13` runtime, as config-nio is (this uses the
-  `AMIGA_COMPILE_CRT` setting in `nio-core-apps`).
+  `AMIGA_COMPILE_CRT` setting in `nio-core-apps`). `fmount` and `fumount` pick
+  their drive model at run time: the Kickstart 1.3 drives below, or the dynamic
+  `DN0:`–`DN7:` drives on 2.0+.
+- **Kickstart 1.3 `Execute()` needs `C:Run`**, a Workbench file, so config-nio
+  runs `fmount`/`fumount` inside its own process there (see
+  `docs/amiga-config.md`). That needs Config to run from a CLI, as the disk's
+  `S/Startup-Sequence` starts it.
+- **No `RAM:` or `T:` on Kickstart 1.3** (1.3 loads `RAM:` from
+  `L:Ram-Handler`, a Workbench file). So the commands' output is not captured
+  (a failed mount shows only its return code), `FMOUNT slot 0|1` cannot
+  record its logical unit, and `FUMOUNT 0|1` asks for the drive name instead.
 
-Verified in Amiberry (Kickstart 2.04, POSIX FujiNet on the serial port): the
-disk boots, config-nio starts and lists the FujiNet's hosts. Kickstart 1.3 also
-boots the disk and starts config-nio, but the serial-driver and tool changes
-above were checked on 2.04 only.
+Verified in Amiberry with POSIX FujiNet on the serial port, using the same ADF
+on both ROMs:
+- Kickstart 1.3 (68000, OCS): Config lists the hosts. A Config SCRIPT run
+  (insert, eject, insert on `DO0:`) ends `ok=7 err=0`, `Dir DO0:` lists the
+  image, and `fumount DO0:` ejects it.
+- Kickstart 2.04 (68000, ECS): a Config SCRIPT run (insert, eject, insert on
+  `DN3:`) ends `ok=5 err=0`, `Dir DN3:` lists the image, and `fumount DN3:`
+  ejects it.
 
-Not verified, and known limits:
-- Mounting a disk image from Config on this disk (it runs `fmount`).
+Known limits:
+- On Kickstart 1.3, only the OFS drives (`DO`/`HO`) work. The FFS drives need
+  Commodore's `Mount` and `FastFileSystem`.
 - Real hardware: the disk uses `fujinet-serial.device` (8N1, Paula UART) instead
   of the stock driver.
 - `fmountrestore` is left off (a clib2 tool; saved drives are not remounted at
   boot).
-- It targets Kickstart 2.0+ (the 2.0 `fmount`); for Kickstart 1.3 use
-  `wb13-free` (below).
 - No hard-drive installer: the installer script relies on Workbench commands.
+- The boot CLI has no commands beyond those on the disk.
 
-## Kickstart 1.3 disks (`wb13`, `wb13-free`)
+## Kickstart 1.3 drives and the `wb13` disk
 
 On Kickstart 1.3 the FujiNet drives have fixed names, each with its own
 `fujinet-disk.device` unit: `DN0:`/`DN1:` (DD, FFS), `HN0:`/`HN1:` (HD, FFS),
@@ -114,28 +128,7 @@ Config, which starts with Workbench. The startup CLI stays open (no
 `EndCLI`), because on 1.3 `Execute()` from Config stalls once that CLI has
 ended.
 
-`make amiga-bootdisk WB=wb13-free` needs no base disk. Like `config-only`, it
-holds only this project's files and boots straight into Config, but with the
-Kickstart 1.3 tool set (`scripts/amiga-artifacts wb13` stages it). It loads
-`fujinet-serial.device` because the stock `serial.device` is a Workbench file.
-
-Verified in Amiberry (Kickstart 1.3, 68000, OCS): the disk boots and Config
-lists the FujiNet's hosts. From the boot CLI (after Config quits),
-`fmount 1 DO0:`, `Dir DO0:` and `fumount DO0:` work with no Commodore file on
-the disk. A Config SCRIPT run (insert, eject, insert) succeeds with
-`ok=7 err=0`, and `Dir DO0:` then lists the image.
-
-Known limits of `wb13-free`:
-- Config's Mount and Eject need Config to run from a CLI, as the disk's
-  `S/Startup-Sequence` starts it. On 1.3, `Execute()` needs `C:Run`, so
-  config-nio runs `fmount`/`fumount` inside its own process instead (see
-  `docs/amiga-config.md`). With no `RAM:`, the commands' output is not
-  captured, so a failure shows only the return code.
-- No FFS drives: `DN`/`HN` need Commodore's `Mount` and `FastFileSystem`.
-- There is no `RAM:` or `T:` (1.3 loads `RAM:` from `L:Ram-Handler`, a
-  Workbench file). So `FMOUNT slot 0|1` cannot record its logical unit, and
-  `FUMOUNT 0|1` asks for the drive name instead; name the drive (`DO0:`).
-- The boot CLI has no commands beyond those on the disk.
+For a disk with no Commodore files, use `free` (above).
 
 ### Commodore files each disk needs
 
@@ -143,5 +136,4 @@ Known limits of `wb13-free`:
 | --- | --- |
 | `wb204`, `wb13` | The whole base Workbench disk (the user's own copy) |
 | `wb13`, FujiNet part only | `C:Mount` and `L:FastFileSystem` for `DN`/`HN` drives only; `RAM:`/`T:` (from the Workbench startup) for logical-unit `FMOUNT 0\|1` |
-| `config-only` (Kickstart 2.0+) | None |
-| `wb13-free` (Kickstart 1.3) | None |
+| `free` (Kickstart 1.3 and 2.0+) | None |
