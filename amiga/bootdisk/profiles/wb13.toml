@@ -59,7 +59,13 @@ insert = [
 [[edit]]
 file = "s/Startup-Sequence"
 before = "EndCLI >NIL:"
-insert = ["Run >NIL: SYS:Tools/config-nio"]
+insert = ["Run >NIL: <NIL: SYS:Tools/config-nio"]
+
+# Keep the startup CLI open: Config runs fmount through Execute(), which hangs
+# on 1.3 once the CLI that started Config has ended.
+[[edit]]
+file = "s/Startup-Sequence"
+remove = ["EndCLI >NIL:"]
 
 # The FujiNet drive entries (DN/HN/DO/HO) join the disk's own MountList.
 [[append]]
