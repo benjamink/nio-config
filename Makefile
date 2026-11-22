@@ -99,13 +99,14 @@ test-trs80-host:
 # workspace) and CONFIG_NIO the built config-nio (make amiga).
 WB ?= wb204
 BOOTDISK_PKG_PROFILE_wb204 := wb32
+BOOTDISK_PKG_PROFILE_config-only := wb32
 BOOTDISK_OUT ?= build/amiga-bootdisk
 NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
 CONFIG_NIO ?= build/amiga/wb32/bin/config-nio
 
 amiga-bootdisk:
-	@test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
-	python3 amiga/bootdisk/build.py $(WB) --base "$(BASE_ADF)" --pkg "$(NIO_PKG)" \
+	@test "$(WB)" = config-only || test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
+	python3 amiga/bootdisk/build.py $(WB) $(if $(BASE_ADF),--base "$(BASE_ADF)") --pkg "$(NIO_PKG)" \
 		--config-nio "$(CONFIG_NIO)" --out "$(BOOTDISK_OUT)"
 
 test-amiga-bootdisk:
