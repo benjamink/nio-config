@@ -62,20 +62,36 @@ disk and check it boots on that Kickstart (Amiberry or hardware).
 ## The freely distributable disk (`config-only`)
 
 `make amiga-bootdisk WB=config-only` needs no base disk. It builds a new floppy
-that contains only this project's own files (drivers, `fmount`/`fumount`,
-config-nio) and an original boot block, so it can be shared. The Kickstart ROM
-in the Amiga supplies exec, dos, intuition and graphics; the disk's
-`S/Startup-Sequence` loads the two FujiNet devices and runs `Tools/config-nio`.
+that contains only this project's own files and an original boot block, so it
+can be shared. The Kickstart ROM supplies exec, dos, intuition and graphics; the
+disk's `S/Startup-Sequence` loads the FujiNet devices, selects the FujiNet
+serial driver and runs `Tools/config-nio`.
 
-Verified in Amiberry: it boots on Kickstart 1.3 and 2.04 with no Workbench, and
-config-nio opens (reporting "FujiNet error 1" when no FujiNet is attached).
+A bare system differs from a Workbench one in two ways that matter here, both
+found by testing:
+
+- **Stock `serial.device` is a Workbench file** (`Devs:serial.device`), not in
+  ROM, so it is missing on this disk. `fujinet-nio.device` then cannot open its
+  serial driver and Config reports "FujiNet error 1" (`FN_ERR_NOT_FOUND`). The
+  disk loads the project's own `fujinet-serial.device` and selects it with
+  `fujinet-nio-serial`.
+- **clib2 programs crash** (`#80000003`) on a bare system, so the Workbench 3.x
+  tool set cannot be used as built. `make amiga-bootdisk-tools` rebuilds
+  `fmount`, `fumount` and `fujinet-nio-serial` against the 2.0 headers and links
+  them with the libnix `nix13` runtime, as config-nio is (this uses the
+  `AMIGA_COMPILE_CRT` setting in `nio-core-apps`).
+
+Verified in Amiberry (Kickstart 2.04, POSIX FujiNet on the serial port): the
+disk boots, config-nio starts and lists the FujiNet's hosts. Kickstart 1.3 also
+boots the disk and starts config-nio, but the serial-driver and tool changes
+above were checked on 2.04 only.
 
 Not verified, and known limits:
-- config-nio with a FujiNet attached on this disk, including mounting (it runs
-  `fmount` through `SystemTags()`, which has not been shown to work without a
-  Workbench startup).
-- `fmountrestore` is left off: it crashed the bare system when no FujiNet
-  answered, so saved drives are not remounted at boot.
-- It uses the Workbench 3.x tool set (`wb32`), so it targets Kickstart 2.0+.
-  Kickstart 1.3 needs the `wb13` tool set and its own profile.
+- Mounting a disk image from Config on this disk (it runs `fmount`).
+- Real hardware: the disk uses `fujinet-serial.device` (8N1, Paula UART) instead
+  of the stock driver.
+- `fmountrestore` is left off (a clib2 tool; saved drives are not remounted at
+  boot).
+- It targets Kickstart 2.0+ (the 2.0 `fmount`); Kickstart 1.3 needs the `wb13`
+  tool set and its own profile.
 - No hard-drive installer: the installer script relies on Workbench commands.
