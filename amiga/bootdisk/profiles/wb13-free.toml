@@ -1,0 +1,54 @@
+# Freely distributable FujiNet boot floppy for Kickstart 1.3: no Workbench, no
+# Commodore or Cloanto files.  Like config-only, everything on the disk is this
+# project's own code, including the boot block, and the ROM supplies exec, dos,
+# intuition and graphics.  The difference is the tool set: fmount and fumount
+# are the Kickstart 1.3 builds (the wb13 package), and on 1.3 fmount starts the
+# OFS drives DO0:/DO1: and HO0:/HO1: itself, without C:Mount.
+#
+# The FFS drives (DN/HN) are not usable on this disk: they need Commodore's
+# Mount and L:FastFileSystem, which only the user's own Workbench disk has.
+#
+# Built from scratch, so no BASE_ADF is needed.  Config runs in the boot CLI,
+# which stays open (Execute() from Config stalls on 1.3 once its CLI ends).
+
+name = "wb13-free"
+description = "FujiNet NIO + Config boot disk, no Workbench (Kickstart 1.3, OFS drives)"
+scratch = true
+volume = "FujiNet13"
+output = "FujiNet-WB13-Free-Boot.adf"
+min_free_bytes = 65536
+dirs = ["C", "Devs", "S", "Tools"]
+config_nio_dst = "Tools/config-nio"
+
+startup_sequence = """; FujiNet NIO boot disk (Kickstart 1.3): load the drivers and run Config.
+C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
+; Stock serial.device is a Workbench file, not in ROM, and is not on this disk:
+; use the project's own Paula UART driver for the RS-232 link instead.
+C:fujinet-load-resident DEVS:fujinet-serial.device fujinet-serial.device
+C:fujinet-nio-serial fujinet-serial.device
+C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+Tools/config-nio
+"""
+
+[[package]]
+src = "fujinet-nio.device"
+dst = "Devs/fujinet-nio.device"
+[[package]]
+src = "fujinet-disk.device"
+dst = "Devs/fujinet-disk.device"
+[[package]]
+src = "fujinet-serial.device"
+dst = "Devs/fujinet-serial.device"
+[[package]]
+src = "fujinet-nio-serial"
+dst = "C/fujinet-nio-serial"
+from = "tools"
+[[package]]
+src = "fujinet-load-resident"
+dst = "C/fujinet-load-resident"
+[[package]]
+src = "fmount"
+dst = "C/fmount"
+[[package]]
+src = "fumount"
+dst = "C/fumount"
