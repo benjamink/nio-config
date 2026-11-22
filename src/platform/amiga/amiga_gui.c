@@ -9,7 +9,9 @@
 #include "amiga_drives.h"
 #include "amiga_format.h"
 #include "amiga_glyph.h"
+#include "amiga_exec.h"
 #include "amiga_help.h"
+#include "amiga_launch.h"
 #include "amiga_input.h"
 #include "amiga_layout.h"
 #include "amiga_logo.h"
@@ -74,6 +76,7 @@ enum {
   ACT_SLOT_MOUNT,
   ACT_DRIVE_EJECT,
   ACT_DRIVE_REMOUNT,
+  ACT_DRIVE_LAUNCH,
   ACT_MOUNT_COMMIT,
   ACT_MOUNT_CANCEL,
   ACT_HELP_CONTENTS,
@@ -106,7 +109,7 @@ static const gui_button_t page_buttons[AMIGA_PAGE_COUNT][AMIGA_BUTTON_COUNT] = {
     { "Clear", ACT_SLOT_CLEAR }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Eject", ACT_DRIVE_EJECT }, { "Remount", ACT_DRIVE_REMOUNT },
-    { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
+    { "Launch...", ACT_DRIVE_LAUNCH }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
     { NULL, ACT_NONE } },
   { { "Mount", ACT_MOUNT_COMMIT }, { NULL, ACT_NONE },
     { NULL, ACT_NONE }, { NULL, ACT_NONE }, { NULL, ACT_NONE },
@@ -2412,6 +2415,523 @@ static int gui_open_config(void)
   return quit;
 }
 
+
+static int gui_touch_drive(const char *name);
+
+/* ---- Launch window --------------------------------------------------------- */
+
+/* Drives > Launch: lists the drawers and programs on a mounted drive; Run
+ * starts the chosen program (with the Arguments typed) from its own drawer.
+ * Same arrangement as the Configuration window: its own window with the
+ * main one blocked, `win` pointed at it while it is open. */
+
+enum { LG_LIST = 0, LG_PROP, LG_ARGS, LG_RUN, LG_RUNX, LG_CLOSE, LG_COUNT };
+#define LAUNCH_COLS 56
+#define LAUNCH_ROWS 10
+
+typedef struct {
+  amiga_rect_t path, list, scroller, args_label, args, button[3], status;
+  int16_t width, height, row_h;
+  uint8_t rows;
+} launch_layout_t;
+
+static amiga_launch_t launch;
+static launch_layout_t ll;
+static struct Gadget launch_gad[LG_COUNT];
+static struct PropInfo launch_pi;
+static struct Image launch_knob;
+static struct StringInfo launch_si;
+static UBYTE launch_args[AMIGA_LAUNCH_ARGS_MAX + 1];
+static UBYTE launch_undo[AMIGA_LAUNCH_ARGS_MAX + 1];
+static uint8_t launch_prop_active;
+static const char *launch_note;
+static const char *const launch_labels[3] = { "Run", "Run + Exit", "Close" };
+
+static void launch_do_layout(struct Window *w)
+{
+  int16_t cw = LAUNCH_COLS * FONT_W;
+  int16_t x0 = (int16_t) (w->BorderLeft + AMIGA_LAYOUT_PAD);
+  int16_t y = (int16_t) (w->BorderTop + AMIGA_LAYOUT_PAD);
+  int16_t btn_h = FONT_H + 6;
+  int16_t str_h = layout.edit.height;
+  int16_t label_w = 10 * FONT_W;
+  int16_t bw;
+  struct Screen *scr = w->WScreen;
+  int i;
+
+  ll.row_h = FONT_H + 1;
+  ll.rows = LAUNCH_ROWS;
+  /* Shrink the list on a short screen. */
+  while (ll.rows > 4 &&
+         y + (FONT_H + 2) + AMIGA_LAYOUT_GAP + ll.rows * ll.row_h + 4 +
+           AMIGA_LAYOUT_GAP + str_h + AMIGA_LAYOUT_GAP + btn_h +
+           AMIGA_LAYOUT_GAP + FONT_H + 4 + AMIGA_LAYOUT_PAD + w->BorderBottom >
+           scr->Height)
+    ll.rows--;
+  ll.path.left = x0; ll.path.top = y; ll.path.width = cw; ll.path.height = FONT_H + 2;
+  y = (int16_t) (y + ll.path.height + AMIGA_LAYOUT_GAP);
+  ll.list.left = x0; ll.list.top = y;
+  ll.list.width = (int16_t) (cw - AMIGA_SCROLLER_W);
+  ll.list.height = (int16_t) (ll.rows * ll.row_h + 4);
+  ll.scroller.left = (int16_t) (x0 + cw - AMIGA_SCROLLER_W);
+  ll.scroller.top = y; ll.scroller.width = AMIGA_SCROLLER_W;
+  ll.scroller.height = ll.list.height;
+  y = (int16_t) (y + ll.list.height + AMIGA_LAYOUT_GAP);
+  ll.args_label.left = x0;
+  ll.args_label.top = (int16_t) (y + (str_h - FONT_H) / 2);
+  ll.args_label.width = label_w; ll.args_label.height = FONT_H;
+  ll.args.left = (int16_t) (x0 + label_w); ll.args.top = y;
+  ll.args.width = (int16_t) (cw - label_w); ll.args.height = str_h;
+  y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
+  bw = (int16_t) ((cw - 2 * AMIGA_LAYOUT_GAP) / 3);
+  for (i = 0; i < 3; i++) {
+    ll.button[i].left = (int16_t) (x0 + i * (bw + AMIGA_LAYOUT_GAP));
+    ll.button[i].top = y; ll.button[i].width = bw; ll.button[i].height = btn_h;
+  }
+  ll.button[2].width = (int16_t) (x0 + cw - ll.button[2].left);
+  y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
+  ll.status.left = x0; ll.status.top = y; ll.status.width = cw;
+  ll.status.height = FONT_H + 4;
+  y = (int16_t) (y + ll.status.height + AMIGA_LAYOUT_PAD);
+  ll.width = (int16_t) (x0 + cw + AMIGA_LAYOUT_PAD + w->BorderRight);
+  ll.height = (int16_t) (y + w->BorderBottom);
+}
+
+static amiga_rect_t launch_interior(void)
+{
+  return amiga_rect_inset(ll.list, 2, 2);
+}
+
+static uint8_t launch_cols(void)
+{
+  return (uint8_t) ((launch_interior().width - 4) / FONT_W);
+}
+
+static void launch_paint_rows(void)
+{
+  amiga_rect_t in = launch_interior();
+  uint8_t cols = launch_cols();
+  uint8_t r;
+
+  for (r = 0; r < ll.rows; r++) {
+    amiga_rect_t row;
+    uint16_t idx = (uint16_t) (launch.list.top + r);
+    int selected = idx == launch.list.selected;
+
+    row.left = in.left; row.top = (int16_t) (in.top + r * ll.row_h);
+    row.width = in.width; row.height = ll.row_h;
+    if (idx >= launch.list.count) {
+      fill(&row, theme.background);
+      continue;
+    }
+    fill(&row, selected ? theme.fill : theme.background);
+    if (amiga_launch_row_is_parent(&launch, idx)) {
+      strcpy(tmp_text, " ../  (parent)");
+    } else {
+      const amiga_launch_entry_t *e = amiga_launch_row_entry(&launch, idx);
+
+      amiga_sprintf(tmp_text, e->is_dir ? " %s/" : " %s", e->name);
+    }
+    text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
+            cols, selected ? theme.filltext : theme.text);
+  }
+}
+
+static void launch_update_prop(void)
+{
+  uint16_t pot;
+  uint16_t body;
+
+  amiga_list_prop(&launch.list, &pot, &body);
+  NewModifyProp(&launch_gad[LG_PROP], win, NULL, launch_pi.Flags, 0, pot,
+                MAXBODY, body, 1);
+}
+
+static void launch_paint_head(void)
+{
+  uint8_t cols = (uint8_t) (ll.path.width / FONT_W);
+
+  fill(&ll.path, theme.background);
+  amiga_clip_head(tmp_text, sizeof(tmp_text), launch.path, cols);
+  text_at(ll.path.left, (WORD) (ll.path.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.highlight);
+}
+
+static void launch_paint_status(void)
+{
+  amiga_rect_t in = amiga_rect_inset(ll.status, 2, 1);
+  uint8_t cols = (uint8_t) ((in.width - 8) / FONT_W);
+
+  fill(&in, theme.background);
+  bevel(&ll.status, 1);
+  amiga_clip_head(tmp_text, sizeof(tmp_text), launch_note ? launch_note : "",
+                  cols);
+  text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.text);
+}
+
+static void launch_set_note(const char *note)
+{
+  launch_note = note;
+  launch_paint_status();
+}
+
+/* What to tell the user about the folder just read. */
+static const char *launch_summary(void)
+{
+  if (launch.truncated)
+    return "Only the first entries are shown";
+  if (!amiga_launch_rows(&launch))
+    return "No programs on this disk";
+  if (launch.count == 0 || launch.entries[launch.count - 1].is_dir)
+    return "No programs here; open a drawer";
+  return "Select a program and press Run";
+}
+
+static void launch_paint(void)
+{
+  amiga_rect_t inner;
+  int i;
+
+  inner.left = (int16_t) win->BorderLeft;
+  inner.top = (int16_t) win->BorderTop;
+  inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
+  inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
+  fill(&inner, theme.background);
+  launch_paint_head();
+  bevel(&ll.list, 1);
+  launch_paint_rows();
+  text_at(ll.args_label.left, ll.args_label.top, "Arguments", 9, theme.text);
+  bevel(&ll.args, 1);
+  for (i = 0; i < 3; i++) {
+    amiga_rect_t in = amiga_rect_inset(ll.button[i], 2, 1);
+
+    fill(&in, theme.background);
+    bevel(&ll.button[i], 0);
+    text_centred(&ll.button[i], launch_labels[i], theme.text);
+  }
+  launch_paint_status();
+  RefreshGadgets(win->FirstGadget, win, NULL);
+  launch_update_prop();
+}
+
+static void launch_make_gadget(uint8_t id, amiga_rect_t r, UWORD flags,
+                               UWORD activation, UWORD type)
+{
+  struct Gadget *g = &launch_gad[id];
+
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left; g->TopEdge = r.top;
+  g->Width = r.width; g->Height = r.height;
+  g->Flags = flags; g->Activation = activation;
+  g->GadgetType = type; g->GadgetID = id;
+  if (id > 0)
+    launch_gad[id - 1].NextGadget = g;
+}
+
+static void launch_make_gadgets(void)
+{
+  int i;
+
+  launch_make_gadget(LG_LIST, launch_interior(), GADGHNONE, GADGIMMEDIATE,
+                     BOOLGADGET);
+  memset(&launch_pi, 0, sizeof(launch_pi));
+  launch_pi.Flags = (UWORD) (AUTOKNOB | FREEVERT | (new_look ? PROPNEWLOOK : 0));
+  launch_pi.HorizBody = MAXBODY;
+  launch_pi.VertBody = MAXBODY;
+  launch_make_gadget(LG_PROP, ll.scroller, GADGHNONE,
+                     GADGIMMEDIATE | RELVERIFY | FOLLOWMOUSE, PROPGADGET);
+  launch_gad[LG_PROP].GadgetRender = (APTR) &launch_knob;
+  launch_gad[LG_PROP].SpecialInfo = (APTR) &launch_pi;
+  memset(&launch_si, 0, sizeof(launch_si));
+  launch_si.Buffer = launch_args;
+  launch_si.UndoBuffer = launch_undo;
+  launch_si.MaxChars = sizeof(launch_args);
+  launch_make_gadget(LG_ARGS, amiga_rect_inset(ll.args, 4, 3), GADGHCOMP,
+                     RELVERIFY, STRGADGET);
+  launch_gad[LG_ARGS].SpecialInfo = (APTR) &launch_si;
+  for (i = 0; i < 3; i++)
+    launch_make_gadget((uint8_t) (LG_RUN + i), ll.button[i], GADGHCOMP,
+                       RELVERIFY, BOOLGADGET);
+}
+
+static void launch_select(uint16_t index)
+{
+  amiga_list_select(&launch.list, index);
+  launch_paint_rows();
+  launch_update_prop();
+}
+
+/* The list changed folder. */
+static void launch_refresh(void)
+{
+  launch_paint_head();
+  launch_paint_rows();
+  launch_update_prop();
+  launch_set_note(launch.error ? launch.error : launch_summary());
+}
+
+/* Runs the selected program.  Returns 1 when Config should quit. */
+static int launch_run(int and_exit)
+{
+  static char cmd[AMIGA_LAUNCH_CMD_MAX];
+  uint16_t row = launch.list.selected;
+  int rc;
+
+  if (row == AMIGA_LIST_NONE || !amiga_launch_row_entry(&launch, row) ||
+      amiga_launch_row_entry(&launch, row)->is_dir) {
+    launch_set_note("Select a program first");
+    return 0;
+  }
+  if (!amiga_launch_command(&launch, row, (const char *) launch_args, cmd,
+                            sizeof(cmd))) {
+    launch_set_note("That command is too long");
+    return 0;
+  }
+  busy_begin();
+  rc = amiga_exec_run(launch.path, cmd, and_exit);
+  busy_end();
+  if (and_exit && rc == 0)
+    return 1;
+  if (and_exit) {
+    launch_set_note("Could not start the program");
+    return 0;
+  }
+  if (rc == 0) {
+    launch_set_note("Program finished");
+  } else {
+    /* Config stays in memory while the program runs; Run + Exit frees it. */
+    amiga_sprintf(tmp_text, "Ended with code %d; Run + Exit frees memory", rc);
+    launch_set_note(tmp_text);
+  }
+  return 0;
+}
+
+/* Return / double-click on a row: open drawers, run programs.
+ * Returns 1 when Config should quit. */
+static int launch_activate(uint16_t row)
+{
+  int what = amiga_launch_activate(&launch, row);
+
+  if (what == AMIGA_LAUNCH_PROGRAM)
+    return launch_run(0);
+  if (what == AMIGA_LAUNCH_ENTERED || launch.error)
+    launch_refresh();
+  return 0;
+}
+
+/* Run + Exit started its program from Return/double-click: quit Config. */
+static uint8_t launch_quit_req;
+static ULONG launch_last_secs, launch_last_micros;
+static uint16_t launch_last_index = AMIGA_LIST_NONE;
+
+static void launch_list_click(struct IntuiMessage *msg)
+{
+  amiga_rect_t in = launch_interior();
+  uint16_t index;
+
+  if (!amiga_list_hit(&launch.list, (int16_t) (msg->MouseY - in.top), ll.row_h,
+                      &index))
+    return;
+  if (index == launch_last_index &&
+      DoubleClick(launch_last_secs, launch_last_micros, msg->Seconds,
+                  msg->Micros)) {
+    launch_last_index = AMIGA_LIST_NONE;
+    launch_select(index);
+    (void) launch_activate(index);   /* a double-click never exits */
+    return;
+  }
+  launch_last_index = index;
+  launch_last_secs = msg->Seconds;
+  launch_last_micros = msg->Micros;
+  launch_select(index);
+}
+
+/* Returns 1 to close the window; *quit is set to quit Config too. */
+static int launch_handle_key(UWORD code, UWORD qualifier, int *quit)
+{
+  amiga_list_t *l = &launch.list;
+  amiga_key_t key = amiga_key_from_raw(code, qualifier);
+
+  switch (key) {
+  case AMIGA_KEY_UP: amiga_list_move(l, -1); break;
+  case AMIGA_KEY_DOWN: amiga_list_move(l, 1); break;
+  case AMIGA_KEY_PAGE_UP: amiga_list_move(l, (int16_t) -ll.rows); break;
+  case AMIGA_KEY_PAGE_DOWN: amiga_list_move(l, (int16_t) ll.rows); break;
+  case AMIGA_KEY_TOP: amiga_list_move(l, (int16_t) -l->count); break;
+  case AMIGA_KEY_BOTTOM: amiga_list_move(l, (int16_t) l->count); break;
+  case AMIGA_KEY_PARENT:
+    if (amiga_launch_parent(&launch))
+      launch_refresh();
+    return 0;
+  case AMIGA_KEY_ACTIVATE:
+    if (l->selected == AMIGA_LIST_NONE)
+      return 0;
+    /* Shift+Return is Run + Exit; a drawer still just opens. */
+    if ((qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) &&
+        amiga_launch_row_entry(&launch, l->selected) &&
+        !amiga_launch_row_entry(&launch, l->selected)->is_dir)
+      *quit = launch_run(1);
+    else
+      *quit = launch_activate(l->selected);
+    return *quit;
+  case AMIGA_KEY_CANCEL:
+    return 1;
+  default:
+    return 0;
+  }
+  launch_select(l->selected == AMIGA_LIST_NONE ? 0 : l->selected);
+  return 0;
+}
+
+/* Returns 1 to close the window; *quit is set to quit Config too. */
+static int launch_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
+                                int down, int *quit)
+{
+  UWORD id = g->GadgetID;
+
+  if (id == LG_PROP) {
+    launch_prop_active = (uint8_t) down;
+    amiga_list_set_top_from_pot(&launch.list, launch_pi.VertPot);
+    launch_paint_rows();
+    return 0;
+  }
+  if (id == LG_LIST) {
+    if (down)
+      launch_list_click(msg);
+    return 0;
+  }
+  if (down)
+    return 0;
+  switch (id) {
+  case LG_ARGS:   /* Return in Arguments runs the selected program */
+    *quit = launch_run(0);
+    return *quit;
+  case LG_RUN:
+    *quit = launch_run(0);
+    return *quit;
+  case LG_RUNX:
+    *quit = launch_run(1);
+    return *quit;
+  case LG_CLOSE:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+/* Opens the Launch window for the selected drive.  Returns 1 when Config
+ * should quit (Run + Exit started its program). */
+static int gui_open_launch(void)
+{
+  static struct Requester main_block;
+  struct Window *main_win = win;
+  struct Window *lw;
+  struct NewWindow nw;
+  struct Screen *scr = main_win->WScreen;
+  char name[8];
+  int quit = 0;
+  int done = 0;
+
+  if (gctl->drives.selected == AMIGA_LIST_NONE ||
+      !amiga_ctl_drive_window_name(gctl, (uint8_t) gctl->drives.selected, name,
+                                   sizeof(name))) {
+    gui_paint_status();
+    return 0;
+  }
+  amiga_launch_init(&launch, LAUNCH_ROWS, amiga_launch_dos_scan, NULL);
+  busy_begin();
+  (void) gui_touch_drive(name);   /* starts the drive's filesystem */
+  if (!amiga_launch_open(&launch, name)) {
+    busy_end();
+    amiga_sprintf(tmp_text, "%s: %s", name,
+                  launch.error ? launch.error : "cannot read the drive");
+    config_nio_set_status(gctl->state, tmp_text);
+    gui_paint_status();
+    return 0;
+  }
+  busy_end();
+
+  launch_do_layout(main_win);
+  amiga_list_set_rows(&launch.list, ll.rows);
+  launch_make_gadgets();
+  memset(launch_args, 0, sizeof(launch_args));
+  memset(launch_undo, 0, sizeof(launch_undo));
+  launch_prop_active = 0;
+  launch_last_index = AMIGA_LIST_NONE;
+  launch_note = launch.error ? launch.error : launch_summary();
+
+  memset(&nw, 0, sizeof(nw));
+  nw.Width = ll.width;
+  nw.Height = ll.height;
+  nw.LeftEdge = (WORD) (main_win->LeftEdge + (main_win->Width - nw.Width) / 2);
+  nw.TopEdge = (WORD) (main_win->TopEdge + (main_win->Height - nw.Height) / 2);
+  if (nw.LeftEdge + nw.Width > scr->Width)
+    nw.LeftEdge = (WORD) (scr->Width - nw.Width);
+  if (nw.TopEdge + nw.Height > scr->Height)
+    nw.TopEdge = (WORD) (scr->Height - nw.Height);
+  if (nw.LeftEdge < 0)
+    nw.LeftEdge = 0;
+  if (nw.TopEdge < 0)
+    nw.TopEdge = 0;
+  nw.DetailPen = (UBYTE) -1;
+  nw.BlockPen = (UBYTE) -1;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | GADGETDOWN | MOUSEMOVE | RAWKEY;
+  nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
+             SMART_REFRESH | NOCAREREFRESH;
+  nw.FirstGadget = &launch_gad[0];
+  amiga_sprintf(tmp_text, "Launch from %s", name);
+  nw.Title = (UBYTE *) tmp_text;
+  nw.Type = WBENCHSCREEN;
+
+  InitRequester(&main_block);
+  (void) Request(&main_block, main_win);
+  lw = OpenWindow(&nw);
+  if (!lw) {
+    EndRequest(&main_block, main_win);
+    config_nio_set_status(gctl->state, "Unable to open the Launch window");
+    gui_paint_status();
+    return 0;
+  }
+  if (font)
+    SetFont(lw->RPort, font);
+  win = lw;
+  launch_paint();
+
+  while (!done) {
+    struct IntuiMessage *msg;
+
+    WaitPort(lw->UserPort);
+    while ((msg = (struct IntuiMessage *) GetMsg(lw->UserPort)) != NULL) {
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      struct Gadget *g = (struct Gadget *) msg->IAddress;
+      struct IntuiMessage copy = *msg;
+
+      ReplyMsg((struct Message *) msg);
+      if (done)
+        continue;
+      if (cls == CLOSEWINDOW)
+        done = 1;
+      else if (cls == GADGETDOWN)
+        done = launch_handle_gadget(g, &copy, 1, &quit);
+      else if (cls == GADGETUP)
+        done = launch_handle_gadget(g, &copy, 0, &quit);
+      else if (cls == MOUSEMOVE && launch_prop_active) {
+        amiga_list_set_top_from_pot(&launch.list, launch_pi.VertPot);
+        launch_paint_rows();
+      } else if (cls == RAWKEY)
+        done = launch_handle_key(code, qual, &quit);
+    }
+  }
+  win = main_win;
+  CloseWindow(lw);
+  EndRequest(&main_block, main_win);
+  gui_paint_status();
+  return quit;
+}
+
 /* ---- Actions ------------------------------------------------------------- */
 
 /* Destructive actions ask first, before the window is marked busy. */
@@ -2581,11 +3101,30 @@ static void gui_do_action(uint8_t action)
  * Locking the root starts it, as inserting a floppy would. */
 static int gui_touch_drive(const char *name)
 {
-  BPTR lock = Lock((CONST_STRPTR) name, SHARED_LOCK);
+  struct Process *me = (struct Process *) FindTask(NULL);
+  APTR old_window = me->pr_WindowPtr;
+  BPTR lock;
 
+  /* A volume DOS has not validated yet would raise a "Please insert
+   * volume" requester that nothing else answers; fail quietly instead. */
+  me->pr_WindowPtr = (APTR) -1;
+  lock = Lock((CONST_STRPTR) name, SHARED_LOCK);
+  me->pr_WindowPtr = old_window;
   if (!lock)
     return 0;
   UnLock(lock);
+  return 1;
+}
+
+/* Only workbench.library V44 (Workbench 3.5) and later can open a drive's
+ * window; without it Return on a drive opens the Launch window instead. */
+static int gui_have_drive_windows(void)
+{
+  struct Library *wb = OpenLibrary((CONST_STRPTR) "workbench.library", 44);
+
+  if (!wb)
+    return 0;
+  CloseLibrary(wb);
   return 1;
 }
 
@@ -2678,8 +3217,10 @@ static void gui_activate(void)
         amiga_ctl_drive_state(gctl, (uint8_t) gctl->drives.selected) ==
           AMIGA_DRIVE_SAVED)
       gui_do_action(ACT_DRIVE_REMOUNT);
-    else
+    else if (gui_have_drive_windows())
       gui_open_drive_window();
+    else if (gui_open_launch())
+      launch_quit_req = 1;
     break;
   default:
     break;
@@ -2874,6 +3415,8 @@ static int gui_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
   } else if (id >= GID_BTN0 && id < GID_COUNT) {
     uint8_t action = page_buttons[gctl->page][id - GID_BTN0].action;
 
+    if (action == ACT_DRIVE_LAUNCH)
+      return gui_open_launch();
     if (action != ACT_NONE)
       gui_do_action(action);
   } else if (id == GID_RO) {
@@ -3302,6 +3845,8 @@ int amiga_gui_run(amiga_ctl_t *ctl, const amiga_options_t *opts)
         done |= gui_handle_key(code, qual, copy.Seconds, copy.Micros);
       else if (cls == MENUPICK)
         done |= gui_handle_menu(code);
+      if (launch_quit_req)
+        done = 1;
     }
   }
   gui_close();
