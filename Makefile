@@ -100,8 +100,7 @@ test-trs80-host:
 WB ?= wb204
 BOOTDISK_PKG_PROFILE_wb204 := wb32
 BOOTDISK_PKG_PROFILE_wb13 := wb13
-BOOTDISK_PKG_PROFILE_config-only := wb32
-BOOTDISK_PKG_PROFILE_wb13-free := wb13
+BOOTDISK_PKG_PROFILE_free := wb32
 BOOTDISK_OUT ?= build/amiga-bootdisk
 NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
 CONFIG_NIO ?= build/amiga/$(BOOTDISK_PKG_PROFILE_$(WB))/bin/config-nio
@@ -115,7 +114,7 @@ DRIVER_BUILD ?= $(DRIVER_DIR)/build/amiga/wb32
 FUJINET_NIO_LIB_DIR ?= $(NIO_WORKSPACE)/repos/fujinet-nio-lib
 
 # Profiles built from scratch (no BASE_ADF); they use the bare-system tools.
-BOOTDISK_SCRATCH := config-only wb13-free
+BOOTDISK_SCRATCH := free
 
 amiga-bootdisk-tools:
 	$(MAKE) -C "$(CORE_APPS_DIR)" -f makefiles/build.mk TARGET=amiga \
