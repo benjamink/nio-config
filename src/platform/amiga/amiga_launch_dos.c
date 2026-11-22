@@ -26,6 +26,13 @@ static int has_hunk_header(const char *path)
           b[3]) == HUNK_HEADER_MAGIC;
 }
 
+static LONG last_error;
+
+long amiga_launch_dos_error(void)
+{
+  return (long) last_error;
+}
+
 int amiga_launch_dos_scan(const char *path, amiga_launch_entry_t *out,
                           uint16_t max, uint16_t *count, void *ctx)
 {
@@ -49,9 +56,11 @@ int amiga_launch_dos_scan(const char *path, amiga_launch_entry_t *out,
   /* No "Please insert volume" requester for a drive that is not there. */
   me->pr_WindowPtr = (APTR) -1;
   lock = Lock((CONST_STRPTR) path, ACCESS_READ);
+  last_error = lock ? 0 : IoErr();
   me->pr_WindowPtr = old_window;
   if (lock && Examine(lock, fib)) {
     ok = 1;
+    last_error = 0;
     while (n < max && ExNext(lock, fib)) {
       amiga_launch_entry_t *e = &out[n];
       size_t len = strlen((const char *) fib->fib_FileName);
@@ -77,6 +86,8 @@ int amiga_launch_dos_scan(const char *path, amiga_launch_entry_t *out,
     if (n < max && IoErr() != ERROR_NO_MORE_ENTRIES)
       ok = 0;
   }
+  else if (lock)
+    last_error = IoErr();
   if (lock)
     UnLock(lock);
   FreeMem(fib, sizeof(*fib));
