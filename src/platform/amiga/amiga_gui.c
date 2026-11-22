@@ -2432,12 +2432,13 @@ static int gui_touch_drive(const char *name);
  * Same arrangement as the Configuration window: its own window with the
  * main one blocked, `win` pointed at it while it is open. */
 
-enum { LG_LIST = 0, LG_PROP, LG_ARGS, LG_RUN, LG_RUNX, LG_CLOSE, LG_COUNT };
+enum { LG_LIST = 0, LG_PROP, LG_ARGS, LG_RUN, LG_CLOSE, LG_COUNT };
+#define LAUNCH_BUTTONS 2
 #define LAUNCH_COLS 56
 #define LAUNCH_ROWS 10
 
 typedef struct {
-  amiga_rect_t path, list, scroller, args_label, args, button[3], status;
+  amiga_rect_t path, list, scroller, args_label, args, button[LAUNCH_BUTTONS], status;
   int16_t width, height, row_h;
   uint8_t rows;
 } launch_layout_t;
@@ -2452,7 +2453,7 @@ static UBYTE launch_args[AMIGA_LAUNCH_ARGS_MAX + 1];
 static UBYTE launch_undo[AMIGA_LAUNCH_ARGS_MAX + 1];
 static uint8_t launch_prop_active;
 static const char *launch_note;
-static const char *const launch_labels[3] = { "Run", "Run + Exit", "Close" };
+static const char *const launch_labels[LAUNCH_BUTTONS] = { "Run", "Close" };
 
 static void launch_do_layout(struct Window *w)
 {
@@ -2490,12 +2491,14 @@ static void launch_do_layout(struct Window *w)
   ll.args.left = (int16_t) (x0 + label_w); ll.args.top = y;
   ll.args.width = (int16_t) (cw - label_w); ll.args.height = str_h;
   y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
-  bw = (int16_t) ((cw - 2 * AMIGA_LAYOUT_GAP) / 3);
-  for (i = 0; i < 3; i++) {
+  bw = (int16_t) ((cw - (LAUNCH_BUTTONS - 1) * AMIGA_LAYOUT_GAP) /
+                  LAUNCH_BUTTONS);
+  for (i = 0; i < LAUNCH_BUTTONS; i++) {
     ll.button[i].left = (int16_t) (x0 + i * (bw + AMIGA_LAYOUT_GAP));
     ll.button[i].top = y; ll.button[i].width = bw; ll.button[i].height = btn_h;
   }
-  ll.button[2].width = (int16_t) (x0 + cw - ll.button[2].left);
+  ll.button[LAUNCH_BUTTONS - 1].width =
+    (int16_t) (x0 + cw - ll.button[LAUNCH_BUTTONS - 1].left);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   ll.status.left = x0; ll.status.top = y; ll.status.width = cw;
   ll.status.height = FONT_H + 4;
@@ -2610,7 +2613,7 @@ static void launch_paint(void)
   launch_paint_rows();
   text_at(ll.args_label.left, ll.args_label.top, "Arguments", 9, theme.text);
   bevel(&ll.args, 1);
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < LAUNCH_BUTTONS; i++) {
     amiga_rect_t in = amiga_rect_inset(ll.button[i], 2, 1);
 
     fill(&in, theme.background);
@@ -2657,7 +2660,7 @@ static void launch_make_gadgets(void)
   launch_make_gadget(LG_ARGS, amiga_rect_inset(ll.args, 4, 3), GADGHCOMP,
                      RELVERIFY, STRGADGET);
   launch_gad[LG_ARGS].SpecialInfo = (APTR) &launch_si;
-  for (i = 0; i < 3; i++)
+  for (i = 0; i < LAUNCH_BUTTONS; i++)
     launch_make_gadget((uint8_t) (LG_RUN + i), ll.button[i], GADGHCOMP,
                        RELVERIFY, BOOLGADGET);
 }
@@ -2678,15 +2681,38 @@ static void launch_refresh(void)
   launch_set_note(launch.error ? launch.error : launch_summary());
 }
 
-/* Runs the selected program.  Returns 1 when Config should quit. */
-static int launch_run(int and_exit)
+/* The console Config leaves behind: clear it and say plainly what is
+ * happening, so the wait does not look like a hang.  "\f" clears an
+ * AmigaDOS console; CSI 1m / 0m switch bold on and off. */
+static void launch_console_notice(const char *name)
+{
+  static char msg[200];
+  BPTR con = Output();
+
+  if (!con)
+    return;
+  amiga_sprintf(msg,
+                "\f\n  \x9b" "1mFujiNet: loading %s\x9b" "0m\n\n"
+                "  Reading the program from the disk image over the\n"
+                "  FujiNet. This can take a few minutes, and nothing else\n"
+                "  will appear until it starts. Please wait...\n\n"
+                "  (Run Tools/config-nio to come back to Config.)\n",
+                name);
+  (void) Write(con, msg, (LONG) strlen(msg));
+}
+
+/* Runs the selected program and quits Config, freeing its memory for the
+ * program (Kickstart 1.3 runs it first, then quits).  Returns 1 when
+ * Config should quit. */
+static int launch_run(void)
 {
   static char cmd[AMIGA_LAUNCH_CMD_MAX];
   uint16_t row = launch.list.selected;
+  const amiga_launch_entry_t *e = row == AMIGA_LIST_NONE
+    ? NULL : amiga_launch_row_entry(&launch, row);
   int rc;
 
-  if (row == AMIGA_LIST_NONE || !amiga_launch_row_entry(&launch, row) ||
-      amiga_launch_row_entry(&launch, row)->is_dir) {
+  if (!e || e->is_dir) {
     launch_set_note("Select a program first");
     return 0;
   }
@@ -2695,37 +2721,15 @@ static int launch_run(int and_exit)
     launch_set_note("That command is too long");
     return 0;
   }
-  /* Loading from a floppy image can take minutes with nothing else to
-   * show: say so in the window, and on the console Config leaves behind. */
-  amiga_sprintf(tmp_text, "Loading %s... this can take a while",
-                amiga_launch_row_entry(&launch, row)->name);
+  amiga_sprintf(tmp_text, "Loading %s... this can take a while", e->name);
   launch_set_note(tmp_text);
-  if (and_exit) {
-    BPTR con = Output();
-    static char msg[96];
-
-    if (con) {
-      amiga_sprintf(msg, "Loading %s... please wait\n",
-                    amiga_launch_row_entry(&launch, row)->name);
-      (void) Write(con, msg, (LONG) strlen(msg));
-    }
-  }
+  launch_console_notice(e->name);
   busy_begin();
-  rc = amiga_exec_run(launch.path, cmd, and_exit);
+  rc = amiga_exec_run(launch.path, cmd, 1);
   busy_end();
-  if (and_exit && rc == 0)
+  if (rc == 0)
     return 1;
-  if (and_exit) {
-    launch_set_note("Could not start the program");
-    return 0;
-  }
-  if (rc == 0) {
-    launch_set_note("Program finished");
-  } else {
-    /* Config stays in memory while the program runs; Run + Exit frees it. */
-    amiga_sprintf(tmp_text, "Ended with code %d; Run + Exit frees memory", rc);
-    launch_set_note(tmp_text);
-  }
+  launch_set_note("Could not start the program");
   return 0;
 }
 
@@ -2736,37 +2740,37 @@ static int launch_activate(uint16_t row)
   int what = amiga_launch_activate(&launch, row);
 
   if (what == AMIGA_LAUNCH_PROGRAM)
-    return launch_run(0);
+    return launch_run();
   if (what == AMIGA_LAUNCH_ENTERED || launch.error)
     launch_refresh();
   return 0;
 }
 
-/* Run + Exit started its program from Return/double-click: quit Config. */
+/* Run started its program from Return/double-click: quit Config. */
 static uint8_t launch_quit_req;
 static ULONG launch_last_secs, launch_last_micros;
 static uint16_t launch_last_index = AMIGA_LIST_NONE;
 
-static void launch_list_click(struct IntuiMessage *msg)
+static int launch_list_click(struct IntuiMessage *msg)
 {
   amiga_rect_t in = launch_interior();
   uint16_t index;
 
   if (!amiga_list_hit(&launch.list, (int16_t) (msg->MouseY - in.top), ll.row_h,
                       &index))
-    return;
+    return 0;
   if (index == launch_last_index &&
       DoubleClick(launch_last_secs, launch_last_micros, msg->Seconds,
                   msg->Micros)) {
     launch_last_index = AMIGA_LIST_NONE;
     launch_select(index);
-    (void) launch_activate(index);   /* a double-click never exits */
-    return;
+    return launch_activate(index);
   }
   launch_last_index = index;
   launch_last_secs = msg->Seconds;
   launch_last_micros = msg->Micros;
   launch_select(index);
+  return 0;
 }
 
 /* Returns 1 to close the window; *quit is set to quit Config too. */
@@ -2789,13 +2793,7 @@ static int launch_handle_key(UWORD code, UWORD qualifier, int *quit)
   case AMIGA_KEY_ACTIVATE:
     if (l->selected == AMIGA_LIST_NONE)
       return 0;
-    /* Shift+Return is Run + Exit; a drawer still just opens. */
-    if ((qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) &&
-        amiga_launch_row_entry(&launch, l->selected) &&
-        !amiga_launch_row_entry(&launch, l->selected)->is_dir)
-      *quit = launch_run(1);
-    else
-      *quit = launch_activate(l->selected);
+    *quit = launch_activate(l->selected);
     return *quit;
   case AMIGA_KEY_CANCEL:
     return 1;
@@ -2820,20 +2818,15 @@ static int launch_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
   }
   if (id == LG_LIST) {
     if (down)
-      launch_list_click(msg);
-    return 0;
+      *quit = launch_list_click(msg);
+    return *quit;
   }
   if (down)
     return 0;
   switch (id) {
   case LG_ARGS:   /* Return in Arguments runs the selected program */
-    *quit = launch_run(0);
-    return *quit;
   case LG_RUN:
-    *quit = launch_run(0);
-    return *quit;
-  case LG_RUNX:
-    *quit = launch_run(1);
+    *quit = launch_run();
     return *quit;
   case LG_CLOSE:
     return 1;
@@ -2843,7 +2836,7 @@ static int launch_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
 }
 
 /* Opens the Launch window for the selected drive.  Returns 1 when Config
- * should quit (Run + Exit started its program). */
+ * should quit (Run started its program). */
 static int gui_open_launch(void)
 {
   static struct Requester main_block;
