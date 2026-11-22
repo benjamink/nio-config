@@ -92,6 +92,7 @@ typedef struct {
   amiga_list_t slots;      /* all 256 slots, for the Catalogue prompt */
   amiga_list_t drives;
   uint8_t browse_host;
+  uint8_t browse_resume;   /* a reload dropped the listing; re-read on show */
   uint8_t browse_open;
   /* Browse keeps a window of state->entries, starting at entry browse_base of
    * the sorted folder, and loads another window when a row falls outside it.

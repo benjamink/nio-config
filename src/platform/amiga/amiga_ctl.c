@@ -710,7 +710,10 @@ int amiga_ctl_reload(amiga_ctl_t *ctl)
     return 0;
   }
   strcpy(s->browse_path, path);
-  /* config_nio_load() clears the directory listing; Browse re-reads it. */
+  /* config_nio_load() clears the directory listing; Browse re-reads it
+   * (same host and path) when next shown. */
+  if (ctl->browse_open)
+    ctl->browse_resume = 1;
   ctl->browse_open = 0;
   amiga_list_set_count(&ctl->entries, 0);
   amiga_list_set_count(&ctl->hosts, s->host_count);
@@ -1150,7 +1153,6 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
   const config_nio_slot_t *s;
   const char *label;
   uint8_t slot;
-  uint8_t return_page = ctl->mount_return;
 
   if (ctl->mount_slot >= 0)
     slot = (uint8_t) ctl->mount_slot;
@@ -1176,7 +1178,10 @@ int amiga_ctl_mount_commit(amiga_ctl_t *ctl, uint8_t unit, uint8_t readonly)
   if (!amiga_ctl_drive_insert(ctl, unit, slot, readonly))
     return 0;
   label = amiga_drive_label(unit, ctl->kick13);
-  ctl->page = return_page;
+  /* Stay on the drives: the user decides what to do next, and Browse
+   * comes back to the same host and path. */
+  ctl->page = AMIGA_PAGE_DRIVES;
+  amiga_list_select(&ctl->drives, unit);
   amiga_sprintf(ctl->msg, "%s mounted on %s (%s, slot %u)", ctl->mount_name,
                 label, readonly ? "RO" : "RW", (unsigned) slot);
   status(ctl, ctl->msg);
