@@ -1,0 +1,69 @@
+# Bootable Workbench 2.04 floppy with the FujiNet NIO drivers and Config.
+# The base disk is Commodore's licensed Workbench 2.0 floppy (not in this
+# repository); pass it with BASE_ADF=.  The 2.04 disk has ~49 KB free, so the
+# parts of Workbench the FujiNet does not need are removed to make room.
+
+name = "wb204"
+description = "Workbench 2.04 (Kickstart 2.04, e.g. A500+)"
+base_volume = "Workbench2.0"
+# amiga-os-204-workbench.adf (Amiga Forever "Workbench2.0" disk)
+base_sha256 = "9023055f9fdc948f2f46fddd49776303cc9c1a997e86cbe927ec60d8c6ffe9ef"
+output = "FujiNet-WB204-Boot.adf"
+# Fail the build rather than ship a disk with less spare room than this.
+min_free_bytes = 4096
+
+# Paths removed from the base disk (files first; each is reported if absent).
+delete = [
+  "Devs/narrator.device", "Devs/printer.device", "L/speak-handler",
+  "Libs/translator.library", "Utilities/Say", "Utilities/Say.info",
+  "Utilities/Display", "Utilities/Display.info", "Utilities/More",
+  "Utilities/More.info", "Utilities/Clock", "Utilities/Clock.info",
+  "C/Ed", "C/Edit", "C/DiskDoctor", "C/MagTape",
+  "Prefs/Printer", "Prefs/Printer.info", "Prefs/PrinterGfx",
+  "Prefs/PrinterGfx.info", "System/DiskCopy", "System/DiskCopy.info",
+  "Libs/rexxsyslib.library", "Libs/rexxsupport.library",
+  "System/RexxMast", "System/RexxMast.info",
+]
+delete_dirs = ["Devs/Printers", "Rexxc"]
+
+# Lines removed from S/Startup-Sequence (the speech handler is gone).
+startup_remove = ["mount speak:"]
+
+# config-nio comes from CONFIG_NIO= (the built binary), plus its icons.
+config_nio_dst = "Tools/config-nio"
+tool_icon = "config-nio.info"            # from amiga/icons/, beside the tool
+desktop_file = "ConfigNIO"                # empty project file on the desktop
+desktop_icon = "FujiNet-Config.info"      # from amiga/icons/, as ConfigNIO.info
+
+# Hard-drive installer (run from the booted floppy) and its icon.
+installer = "wb204/Install-HD"
+installer_dst = "Install-HD"
+
+# S:User-Startup written to the floppy.
+user_startup = """; User-Startup: FujiNet NIO
+C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
+C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+; Remount saved FujiNet drives in the background; a FujiNet that is off or
+; unreachable cannot hold up the boot.
+Run >NIL: C:fmountrestore
+"""
+
+# Files from the NIO package directory (NIO_PKG=) copied to the disk.
+[[package]]
+src = "fujinet-nio.device"
+dst = "Devs/fujinet-nio.device"
+[[package]]
+src = "fujinet-disk.device"
+dst = "Devs/fujinet-disk.device"
+[[package]]
+src = "fujinet-load-resident"
+dst = "C/fujinet-load-resident"
+[[package]]
+src = "fmount"
+dst = "C/fmount"
+[[package]]
+src = "fumount"
+dst = "C/fumount"
+[[package]]
+src = "fmountrestore"
+dst = "C/fmountrestore"
