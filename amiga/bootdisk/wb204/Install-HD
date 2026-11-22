@@ -1,0 +1,99 @@
+.KEY TO
+.BRA {
+.KET }
+.DEF TO "DH0:"
+; Install-HD - copy the FujiNet NIO drivers and Config onto a hard drive and
+; make that drive load them at boot.  Run it from this boot floppy:
+;
+;   Execute SYS:Install-HD            installs to DH0: (asks first)
+;   Execute SYS:Install-HD DH1:       installs to another volume
+;
+; The target must be a Workbench 2.0 or later hard drive (it has Devs and S).
+; Nothing is removed; existing files of the same name are replaced.
+FailAt 21
+
+Echo "FujiNet NIO hard drive install, target {TO}"
+If NOT EXISTS "{TO}Devs"
+  Echo "{TO} has no Devs drawer, so it is not a Workbench volume."
+  Echo "Usage: Execute SYS:Install-HD <volume>:   (for example DH0:)"
+  Ask "Press Return to close"
+  Quit 10
+EndIf
+If NOT EXISTS "{TO}S"
+  Echo "{TO} has no S drawer, so it is not a Workbench volume."
+  Ask "Press Return to close"
+  Quit 10
+EndIf
+
+Ask "Install FujiNet drivers and Config onto {TO}? (y/n)"
+If NOT WARN
+  Echo "Cancelled; nothing was changed."
+  Quit 0
+EndIf
+
+Echo "Copying devices to {TO}Devs"
+Copy SYS:Devs/fujinet-nio.device "{TO}Devs/" CLONE QUIET
+Copy SYS:Devs/fujinet-disk.device "{TO}Devs/" CLONE QUIET
+If NOT EXISTS "{TO}Devs/fujinet-disk.device"
+  Echo "Could not copy the devices (disk full or write-protected?)."
+  Echo "Nothing else was changed."
+  Ask "Press Return to close"
+  Quit 20
+EndIf
+
+Echo "Copying commands to {TO}C"
+Copy SYS:C/fujinet-load-resident "{TO}C/" CLONE QUIET
+Copy SYS:C/fmount "{TO}C/" CLONE QUIET
+Copy SYS:C/fumount "{TO}C/" CLONE QUIET
+Copy SYS:C/fmountrestore "{TO}C/" CLONE QUIET
+
+Echo "Copying FujiNet Config to {TO}Tools"
+If NOT EXISTS "{TO}Tools"
+  MakeDir "{TO}Tools"
+EndIf
+Copy SYS:Tools/config-nio "{TO}Tools/" CLONE QUIET
+Copy SYS:Tools/config-nio.info "{TO}Tools/" CLONE QUIET
+
+Ask "Also put a ConfigNIO icon on the {TO} Workbench window? (y/n)"
+If WARN
+  Copy SYS:ConfigNIO "{TO}" CLONE QUIET
+  Copy SYS:ConfigNIO.info "{TO}" CLONE QUIET
+EndIf
+
+; Load the devices at every boot.  Startup-Sequence runs S:User-Startup.
+If NOT EXISTS "{TO}S/User-Startup"
+  Echo "; User-Startup" >"{TO}S/User-Startup"
+EndIf
+Set nioreboot "no"
+Search >NIL: "{TO}S/User-Startup" "DEVS:fujinet-nio.device"
+If WARN
+  Echo "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device" >>"{TO}S/User-Startup"
+EndIf
+Search >NIL: "{TO}S/User-Startup" "DEVS:fujinet-disk.device"
+If WARN
+  Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>"{TO}S/User-Startup"
+EndIf
+; Mount the saved FujiNet drives again, in the background so a FujiNet that is
+; off or unreachable cannot hold up the boot.
+Search >NIL: "{TO}S/User-Startup" "fmountrestore"
+If WARN
+  Echo "Run >NIL: C:fmountrestore" >>"{TO}S/User-Startup"
+EndIf
+
+; The stock Startup-Sequence runs S:User-Startup; a custom one may not.
+Search >NIL: "{TO}S/Startup-Sequence" "User-Startup"
+If WARN
+  Echo ""
+  Echo "WARNING: {TO}S/Startup-Sequence does not run S:User-Startup, so the"
+  Echo "FujiNet devices will not load at boot.  Add these lines to it, before"
+  Echo "the LoadWB line:"
+  Echo "  If EXISTS S:User-Startup"
+  Echo "    Execute S:User-Startup"
+  Echo "  EndIf"
+EndIf
+
+Echo ""
+Echo "Installed.  Remove the floppy and reboot from {TO} so the devices load."
+Echo "Run FujiNet Config from Tools (or the ConfigNIO icon)."
+Ask "Press Return to close"
+Quit 0

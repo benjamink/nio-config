@@ -2,7 +2,8 @@ TARGETS := msdos bbc master linux atari c64
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
 .PHONY: atari-banked all all-targets clean disk confnio-bbc-disk confnio-master-disk \
-	splash-bbc splash-bbc-disk test-amiga-host amiga regen-amiga-icons $(TARGETS)
+	splash-bbc splash-bbc-disk test-amiga-host test-amiga-bootdisk amiga amiga-bootdisk \
+	regen-amiga-icons $(TARGETS)
 
 all: $(DEFAULT_TARGET)
 
@@ -90,3 +91,22 @@ trs80:
 	$(MAKE) -C trs80 build/config.bin
 test-trs80-host:
 	$(MAKE) -C tests/trs80 test
+
+# Bootable Workbench floppy with the FujiNet drivers, Config and Install-HD.
+# Needs the user's own licensed Workbench floppy; see docs/amiga-bootdisk.md.
+#   make amiga-bootdisk WB=wb204 BASE_ADF=/path/to/workbench.adf
+# NIO_PKG is the staged package (scripts/amiga-artifacts <profile> in the
+# workspace) and CONFIG_NIO the built config-nio (make amiga).
+WB ?= wb204
+BOOTDISK_PKG_PROFILE_wb204 := wb32
+BOOTDISK_OUT ?= build/amiga-bootdisk
+NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
+CONFIG_NIO ?= build/amiga/wb32/bin/config-nio
+
+amiga-bootdisk:
+	@test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }
+	python3 amiga/bootdisk/build.py $(WB) --base "$(BASE_ADF)" --pkg "$(NIO_PKG)" \
+		--config-nio "$(CONFIG_NIO)" --out "$(BOOTDISK_OUT)"
+
+test-amiga-bootdisk:
+	python3 -I -m unittest discover -s tests/amiga/bootdisk -v
