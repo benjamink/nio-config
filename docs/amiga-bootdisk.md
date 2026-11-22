@@ -31,6 +31,7 @@ Each Workbench release is a file in `amiga/bootdisk/profiles/`:
 | Profile | Base disk | Status |
 | --- | --- | --- |
 | `wb204` | Workbench 2.0x floppy ("Workbench2.0"), Kickstart 2.04 | built |
+| `config-only` | none: built from scratch, no Workbench | built; see below |
 | `wb13`, `wb31`, `wb32` | | not yet written |
 
 A profile lists what to delete from the base disk to make room, lines to drop
@@ -57,3 +58,24 @@ and a few utilities (Ed, Edit, Clock, Display, More, DiskCopy and others).
 
 Add a Workbench release by writing a profile, then build it against a real base
 disk and check it boots on that Kickstart (Amiberry or hardware).
+
+## The freely distributable disk (`config-only`)
+
+`make amiga-bootdisk WB=config-only` needs no base disk. It builds a new floppy
+that contains only this project's own files (drivers, `fmount`/`fumount`,
+config-nio) and an original boot block, so it can be shared. The Kickstart ROM
+in the Amiga supplies exec, dos, intuition and graphics; the disk's
+`S/Startup-Sequence` loads the two FujiNet devices and runs `Tools/config-nio`.
+
+Verified in Amiberry: it boots on Kickstart 1.3 and 2.04 with no Workbench, and
+config-nio opens (reporting "FujiNet error 1" when no FujiNet is attached).
+
+Not verified, and known limits:
+- config-nio with a FujiNet attached on this disk, including mounting (it runs
+  `fmount` through `SystemTags()`, which has not been shown to work without a
+  Workbench startup).
+- `fmountrestore` is left off: it crashed the bare system when no FujiNet
+  answered, so saved drives are not remounted at boot.
+- It uses the Workbench 3.x tool set (`wb32`), so it targets Kickstart 2.0+.
+  Kickstart 1.3 needs the `wb13` tool set and its own profile.
+- No hard-drive installer: the installer script relies on Workbench commands.

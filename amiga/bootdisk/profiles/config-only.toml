@@ -1,0 +1,40 @@
+# Freely distributable FujiNet boot floppy: no Workbench, no Commodore or
+# Cloanto files.  Everything on the disk is this project's own code, including
+# the boot block.  Kickstart 2.0 or later (the Amiga's own ROM supplies exec,
+# dos, intuition and graphics): the disk boots straight to FujiNet Config,
+# using the Workbench 3.x tool set (which needs 2.0+, e.g. an A500+).
+#
+# Built from scratch, so no BASE_ADF is needed.  fmountrestore is left off: on
+# a bare system (no Workbench startup) it crashed when no FujiNet answered, so
+# saved drives are not remounted at boot; mount from Config instead.
+
+name = "config-only"
+description = "FujiNet NIO + Config boot disk, no Workbench (Kickstart 2.0+)"
+scratch = true
+volume = "FujiNet"
+output = "FujiNet-Config-Boot.adf"
+min_free_bytes = 65536
+dirs = ["C", "Devs", "S", "Tools"]
+config_nio_dst = "Tools/config-nio"
+
+startup_sequence = """; FujiNet NIO boot disk: load the drivers, restore saved drives, run Config.
+C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
+C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+Tools/config-nio
+"""
+
+[[package]]
+src = "fujinet-nio.device"
+dst = "Devs/fujinet-nio.device"
+[[package]]
+src = "fujinet-disk.device"
+dst = "Devs/fujinet-disk.device"
+[[package]]
+src = "fujinet-load-resident"
+dst = "C/fujinet-load-resident"
+[[package]]
+src = "fmount"
+dst = "C/fmount"
+[[package]]
+src = "fumount"
+dst = "C/fumount"

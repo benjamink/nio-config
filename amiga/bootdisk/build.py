@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tomllib
@@ -102,31 +103,74 @@ def make_install_icon(workdir):
     return out
 
 
+# Original boot block code (no Commodore bytes): find dos.library's resident
+# structure and return its init vector to exec's strap, which is all a DOS
+# boot block has to do.  Placed at offset 12 of the 1024-byte boot area.
+#   lea   dosname(pc),a1 ; jsr FindResident(a6) ; movea.l d0,a0
+#   movea.l RT_INIT(a0),a0 ; moveq #0,d0 ; rts ; dosname: "dos.library"
+BOOT_CODE = bytes.fromhex("43FA0010" "4EAEFFA0" "2040" "20680016" "7000" "4E75") \
+    + b"dos.library\0"
+
+
+def boot_block(fs_flag=0):
+    """A bootable 1024-byte DOS boot block (fs_flag 0 = OFS, 1 = FFS)."""
+    blk = bytearray(1024)
+    blk[0:4] = b"DOS" + bytes([fs_flag])
+    blk[8:12] = struct.pack(">L", 880)
+    blk[12:12 + len(BOOT_CODE)] = BOOT_CODE
+    total = 0
+    for i in range(0, 1024, 4):
+        total += struct.unpack(">L", blk[i:i + 4])[0]
+        if total > 0xFFFFFFFF:
+            total = (total & 0xFFFFFFFF) + 1
+    blk[4:8] = struct.pack(">L", ~total & 0xFFFFFFFF)
+    return bytes(blk)
+
+
+def create_scratch_disk(out, profile):
+    """A new formatted OFS floppy with our own boot block (no base disk)."""
+    if os.path.exists(out):
+        os.unlink(out)
+    cmds = ["create", "+", "format", profile["volume"], "ofs"]
+    for d in profile.get("dirs", []):
+        cmds += ["+", "makedir", d]
+    xdf(out, *cmds)
+    with open(out, "r+b") as f:
+        f.write(boot_block(0))
+
+
 def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
     name = profile["name"]
-    for label, path in (("base ADF", base), ("config-nio binary", config_nio)):
-        if not os.path.isfile(path):
+    scratch = bool(profile.get("scratch"))
+    checks = [("config-nio binary", config_nio)]
+    if not scratch:
+        checks.insert(0, ("base ADF", base))
+    for label, path in checks:
+        if not path or not os.path.isfile(path):
             raise BuildError(f"{label} not found: {path}")
     if not os.path.isdir(pkg):
         raise BuildError(f"NIO package directory not found: {pkg}")
 
     expected = profile.get("base_sha256")
-    if expected and sha256(base) != expected and not allow_unknown_base:
+    if not scratch and expected and sha256(base) != expected and not allow_unknown_base:
         raise BuildError(
             f"{base} is not the base disk the {name} profile was written for "
             f"(sha256 mismatch). Pass --allow-unknown-base to use it anyway.")
 
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, profile["output"])
-    shutil.copyfile(base, out)
-    os.chmod(out, 0o644)
+    if scratch:
+        create_scratch_disk(out, profile)
+    else:
+        shutil.copyfile(base, out)
+        os.chmod(out, 0o644)
     workdir = os.path.join(out_dir, f".{name}-work")
     shutil.rmtree(workdir, ignore_errors=True)
     os.makedirs(workdir)
 
     try:
         volume, entries = listing(out)
-        if volume != profile["base_volume"]:
+        if not scratch and volume != profile["base_volume"]:
             raise BuildError(f"base disk is {volume!r}, profile expects "
                              f"{profile['base_volume']!r}")
 
@@ -155,10 +199,15 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
             xdf(out, "delete", "S/Startup-Sequence")
             xdf(out, "write", seq, "S/Startup-Sequence")
 
-        user_startup = os.path.join(workdir, "User-Startup")
-        with open(user_startup, "w", encoding="latin-1", newline="") as f:
-            f.write(profile["user_startup"])
-        xdf(out, "write", user_startup, "S/User-Startup")
+        for key, dst in (("startup_sequence", "S/Startup-Sequence"),
+                         ("user_startup", "S/User-Startup")):
+            if key in profile:
+                text = os.path.join(workdir, key)
+                with open(text, "w", encoding="latin-1", newline="") as f:
+                    f.write(profile[key])
+                if dst in entries:
+                    xdf(out, "delete", dst)
+                xdf(out, "write", text, dst)
 
         def put(src, dst):
             if not os.path.isfile(src):
@@ -174,20 +223,23 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
             put(os.path.join(pkg, item["src"]), item["dst"])
         put(config_nio, profile["config_nio_dst"])
         icons = os.path.join(AMIGA_DIR, "icons")
-        put(os.path.join(icons, profile["tool_icon"]),
-            profile["config_nio_dst"] + ".info")
         empty = os.path.join(workdir, "empty")
         open(empty, "wb").close()
-        put(empty, profile["desktop_file"])
-        put(os.path.join(icons, profile["desktop_icon"]),
-            profile["desktop_file"] + ".info")
+        if profile.get("tool_icon"):
+            put(os.path.join(icons, profile["tool_icon"]),
+                profile["config_nio_dst"] + ".info")
+        if profile.get("desktop_file"):
+            put(empty, profile["desktop_file"])
+            put(os.path.join(icons, profile["desktop_icon"]),
+                profile["desktop_file"] + ".info")
         if profile.get("autostart_file"):
             put(empty, profile["autostart_file"])
             put(os.path.join(icons, profile["autostart_icon"]),
                 profile["autostart_file"] + ".info")
-        put(os.path.join(HERE, profile["installer"]), profile["installer_dst"])
-        xdf(out, "protect", profile["installer_dst"], "+s")
-        put(make_install_icon(workdir), profile["installer_dst"] + ".info")
+        if profile.get("installer"):
+            put(os.path.join(HERE, profile["installer"]), profile["installer_dst"])
+            xdf(out, "protect", profile["installer_dst"], "+s")
+            put(make_install_icon(workdir), profile["installer_dst"] + ".info")
 
         fsck = xdf(out, "fsck", capture=True)
         if "clean" not in fsck:
@@ -209,7 +261,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("profile")
-    ap.add_argument("--base", required=True, help="licensed Workbench base ADF")
+    ap.add_argument("--base", help="licensed Workbench base ADF (not needed for\n                    profiles that build from scratch)")
     ap.add_argument("--pkg", required=True, help="staged NIO package directory")
     ap.add_argument("--config-nio", required=True, help="built config-nio binary")
     ap.add_argument("--out", default="build/amiga-bootdisk", help="output directory")

@@ -128,6 +128,27 @@ class BootdiskTest(unittest.TestCase):
             self.run_build()
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "out", "Fake-Boot.adf")))
 
+    def test_boot_block_checksum_and_scratch_build(self):
+        blk = build.boot_block(0)
+        self.assertEqual(blk[:4], b"DOS\0")
+        total = 0
+        for i in range(0, 1024, 4):
+            total += int.from_bytes(blk[i:i + 4], "big")
+            if total > 0xFFFFFFFF:
+                total = (total & 0xFFFFFFFF) + 1
+        self.assertEqual(total, 0xFFFFFFFF)
+        prof = {"name": "s", "scratch": True, "volume": "Scratch", "output": "S.adf",
+                "dirs": ["C", "S", "Tools"], "config_nio_dst": "Tools/config-nio",
+                "startup_sequence": "Tools/config-nio\n", "min_free_bytes": 1024,
+                "package": [{"src": "fmount", "dst": "C/fmount"}]}
+        out, _ = build.build(prof, None, self.pkg, self.cfg,
+                             os.path.join(self.tmp, "out2"))
+        with open(out, "rb") as f:
+            self.assertEqual(f.read(1024), blk)
+        _, entries = build.listing(out)
+        for path in ("C/fmount", "Tools/config-nio", "S/Startup-Sequence"):
+            self.assertIn(path, entries)
+
     def test_real_profiles_parse(self):
         for name in ("wb204",):
             prof = build.load_profile(name)
