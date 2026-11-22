@@ -27,6 +27,8 @@ config_nio_dst = "Tools/config-nio"
 tool_icon = "config-nio.info"
 desktop_file = "ConfigNIO"
 desktop_icon = "FujiNet-Config.info"
+autostart_file = "WBStartup/FujiNet-Config"
+autostart_icon = "FujiNet-Config.info"
 installer = "wb204/Install-HD"
 installer_dst = "Install-HD"
 user_startup = "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device\\n"
@@ -55,6 +57,7 @@ class BootdiskTest(unittest.TestCase):
                 f.write(data)
         xdf(self.base, "create", "+", "format", "FakeWB", "ofs", "+", "makedir", "C",
             "+", "makedir", "Devs", "+", "makedir", "S", "+", "makedir", "Rexxc",
+            "+", "makedir", "WBStartup",
             "+", "write", os.path.join(t, "startup"), "S/Startup-Sequence",
             "+", "write", os.path.join(t, "junk"), "Devs/junk.device",
             "+", "write", os.path.join(t, "junk"), "C/Junk",
@@ -83,7 +86,8 @@ class BootdiskTest(unittest.TestCase):
         _, entries = build.listing(out)
         for path in ("Devs/fujinet-nio.device", "C/fmount", "Tools/config-nio",
                      "Tools/config-nio.info", "ConfigNIO", "ConfigNIO.info",
-                     "Install-HD", "Install-HD.info", "S/User-Startup"):
+                     "Install-HD", "Install-HD.info", "S/User-Startup",
+                     "WBStartup/FujiNet-Config", "WBStartup/FujiNet-Config.info"):
             self.assertIn(path, entries)
         for path in ("Devs/junk.device", "C/Junk", "Rexxc", "Rexxc/RX"):
             self.assertNotIn(path, entries)

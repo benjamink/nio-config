@@ -43,7 +43,9 @@ path is missing, the filesystem check is not clean, or fewer than
 
 - `Devs/fujinet-nio.device`, `Devs/fujinet-disk.device`
 - `C/fujinet-load-resident`, `C/fmount`, `C/fumount`, `C/fmountrestore`
-- `Tools/config-nio`, and a `ConfigNIO` icon on the Workbench desktop
+- `Tools/config-nio`, a `ConfigNIO` icon on the Workbench desktop, and a
+  `WBStartup/FujiNet-Config` entry so Config starts when Workbench comes up
+  (delete that file and its `.info` from `WBStartup` to stop it)
 - `S/User-Startup`: loads both devices at boot and runs `fmountrestore` in the
   background, so an absent FujiNet cannot stall the boot
 - `Install-HD` (with an icon): `Execute SYS:Install-HD [volume:]` copies the

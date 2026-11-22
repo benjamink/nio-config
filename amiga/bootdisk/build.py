@@ -181,6 +181,10 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False):
         put(empty, profile["desktop_file"])
         put(os.path.join(icons, profile["desktop_icon"]),
             profile["desktop_file"] + ".info")
+        if profile.get("autostart_file"):
+            put(empty, profile["autostart_file"])
+            put(os.path.join(icons, profile["autostart_icon"]),
+                profile["autostart_file"] + ".info")
         put(os.path.join(HERE, profile["installer"]), profile["installer_dst"])
         xdf(out, "protect", profile["installer_dst"], "+s")
         put(make_install_icon(workdir), profile["installer_dst"] + ".info")

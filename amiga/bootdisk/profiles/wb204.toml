@@ -34,6 +34,10 @@ config_nio_dst = "Tools/config-nio"
 tool_icon = "config-nio.info"            # from amiga/icons/, beside the tool
 desktop_file = "ConfigNIO"                # empty project file on the desktop
 desktop_icon = "FujiNet-Config.info"      # from amiga/icons/, as ConfigNIO.info
+# Start Config when Workbench comes up: an empty project in WBStartup whose
+# icon (default tool SYS:Tools/config-nio, DONOTWAIT) runs the installed tool.
+autostart_file = "WBStartup/FujiNet-Config"
+autostart_icon = "FujiNet-Config.info"    # from amiga/icons/
 
 # Hard-drive installer (run from the booted floppy) and its icon.
 installer = "wb204/Install-HD"
