@@ -99,10 +99,11 @@ test-trs80-host:
 # workspace) and CONFIG_NIO the built config-nio (make amiga).
 WB ?= wb204
 BOOTDISK_PKG_PROFILE_wb204 := wb32
+BOOTDISK_PKG_PROFILE_wb13 := wb13
 BOOTDISK_PKG_PROFILE_config-only := wb32
 BOOTDISK_OUT ?= build/amiga-bootdisk
 NIO_PKG ?= $(NIO_WORKSPACE)/build/amiga-artifacts/$(BOOTDISK_PKG_PROFILE_$(WB))/NIO
-CONFIG_NIO ?= build/amiga/wb32/bin/config-nio
+CONFIG_NIO ?= build/amiga/$(BOOTDISK_PKG_PROFILE_$(WB))/bin/config-nio
 
 # fmount, fumount and fujinet-nio-serial for a bare (no Workbench startup)
 # system: compiled against the 2.0 headers, linked with the nix13 runtime.
