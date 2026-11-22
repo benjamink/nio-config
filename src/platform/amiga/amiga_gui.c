@@ -2859,8 +2859,8 @@ static int gui_open_launch(void)
   (void) gui_touch_drive(name);   /* starts the drive's filesystem */
   if (!amiga_launch_open(&launch, name)) {
     busy_end();
-    amiga_sprintf(tmp_text, "%s: %s", name,
-                  launch.error ? launch.error : "cannot read the drive");
+    amiga_sprintf(tmp_text, "%s cannot be read (DOS error %ld)", name,
+                  amiga_launch_dos_error());
     config_nio_set_status(gctl->state, tmp_text);
     gui_paint_status();
     return 0;

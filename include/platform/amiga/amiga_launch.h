@@ -51,6 +51,9 @@ enum {
 int amiga_launch_dos_scan(const char *path, amiga_launch_entry_t *out,
                           uint16_t max, uint16_t *count, void *ctx);
 
+/* AmigaDOS error behind the last failed amiga_launch_dos_scan (0 if none). */
+long amiga_launch_dos_error(void);
+
 void amiga_launch_init(amiga_launch_t *l, uint8_t rows,
                        amiga_launch_scan_fn scan, void *scan_ctx);
 /* Opens a drive's root, e.g. "DN0:".  Returns 0 (with l->error) on failure. */
