@@ -90,6 +90,29 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
   drive shows its floppy half in or out with "Mounting..." or "Ejecting...". The glyphs and icons use only the screen's own pens, so
   they look right on the four-colour Workbench 1.3 screen as well as 2.x/3.x.
 
+### Launching a program from a mounted disk
+
+On the **Drives** page, select a mounted drive and press **Launch...** (or
+press Return on it when Workbench 3.5's drive windows are not available,
+which includes a boot disk without Workbench). A window lists the drawers and
+the programs on the disk; a program is any file that starts with the AmigaDOS
+executable header, so scripts, data and `.info` files are not listed.
+
+- Return or double-click opens a drawer (`..` goes back up; Backspace does
+  too) and runs a program.
+- **Arguments** is passed on the command line after the program's name.
+- **Run** starts the program from its own drawer as the current directory,
+  with no console, and waits for it: Config stays in memory meanwhile, so a
+  big program can fail (in Amiberry the same KoiPond run ended with code 20 here but started with Run + Exit; memory is the likely cause, not confirmed). **Run + Exit** (or Shift-Return)
+  quits Config first and starts the program in the background; on
+  Kickstart 1.3, which cannot do that, it runs the program and then quits (untested on 1.3).
+- The program's text output is discarded: Launch is for programs that open
+  their own screen or window.
+
+Verified in Amiberry on Kickstart 2.04: KoiPond.adf mounted on DN0: and
+KoiPondECS started with Run + Exit from the config-only boot disk. Loading the
+game over the emulated serial line takes about two and a half minutes.
+
 To mount an image:
 
 1. On **Hosts**, double-click a host.

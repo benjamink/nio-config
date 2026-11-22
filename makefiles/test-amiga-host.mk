@@ -29,7 +29,8 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_logo_data.c \
 	src/platform/amiga/amiga_splash_data.c \
 	src/platform/amiga/amiga_help.c \
-	src/platform/amiga/amiga_net.c
+	src/platform/amiga/amiga_net.c \
+	src/platform/amiga/amiga_launch.c
 PORTABLE_HOST_SRCS := \
 	src/platform/portable/config_nio_state.c \
 	src/platform/portable/config_nio_store.c \
