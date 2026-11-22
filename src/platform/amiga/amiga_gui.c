@@ -1318,6 +1318,13 @@ static void gui_set_page(uint8_t page)
   if (gctl->page == AMIGA_PAGE_HELP && page != AMIGA_PAGE_HELP)
     amiga_ctl_help_close(gctl);
   amiga_ctl_set_page(gctl, page);
+  if (gctl->page == AMIGA_PAGE_BROWSE && gctl->browse_resume &&
+      !gctl->browse_open) {
+    gctl->browse_resume = 0;
+    busy_begin();
+    (void) amiga_ctl_browse_refresh(gctl);
+    busy_end();
+  }
   if (gctl->page == AMIGA_PAGE_CATALOGUE)
     (void) amiga_ctl_catalogue_refresh(gctl);
   gui_sync_gadgets();
@@ -2687,6 +2694,21 @@ static int launch_run(int and_exit)
                             sizeof(cmd))) {
     launch_set_note("That command is too long");
     return 0;
+  }
+  /* Loading from a floppy image can take minutes with nothing else to
+   * show: say so in the window, and on the console Config leaves behind. */
+  amiga_sprintf(tmp_text, "Loading %s... this can take a while",
+                amiga_launch_row_entry(&launch, row)->name);
+  launch_set_note(tmp_text);
+  if (and_exit) {
+    BPTR con = Output();
+    static char msg[96];
+
+    if (con) {
+      amiga_sprintf(msg, "Loading %s... please wait\n",
+                    amiga_launch_row_entry(&launch, row)->name);
+      (void) Write(con, msg, (LONG) strlen(msg));
+    }
   }
   busy_begin();
   rc = amiga_exec_run(launch.path, cmd, and_exit);

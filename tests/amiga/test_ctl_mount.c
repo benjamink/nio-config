@@ -89,7 +89,9 @@ void test_ctl_mount(void)
   CHECK(amiga_ctl_mount_commit(&ctl, 0, 1));
   CHECK_STR(last_cmd, "fmount 1 DN0: RO");
   CHECK(fake_slot_readonly(1) == 1);
-  CHECK(ctl.page == AMIGA_PAGE_BROWSE);
+  CHECK(ctl.page == AMIGA_PAGE_DRIVES);
+  CHECK(ctl.drives.selected == 0);   /* the drive just mounted */
+  CHECK(ctl.browse_resume);   /* Browse re-reads its host and path when shown */
   CHECK_STR(state.status, "boot.adf mounted on DN0: (RO, slot 1)");
   CHECK(amiga_ctl_drive_mounted(&ctl, 0));
   CHECK(amiga_ctl_first_empty_drive(&ctl) == 1);
@@ -154,7 +156,7 @@ void test_ctl_mount(void)
   CHECK(amiga_ctl_mount_commit(&ctl, 1, 1));
   CHECK_STR(last_cmd, "fmount 0 DN1: RO");
   CHECK(fake_slot_readonly(0) == 1);
-  CHECK(ctl.page == AMIGA_PAGE_CATALOGUE);
+  CHECK(ctl.page == AMIGA_PAGE_DRIVES);
 
   /* Script form uses the browse selection. */
   open_root();
@@ -165,7 +167,7 @@ void test_ctl_mount(void)
 
   /* The mount page is entered only through mount_begin_*. */
   amiga_ctl_set_page(&ctl, AMIGA_PAGE_MOUNT);
-  CHECK(ctl.page == AMIGA_PAGE_BROWSE);
+  CHECK(ctl.page == AMIGA_PAGE_DRIVES);
 
   /* Full catalogue: a new image cannot be mounted. */
   for (i = 0; i < 256; i++) {
