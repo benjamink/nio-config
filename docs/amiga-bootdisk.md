@@ -122,13 +122,15 @@ Kickstart 1.3 tool set (`scripts/amiga-artifacts wb13` stages it). It loads
 Verified in Amiberry (Kickstart 1.3, 68000, OCS): the disk boots and Config
 lists the FujiNet's hosts. From the boot CLI (after Config quits),
 `fmount 1 DO0:`, `Dir DO0:` and `fumount DO0:` work with no Commodore file on
-the disk.
+the disk. A Config SCRIPT run (insert, eject, insert) succeeds with
+`ok=7 err=0`, and `Dir DO0:` then lists the image.
 
 Known limits of `wb13-free`:
-- **Mount and Eject in Config fail** ("FMOUNT failed ... (rc 20)"). On
-  Kickstart 1.3, `Execute()` (which Config uses to run `fmount`/`fumount`)
-  needs `C:Run`, a Workbench file. With the user's own `Run` copied to `C/`,
-  Config mounts and ejects normally.
+- Config's Mount and Eject need Config to run from a CLI, as the disk's
+  `S/Startup-Sequence` starts it. On 1.3, `Execute()` needs `C:Run`, so
+  config-nio runs `fmount`/`fumount` inside its own process instead (see
+  `docs/amiga-config.md`). With no `RAM:`, the commands' output is not
+  captured, so a failure shows only the return code.
 - No FFS drives: `DN`/`HN` need Commodore's `Mount` and `FastFileSystem`.
 - There is no `RAM:` or `T:` (1.3 loads `RAM:` from `L:Ram-Handler`, a
   Workbench file). So `FMOUNT slot 0|1` cannot record its logical unit, and
@@ -140,6 +142,6 @@ Known limits of `wb13-free`:
 | Disk | Commodore files used |
 | --- | --- |
 | `wb204`, `wb13` | The whole base Workbench disk (the user's own copy) |
-| `wb13`, FujiNet part only | `C:Mount` and `L:FastFileSystem` for `DN`/`HN` drives only; `C:Run` for Config's Mount/Eject; `RAM:`/`T:` (from the Workbench startup) for logical-unit `FMOUNT 0\|1` |
+| `wb13`, FujiNet part only | `C:Mount` and `L:FastFileSystem` for `DN`/`HN` drives only; `RAM:`/`T:` (from the Workbench startup) for logical-unit `FMOUNT 0\|1` |
 | `config-only` (Kickstart 2.0+) | None |
-| `wb13-free` (Kickstart 1.3) | None. Config's Mount/Eject additionally need `C:Run` (see above) |
+| `wb13-free` (Kickstart 1.3) | None |
