@@ -151,8 +151,8 @@ That is intended: 38400 is the rate verified on hardware.
   back to 38400 if the FujiNet does not answer." OK / Cancel.
 - **Device access:** `fujinet-nio-lib` keeps its device handle private and
   has no baud API, so Config opens its own `fujinet-nio.device` handle for
-  `GET_BAUD`/`SET_BAUD`, as `fujinet-nio-baud` does. No change to
-  `fujinet-nio-lib`. (Builder-check call: keeps the work to two repos.)
+  `GET_BAUD`/`SET_BAUD`, as `fujinet-nio-baud` does. `fujinet-nio-lib`
+  changes only for the Cancel wait hook below.
 - **Switch:** `FUJINET_NIO_CMD_SET_BAUD` with the new rate. The device closes
   its serial backend and the next exchange reopens it at the new rate.
 - **Wait:** the window shows the console commands, a countdown and a Cancel
@@ -166,10 +166,17 @@ That is intended: 38400 is the rate verified on hardware.
   A failed request takes the driver's timeout (about 5 s at present), so
   expect roughly 10-12 tries; the countdown must still update and Cancel must
   still work between tries.
-- **Cancel:** always available while waiting, and acts at once: it aborts
-  the check in progress (`AbortIO` on the outstanding `fujinet-nio.device`
-  request, which the device supports) rather than waiting for its timeout,
-  then reverts as below.
+- **Cancel:** always available while waiting. The window shows
+  "Cancelling..." at once; the rate goes back as soon as the check in
+  progress ends (within about the driver's 5 s timeout). (User's choice,
+  option 2 of 3.) `fujinet-nio.device` only flags an aborted in-flight
+  request and still finishes it, and `fujinet-nio-lib` waits on each
+  exchange with `DoIO`, so this needs a small `fujinet-nio-lib` change: an
+  optional wait hook, called while an exchange is in flight whenever one of
+  a caller-chosen set of signals arrives (the Configuration window's IDCMP
+  signal, with `IDCMP_INTUITICKS` on during the wait so the countdown
+  redraws); the hook returning nonzero makes the lib `AbortIO`/`WaitIO` the
+  request and return `FN_ERR_ABORTED`. The serial driver is not changed.
 - **Success:** save `BAUD=<new>` to `S:FujiNet-Config` (above), refresh the
   Device tab, status "Serial rate 57600 saved". If the save fails, the rate
   stays in effect for this session and the status says it could not be saved
@@ -207,6 +214,9 @@ format and the `FROM=` form. Driver README: document `FROM=`.
 - The large-reply confirmation before saving.
 - The 60-second wait.
 - `FROM=` returns WARN on every failure; Config opens its own device handle.
+- The large-reply check writes a 512-byte test pattern to the FujiNet app
+  store (namespace `config-nio`, key `rate-check`), reads it back three
+  times and compares it, then deletes the key. It needs no host or disk image.
 - The button label and placement, and the requester wording.
 - Workbench disks move from 19200 to 38400 by default.
 
