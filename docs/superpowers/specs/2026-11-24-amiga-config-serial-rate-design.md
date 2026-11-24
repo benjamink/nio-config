@@ -166,6 +166,10 @@ That is intended: 38400 is the rate verified on hardware.
   A failed request takes the driver's timeout (about 5 s at present), so
   expect roughly 10-12 tries; the countdown must still update and Cancel must
   still work between tries.
+- **Cancel:** always available while waiting, and acts at once: it aborts
+  the check in progress (`AbortIO` on the outstanding `fujinet-nio.device`
+  request, which the device supports) rather than waiting for its timeout,
+  then reverts as below.
 - **Success:** save `BAUD=<new>` to `S:FujiNet-Config` (above), refresh the
   Device tab, status "Serial rate 57600 saved". If the save fails, the rate
   stays in effect for this session and the status says it could not be saved
