@@ -133,7 +133,8 @@ amiga-bootdisk-tools:
 	m68k-amigaos-gcc -std=c99 -Wall -O2 -mcpu=68000 -msoft-float -mcrt=nix13 \
 		-I"$(DRIVER_DIR)/amiga/include" -I"$(DRIVER_DIR)/amiga/public/include" \
 		-I"$(FUJINET_NIO_LIB_DIR)/include" \
-		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-baud.c" -lamiga \
+		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-baud.c" \
+		"$(DRIVER_DIR)/amiga/common/fujinet_boot_config.c" -lamiga \
 		-o "$(BOOTDISK_TOOLS)/fujinet-nio-baud"
 
 amiga-bootdisk: $(if $(filter $(BOOTDISK_SCRATCH),$(WB)),amiga-bootdisk-tools)
