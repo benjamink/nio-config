@@ -162,7 +162,8 @@ class BootdiskTest(unittest.TestCase):
         # nothing from Workbench (Mount, Run, FastFileSystem, ...) is packaged.
         project = {"fujinet-nio.device", "fujinet-disk.device",
                    "fujinet-serial.device", "fujinet-nio-serial",
-                   "fujinet-load-resident", "fmount", "fumount"}
+                   "fujinet-nio-baud", "fujinet-load-resident", "fmount",
+                   "fumount"}
         for name in ("free",):
             prof = build.load_profile(name)
             self.assertTrue(prof.get("scratch"))
@@ -170,6 +171,19 @@ class BootdiskTest(unittest.TestCase):
             for item in prof["package"]:
                 self.assertIn(item["src"], project)
             self.assertNotIn("Mount", prof["startup_sequence"])
+
+    def test_free_profile_sets_38400_before_config(self):
+        # 38400 is the rate verified on Kickstart 1.3 and 3.1 (stock and
+        # PiStorm); the FujiNet must be set to match.
+        prof = build.load_profile("free")
+        lines = prof["startup_sequence"].splitlines()
+        self.assertIn("C:fujinet-nio-baud 38400", lines)
+        self.assertLess(lines.index("C:fujinet-nio-baud 38400"),
+                        lines.index("Tools/config-nio"))
+        baud = [p for p in prof["package"] if p["src"] == "fujinet-nio-baud"]
+        self.assertEqual(baud, [{"src": "fujinet-nio-baud",
+                                 "dst": "C/fujinet-nio-baud",
+                                 "from": "tools"}])
 
 
 if __name__ == "__main__":

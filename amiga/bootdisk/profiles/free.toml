@@ -10,7 +10,8 @@
 # - Stock serial.device is a Workbench file (Devs:), so the disk loads the
 #   project's own fujinet-serial.device and selects it with fujinet-nio-serial.
 # - The Workbench 3.x tools are built with clib2, whose startup crashes without
-#   a Workbench startup.  fmount, fumount and fujinet-nio-serial are rebuilt
+#   a Workbench startup.  fmount, fumount, fujinet-nio-serial and
+#   fujinet-nio-baud are rebuilt
 #   against the 2.0 headers and linked with the libnix nix13 runtime (like
 #   config-nio): `make amiga-bootdisk-tools`.  fmount and fumount pick their
 #   path at run time: Kickstart 1.3 gets the OFS drives DO0:/DO1:/HO0:/HO1:
@@ -20,6 +21,9 @@
 #   which stays open.
 # - fmountrestore is left off: on a bare system it crashed when no FujiNet
 #   answered, so saved drives are not remounted at boot; mount from Config.
+# - The RS-232 rate is 38400, verified on Kickstart 1.3 and 3.1 (stock and
+#   PiStorm; PiStorm on 1.3 needs Zorro II RAM).  The FujiNet must match.  To
+#   use another rate, change the fujinet-nio-baud line in S/Startup-Sequence.
 
 name = "free"
 description = "FujiNet NIO + Config boot disk, no Workbench (Kickstart 1.3 and 2.0+)"
@@ -37,6 +41,9 @@ C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
 C:fujinet-load-resident DEVS:fujinet-serial.device fujinet-serial.device
 C:fujinet-nio-serial fujinet-serial.device
 C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+; The FujiNet must use the same rate: on its console, uart.baud 38400 then
+; uart.save.  Edit this line to use another rate.
+C:fujinet-nio-baud 38400
 Tools/config-nio
 """
 
@@ -52,6 +59,10 @@ dst = "Devs/fujinet-serial.device"
 [[package]]
 src = "fujinet-nio-serial"
 dst = "C/fujinet-nio-serial"
+from = "tools"
+[[package]]
+src = "fujinet-nio-baud"
+dst = "C/fujinet-nio-baud"
 from = "tools"
 [[package]]
 src = "fujinet-load-resident"

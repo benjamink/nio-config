@@ -130,6 +130,11 @@ amiga-bootdisk-tools:
 		-I"$(FUJINET_NIO_LIB_DIR)/include" \
 		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-serial.c" -lamiga \
 		-o "$(BOOTDISK_TOOLS)/fujinet-nio-serial"
+	m68k-amigaos-gcc -std=c99 -Wall -O2 -mcpu=68000 -msoft-float -mcrt=nix13 \
+		-I"$(DRIVER_DIR)/amiga/include" -I"$(DRIVER_DIR)/amiga/public/include" \
+		-I"$(FUJINET_NIO_LIB_DIR)/include" \
+		"$(DRIVER_DIR)/amiga/tools/fujinet-nio-baud.c" -lamiga \
+		-o "$(BOOTDISK_TOOLS)/fujinet-nio-baud"
 
 amiga-bootdisk: $(if $(filter $(BOOTDISK_SCRATCH),$(WB)),amiga-bootdisk-tools)
 	@test -n "$(filter $(BOOTDISK_SCRATCH),$(WB))" || test -n "$(BASE_ADF)" || { echo "BASE_ADF=<your Workbench floppy .adf> is required"; exit 2; }

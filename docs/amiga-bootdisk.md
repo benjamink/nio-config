@@ -67,7 +67,14 @@ contains only this project's own files and an original boot block, so it can
 be shared. The same disk boots on every Kickstart from 1.3. The ROM supplies
 exec, dos, intuition and graphics, and its shell runs the disk's
 `S/Startup-Sequence`, which loads the FujiNet devices, selects the FujiNet
-serial driver and runs `Tools/config-nio`.
+serial driver, sets the RS-232 rate to 38400 and runs `Tools/config-nio`.
+
+**Set the FujiNet to 38400 too** (on its console: `uart.baud 38400`, then
+`uart.save`); the two ends must match. To use another rate, change the
+`C:fujinet-nio-baud 38400` line in `S/Startup-Sequence`. The disk has no
+editor, so edit the ADF on another machine (for example `xdftool`) or from a
+Workbench system. For one session, quit Config and type
+`C:fujinet-nio-baud <rate>` then `Tools/config-nio` at the boot CLI.
 
 A bare system differs from a Workbench one in ways that matter here, all
 found by testing:
@@ -79,7 +86,8 @@ found by testing:
   `fujinet-nio-serial`.
 - **clib2 programs crash** (`#80000003`) on a bare system, so the Workbench 3.x
   tool set cannot be used as built. `make amiga-bootdisk-tools` rebuilds
-  `fmount`, `fumount` and `fujinet-nio-serial` against the 2.0 headers and links
+  `fmount`, `fumount`, `fujinet-nio-serial` and `fujinet-nio-baud` against the
+  2.0 headers and links
   them with the libnix `nix13` runtime, as config-nio is (this uses the
   `AMIGA_COMPILE_CRT` setting in `nio-core-apps`). `fmount` and `fumount` pick
   their drive model at run time: the Kickstart 1.3 drives below, or the dynamic
@@ -101,6 +109,17 @@ on both ROMs:
 - Kickstart 2.04 (68000, ECS): a Config SCRIPT run (insert, eject, insert on
   `DN3:`) ends `ok=5 err=0`, `Dir DN3:` lists the image, and `fumount DN3:`
   ejects it.
+
+Verified on hardware at 38400 (2026-11-24):
+- Stock Amiga 2000, Kickstart 1.3.
+- PiStorm with Emu68 1.0.7, Kickstart 1.3, **with Zorro II RAM enabled**
+  (`z2_ram_size=8` in `cmdline.txt`; Emu68 1.1 uses
+  `dtoverlay=z2ram,size=8` in `config.txt`). Without it the Amiga loses
+  received bytes, and the loss gets worse as the reply gets longer: "FujiNet
+  error 16" loading the host list, "Browse failed: error 3", "Unable to read
+  catalogue", and `fmount` "Unsupported candidate media". 57600 still failed
+  with Zorro II RAM.
+- PiStorm with Emu68, Kickstart 3.1 (also works at 57600).
 
 Known limits:
 - On Kickstart 1.3, only the OFS drives (`DO`/`HO`) work. The FFS drives need
