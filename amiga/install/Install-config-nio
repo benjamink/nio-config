@@ -59,9 +59,9 @@ EndIf
 If NOT EXISTS SYS:C/fujinet-load-resident
   Copy "{FROM}fujinet-load-resident" SYS:C/ CLONE QUIET
 EndIf
-If NOT EXISTS SYS:C/fujinet-nio-baud
-  Copy "{FROM}fujinet-nio-baud" SYS:C/ CLONE QUIET
-EndIf
+; Always replaced: an older fujinet-nio-baud has no FROM= and would fail
+; (stopping S:User-Startup) on the boot line added below.
+Copy "{FROM}fujinet-nio-baud" SYS:C/ CLONE QUIET
 If NOT EXISTS SYS:C/fmountrestore
   Copy "{FROM}fmountrestore" SYS:C/ CLONE QUIET
 EndIf
@@ -79,25 +79,58 @@ Set reboot "no"
 If NOT EXISTS S:User-Startup
   Echo "; User-Startup" >S:User-Startup
 EndIf
+; An upgrade: the device was loaded at boot before this run.
+Set nioupgrade "no"
 Search >NIL: S:User-Startup "DEVS:fujinet-nio.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device" >>S:User-Startup
   Set reboot "yes"
+Else
+  Set nioupgrade "yes"
+EndIf
+Set niorestore "no"
+Search >NIL: S:User-Startup "fmountrestore"
+If NOT WARN
+  Set niorestore "yes"
 EndIf
 Search >NIL: S:User-Startup "DEVS:fujinet-disk.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>S:User-Startup
   Set reboot "yes"
 EndIf
-; Default boot settings; an existing S:FujiNet-Config is never replaced.
-If NOT EXISTS S:FujiNet-Config
-  Copy "{FROM}FujiNet-Config" S: CLONE QUIET
-EndIf
-; Apply the saved serial rate at boot, after the devices are loaded.
-Search >NIL: S:User-Startup "FROM=S:FujiNet-Config"
+; Apply the serial rate saved in S:FujiNet-Config at boot, after the devices
+; are loaded.  An existing S:FujiNet-Config is never replaced.  A new install
+; gets the shipped default (38400).  An upgrade keeps the rate it ran at: a
+; fujinet-nio-baud line already there is left alone, and without one the
+; system ran at the driver's built-in 19200, which the new file keeps.
+Set nioaddrate "no"
+Search >NIL: S:User-Startup "fujinet-nio-baud"
 If WARN
+  Set nioaddrate "yes"
+  If NOT EXISTS S:FujiNet-Config
+    If "$nioupgrade" EQ "yes"
+      Echo "; FujiNet boot settings, written by Config" >S:FujiNet-Config
+      Echo "BAUD=19200" >>S:FujiNet-Config
+    Else
+      Copy "{FROM}FujiNet-Config.default" S:FujiNet-Config CLONE QUIET
+    EndIf
+  EndIf
   Echo "C:fujinet-nio-baud FROM=S:FujiNet-Config" >>S:User-Startup
   Set reboot "yes"
+Else
+  Search >NIL: S:User-Startup "FROM=S:FujiNet-Config"
+  If WARN
+    Echo "Kept the fujinet-nio-baud line in S:User-Startup; C:fujinet-nio-baud FROM=S:FujiNet-Config lets Config change the rate."
+  EndIf
+EndIf
+; Added after a Run >NIL: C:fmountrestore line, the rate could change while
+; fmountrestore runs in the background.
+If "$nioaddrate" EQ "yes"
+  If "$niorestore" EQ "yes"
+    Echo "NOTE: in S:User-Startup, move the line"
+    Echo "  C:fujinet-nio-baud FROM=S:FujiNet-Config"
+    Echo "above the line Run >NIL: C:fmountrestore"
+  EndIf
 EndIf
 ; Some minimal systems (e.g. the Workbench 3.2 install floppy) never run
 ; S:User-Startup; then nothing above loads at boot.

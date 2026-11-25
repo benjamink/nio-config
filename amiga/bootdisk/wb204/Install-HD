@@ -65,23 +65,55 @@ EndIf
 If NOT EXISTS "{TO}S/User-Startup"
   Echo "; User-Startup" >"{TO}S/User-Startup"
 EndIf
-Set nioreboot "no"
+; An upgrade: the device was loaded at boot before this run.
+Set nioupgrade "no"
 Search >NIL: "{TO}S/User-Startup" "DEVS:fujinet-nio.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device" >>"{TO}S/User-Startup"
+Else
+  Set nioupgrade "yes"
+EndIf
+Set niorestore "no"
+Search >NIL: "{TO}S/User-Startup" "fmountrestore"
+If NOT WARN
+  Set niorestore "yes"
 EndIf
 Search >NIL: "{TO}S/User-Startup" "DEVS:fujinet-disk.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>"{TO}S/User-Startup"
 EndIf
-; Default boot settings; an existing S:FujiNet-Config is never replaced.
-If NOT EXISTS "{TO}S/FujiNet-Config"
-  Copy SYS:S/FujiNet-Config "{TO}S/" CLONE QUIET
-EndIf
-; Apply the saved serial rate at boot, after the devices are loaded.
-Search >NIL: "{TO}S/User-Startup" "FROM=S:FujiNet-Config"
+; Apply the serial rate saved in S:FujiNet-Config at boot, after the devices
+; are loaded.  An existing S:FujiNet-Config is never replaced.  A new install
+; gets this floppy's default (38400).  An upgrade keeps the rate it ran at: a
+; fujinet-nio-baud line already there is left alone, and without one the
+; system ran at the driver's built-in 19200, which the new file keeps.
+Set nioaddrate "no"
+Search >NIL: "{TO}S/User-Startup" "fujinet-nio-baud"
 If WARN
+  Set nioaddrate "yes"
+  If NOT EXISTS "{TO}S/FujiNet-Config"
+    If "$nioupgrade" EQ "yes"
+      Echo "; FujiNet boot settings, written by Config" >"{TO}S/FujiNet-Config"
+      Echo "BAUD=19200" >>"{TO}S/FujiNet-Config"
+    Else
+      Copy SYS:S/FujiNet-Config "{TO}S/" CLONE QUIET
+    EndIf
+  EndIf
   Echo "C:fujinet-nio-baud FROM=S:FujiNet-Config" >>"{TO}S/User-Startup"
+Else
+  Search >NIL: "{TO}S/User-Startup" "FROM=S:FujiNet-Config"
+  If WARN
+    Echo "Kept the fujinet-nio-baud line in {TO}S/User-Startup; C:fujinet-nio-baud FROM=S:FujiNet-Config lets Config change the rate."
+  EndIf
+EndIf
+; Added after a Run >NIL: C:fmountrestore line, the rate could change while
+; fmountrestore runs in the background.
+If "$nioaddrate" EQ "yes"
+  If "$niorestore" EQ "yes"
+    Echo "NOTE: in {TO}S/User-Startup, move the line"
+    Echo "  C:fujinet-nio-baud FROM=S:FujiNet-Config"
+    Echo "above the line Run >NIL: C:fmountrestore"
+  EndIf
 EndIf
 ; Mount the saved FujiNet drives again, in the background so a FujiNet that is
 ; off or unreachable cannot hold up the boot.
