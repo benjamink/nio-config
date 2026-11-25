@@ -1710,7 +1710,6 @@ static amiga_list_t cfg_help_list;
 #define RATE_WAIT_ROWS 5
 static amiga_list_t cfg_rates;
 static amiga_list_t cfg_rate_wait;
-static uint32_t rate_new;
 static uint32_t rate_wait_baud;  /* the rate the wait view asks for */
 static uint8_t rate_persist;     /* the wait view asks for uart.save */
 static uint8_t rate_back;        /* the second wait: set the FujiNet back */
@@ -2253,7 +2252,6 @@ static void rate_use(void)
 
   /* The wait view stays live (no busy requester), so Cancel can be
    * pressed; the hook and rate_drain take every message meanwhile. */
-  rate_new = new_baud;
   rate_wait_baud = new_baud;
   rate_persist = (uint8_t) persist;
   rate_back = 0;
