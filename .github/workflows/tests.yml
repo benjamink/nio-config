@@ -1,8 +1,8 @@
 name: Tests
 
 # The host-side tests for this repository: plain gcc and make, no emulator and
-# no cross toolchain. The library it builds against is checked out beside it, as
-# in a workspace.
+# no cross toolchain. The library and the driver it builds against are checked
+# out beside it, as in a workspace.
 on:
   pull_request:
   push:
@@ -30,6 +30,16 @@ jobs:
           persist-credentials: false
           repository: fujinet-nio/fujinet-nio-lib
           path: repos/fujinet-nio-lib
+
+      # The Amiga host tests build the driver's boot settings parser
+      # (amiga/common/fujinet_boot_config.c); test-amiga-host.mk finds it at
+      # its default FUJINET_NIO_DRIVER, ../fujinet-nio-driver.
+      - name: Checkout fujinet-nio-driver
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          repository: fujinet-nio/fujinet-nio-driver
+          path: repos/fujinet-nio-driver
 
       - name: Install system dependencies
         run: |
