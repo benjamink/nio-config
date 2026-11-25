@@ -87,10 +87,33 @@ prints one line and returns 5; it never returns 20.
 The Workbench disks (`wb204`, `wb13`) and the installers (`Install-HD`,
 `Install-config-nio`, `Install-FujiNet-WB13`) ship `C:fujinet-nio-baud` and a
 default `S:FujiNet-Config` as well, now at 38400 (the Workbench disks
-previously ran at the driver's built-in 19200). The installers copy the file
-only when none exists. `Install-HD` and `Install-config-nio` append the boot
-line to `S:User-Startup`; `Install-FujiNet-WB13` tells you to add it to
-`S:StartupII`.
+previously ran at the driver's built-in 19200). In the NIO package drawer the
+default is `FujiNet-Config.default` (a plain `FujiNet-Config` there would sit
+beside Config's `FujiNet-Config.info` icon); the installers copy it to
+`S:FujiNet-Config`, and only when none exists. The `wb204` floppy holds the
+real `S/FujiNet-Config`, which `Install-HD` copies.
+
+`Install-HD` and `Install-config-nio` append the boot line to
+`S:User-Startup`, before `Run >NIL: C:fmountrestore` on a new install. On an
+upgrade (`S:User-Startup` already loads `fujinet-nio.device`) they keep the
+rate the system ran at:
+
+- If `S:User-Startup` already has a `fujinet-nio-baud` line (your own, or the
+  `FROM=` line from an earlier run), nothing is added and no
+  `S:FujiNet-Config` is created. If it is not the `FROM=` line, the installer
+  says so: switch it to `C:fujinet-nio-baud FROM=S:FujiNet-Config` to let
+  Config change the rate.
+- Otherwise the system ran at 19200, so the installer writes
+  `S:FujiNet-Config` with `BAUD=19200` (if none exists) and appends the
+  `FROM=` line. If `S:User-Startup` already runs `fmountrestore`, the line
+  lands after it, and the installer asks you to move it above
+  `Run >NIL: C:fmountrestore`, so the rate is set before the drives are
+  mounted in the background.
+
+`Install-config-nio` always replaces `C:fujinet-nio-baud`, because an older
+one has no `FROM=` form. `Install-FujiNet-WB13` tells you to add the boot line
+to `S:StartupII`, on a new install and again when it refreshes an existing
+one; the FujiNet must be set to the rate in `S:FujiNet-Config`.
 
 A bare system differs from a Workbench one in ways that matter here, all
 found by testing:

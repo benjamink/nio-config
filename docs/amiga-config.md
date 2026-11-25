@@ -244,23 +244,51 @@ Amiga and the FujiNet, with a **Rate...** button. To change it:
 1. Press **Rate...**. The list shows 9600, 19200, 38400, 57600 and 115200,
    with `*` marking the current rate. Select one and press **Use** (or
    double-click).
-2. If no startup file runs `fujinet-nio-baud FROM=S:FujiNet-Config`, a
-   requester offers **This session only** or Cancel.
+2. If no startup file runs `fujinet-nio-baud FROM=S:FujiNet-Config`, or
+   `S:FujiNet-Config` cannot be written (Config tries creating
+   `S:FujiNet-Config.new` first: disk write-protected or full), a requester
+   says the new rate would be lost at the next boot and offers **This session
+   only** or Cancel.
 3. A requester explains what to do on the FujiNet's console: type
-   `uart.baud <rate>` and `uart.save`. Config then waits 60 seconds, showing a
-   countdown and a **Cancel** button. Cancel shows `Cancelling...` and the old
-   rate comes back within about 5 seconds.
+   `uart.baud <rate>` and `uart.save` (for this session only, type
+   `uart.baud <rate>` but not `uart.save`). It also warns that FujiNet drives may not
+   respond while Config waits. Config then switches the Amiga and waits 60
+   seconds, showing the console commands (without `uart.save` for this
+   session only), a countdown and a **Cancel** button. Cancel shows
+   `Cancelling...` and the old rate comes back within about 5 seconds.
 4. When the FujiNet answers at the new rate, Config runs a long-reply check:
    it writes a 512-byte pattern to the FujiNet app store (`config-nio`,
-   `rate-check`) and reads it back 3 times. If that fails, Config reverts and
-   says `<rate> lost data on long replies; back to <old rate>`.
+   `rate-check`) and reads it back 3 times. From here only Cancel stops the
+   check; the 60 seconds no longer apply, so all 3 tries run.
 5. If it works, Config saves `BAUD=<rate>` to `S:FujiNet-Config`, keeping the
-   file's other lines, and says `Serial rate <rate> saved`. If the save fails
-   (disk full or write-protected), the rate stays for this session and the
-   status says it is not saved.
+   file's other lines. If the save fails anyway, the new rate stays for this
+   session only.
 
-If the FujiNet does not answer, the status is `No answer at <rate>; back to
-<old rate>`. Cancelling gives `Cancelled; back to <old rate>`.
+If the long-reply check fails, or you cancel it, the FujiNet is already at the
+new rate, so switching only the Amiga back is not enough. Config switches the
+Amiga back and checks once; if the FujiNet does not answer at the old rate,
+the wait view asks you to type `uart.baud <old rate>` and `uart.save` on the
+FujiNet's console, with a fresh 60-second countdown and **Cancel**, and checks
+until it answers.
+
+After a change, the status line shows one of these (`<rate>` is the new rate):
+
+| Status | Meaning |
+| --- | --- |
+| `Serial rate <rate> saved` | Works; saved in `S:FujiNet-Config`. |
+| `Serial rate <rate> for this session only` | Works; not saved (This session only). |
+| `Rate <rate> not saved: set FujiNet to <old rate> before reboot` | Works, but the save failed; the next boot uses the old rate. |
+| `No answer at <rate>; back to <old rate>` | The FujiNet did not answer in 60 seconds; nothing changed. |
+| `Cancelled; back to <old rate>` | Cancelled; back at the old rate on both ends. |
+| `<rate> lost data on long replies; back to <old rate>` | The long-reply check failed; back at the old rate on both ends. |
+| `No answer at <rate> either: set the FujiNet back to <old rate>` | Back at the old rate before the FujiNet ever answered at the new one, but it no longer answers (for example `uart.baud` was typed just too late). |
+| `Set the FujiNet back: uart.baud <old rate> then uart.save` | The FujiNet answered at the new rate, the change was undone, and the FujiNet was not set back within the second 60 seconds. |
+| `Could not set the serial rate` | `fujinet-nio.device` refused the new rate; nothing changed. |
+| `Serial rate is already <rate>` | The rate picked is the one in use. |
+
+After either of the two results that say to set the FujiNet back, Config does
+not refresh the FujiNet's settings (each request would only time out); it
+re-reads just the Amiga's rate for the **Serial rate** row.
 
 ## Drives, FMOUNT and FMOUNTRESTORE
 

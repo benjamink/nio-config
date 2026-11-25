@@ -114,19 +114,31 @@ New form in `fujinet-nio-driver/amiga/tools/fujinet-nio-baud.c`; the existing
   `Install-FujiNet-WB13`): copy `fujinet-nio-baud` to `C:` (today the wb13
   package excludes it; add a nix13 build), copy a default `S:FujiNet-Config`
   only if none exists, and add the boot line to the lines the installer tells
-  the user to put in `S:StartupII`.
+  the user to put in `S:StartupII`. A re-run on an installed system prints
+  the boot line too, with the rate it applies (38400 by default) and that
+  the FujiNet must match.
 - **WB 2.04 hard-drive installer** (`amiga/bootdisk/wb204/Install-HD`) and
   **Config installer** (`amiga/install/Install-config-nio`): copy
   `fujinet-nio-baud` to `C:`, copy a default `S:FujiNet-Config` only if none
   exists, and append the boot line to `S:User-Startup` where they already
-  append the driver lines (Install-HD), or tell the user to add it
-  (Install-config-nio, which does not edit startup files today).
+  append the driver lines. On an upgrade (the `fujinet-nio.device` line was
+  already there) they keep the rate the system ran at: an existing
+  `fujinet-nio-baud` line is left alone (no `FROM=` line, no file; a note
+  says how to let Config change the rate), and without one they write
+  `S:FujiNet-Config` with `BAUD=19200` and add the `FROM=` line, telling
+  the user to move it above `Run >NIL: C:fmountrestore` if that line was
+  already there.
+- In the NIO package drawer the default file is staged as
+  `FujiNet-Config.default`, so it does not sit beside Config's
+  `FujiNet-Config.info` WBStartup icon; the installers copy it to
+  `S:FujiNet-Config`. The `wb204` floppy keeps its real `S/FujiNet-Config`.
 - Existing installs keep working: without the boot line and file nothing
   changes.
 
 The rate in the shipped files (38400) is a change for the Workbench disks,
 which today never set a rate and so run at the driver's built-in 19200.
-That is intended: 38400 is the rate verified on hardware.
+That is intended for new installs: 38400 is the rate verified on hardware.
+Upgrades keep their rate (above).
 
 ### Config: the rate row and the change flow
 
@@ -145,10 +157,18 @@ That is intended: 38400 is the rate verified on hardware.
   wait as below, but never save) or Cancel. This stops a saved rate the boot
   never applies from leaving the Amiga unable to reach a FujiNet already
   saved at the new rate.
+- **Writable check:** when the boot line is present, Config also checks that
+  `S:FujiNet-Config.new` can be created (open as a new file, close, delete).
+  If not (disk write-protected or full), the same two-choice requester says
+  "S:FujiNet-Config cannot be written (disk write-protected or full), so the
+  new rate would be lost at the next boot." (This session only / Cancel).
 - **Confirm:** a requester explains what happens:
   "Config switches the Amiga to 57600 now. Then, on the FujiNet's console,
   type: uart.baud 57600 and uart.save. Config waits 60 seconds and switches
-  back to 38400 if the FujiNet does not answer." OK / Cancel.
+  back to 38400 if the FujiNet does not answer. FujiNet drives may not
+  respond while waiting." OK / Cancel. For this session only it says
+  "type: uart.baud 57600 (not uart.save)", and the wait view leaves out the
+  `uart.save` row.
 - **Device access:** `fujinet-nio-lib` keeps its device handle private and
   has no baud API, so Config opens its own `fujinet-nio.device` handle for
   `GET_BAUD`/`SET_BAUD`, as `fujinet-nio-baud` does. `fujinet-nio-lib`
@@ -163,6 +183,8 @@ That is intended: 38400 is the rate verified on hardware.
   sized to that), a few times in a row; any failure there counts as a
   failed change and reverts. Small replies pass at rates where large ones
   lose bytes, so a small reply alone does not prove a rate works.
+  Once the small reply has passed, the 60 s deadline no longer applies: the
+  large check gets all its tries and only Cancel cuts it short.
   A failed request takes the driver's timeout (about 5 s at present), so
   expect roughly 10-12 tries; the countdown must still update and Cancel must
   still work between tries.
@@ -179,13 +201,23 @@ That is intended: 38400 is the rate verified on hardware.
   request and return `FN_ERR_ABORTED`. The serial driver is not changed.
 - **Success:** save `BAUD=<new>` to `S:FujiNet-Config` (above), refresh the
   Device tab, status "Serial rate 57600 saved". If the save fails, the rate
-  stays in effect for this session and the status says it could not be saved
-  (and why: disk write-protected, full, etc.).
-- **Timeout or Cancel:** `FUJINET_NIO_CMD_SET_BAUD` with the old rate, check
-  the link once, save nothing. Status: "No answer at 57600; back to 38400".
-  If the link does not answer at the old rate either (the user changed the
-  FujiNet but too late), say so and tell the user to set the FujiNet back to
-  the old rate.
+  stays in effect for this session and the status says "Rate 57600 not
+  saved: set FujiNet to 38400 before reboot".
+- **Timeout or Cancel before any answer:** `FUJINET_NIO_CMD_SET_BAUD` with
+  the old rate, check the link once, save nothing. Status: "No answer at
+  57600; back to 38400". If the link does not answer at the old rate either
+  (the user changed the FujiNet but too late), say so and tell the user to
+  set the FujiNet back to the old rate.
+- **Revert after the FujiNet answered at the new rate** (large check failed,
+  or Cancel during it): the user has changed the FujiNet and probably saved
+  it, so switching only the Amiga back would always fail. Config switches the
+  Amiga back and checks once; if that fails it starts a second wait: the
+  wait view shows `uart.baud 38400` / `uart.save`, a fresh 60 s countdown and
+  Cancel, and Config checks the old rate until it answers. Answered: status
+  "57600 lost data on long replies; back to 38400" or "Cancelled; back to
+  38400". Second wait timed out or cancelled: "Set the FujiNet back:
+  uart.baud 38400 then uart.save". After either "set the FujiNet back"
+  result Config re-reads only the Amiga's rate, not the FujiNet's settings.
 - **Help:** add the rate row, the flow and the FujiNet console commands to the
   Configuration help topic (`amiga_help.c`).
 
