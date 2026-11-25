@@ -3,13 +3,14 @@
 # fujinet-nio library calls used by the portable store and the controller.
 HOSTCC ?= cc
 FUJINET_NIO_LIB ?= ../fujinet-nio-lib
+FUJINET_NIO_DRIVER ?= ../fujinet-nio-driver
 BUILD_DIR ?= build
 TEST_DIR := $(BUILD_DIR)/test-amiga-host
 TEST_BIN := $(TEST_DIR)/run_tests
 
 TEST_CFLAGS := -std=c99 -Wall -Wextra -O0 -g \
 	-Iinclude -Iinclude/common -Iinclude/platform/amiga -Itests/amiga \
-	-I$(FUJINET_NIO_LIB)/include \
+	-I$(FUJINET_NIO_LIB)/include -I$(FUJINET_NIO_DRIVER)/amiga/include \
 	-DFNSVC_LIST_MAX_PAYLOAD=420 -DCONFIG_NIO_MAX_ENTRIES=200 \
 	-DCONFIG_NIO_MAX_HOSTS=64 -DCONFIG_NIO_NAME_MAX=220 -DCONFIG_NIO_TEXT_MAX=16384 -DFNCTL_MAX_DATA=1024
 
@@ -30,7 +31,9 @@ AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_splash_data.c \
 	src/platform/amiga/amiga_help.c \
 	src/platform/amiga/amiga_net.c \
-	src/platform/amiga/amiga_launch.c
+	src/platform/amiga/amiga_launch.c \
+	src/platform/amiga/amiga_rate.c \
+	$(FUJINET_NIO_DRIVER)/amiga/common/fujinet_boot_config.c
 PORTABLE_HOST_SRCS := \
 	src/platform/portable/config_nio_state.c \
 	src/platform/portable/config_nio_store.c \
