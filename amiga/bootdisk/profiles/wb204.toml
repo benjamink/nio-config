@@ -47,9 +47,15 @@ installer_dst = "Install-HD"
 user_startup = """; User-Startup: FujiNet NIO
 C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device
 C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
+C:fujinet-nio-baud FROM=S:FujiNet-Config
 ; Remount saved FujiNet drives in the background; a FujiNet that is off or
 ; unreachable cannot hold up the boot.
 Run >NIL: C:fmountrestore
+"""
+
+# S:FujiNet-Config: the serial rate the boot line above applies; Config edits it.
+boot_config = """; FujiNet boot settings, written by Config
+BAUD=38400
 """
 
 # Files from the NIO package directory (NIO_PKG=) copied to the disk.
@@ -68,6 +74,9 @@ dst = "C/fmount"
 [[package]]
 src = "fumount"
 dst = "C/fumount"
+[[package]]
+src = "fujinet-nio-baud"
+dst = "C/fujinet-nio-baud"
 [[package]]
 src = "fmountrestore"
 dst = "C/fmountrestore"

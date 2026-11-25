@@ -45,6 +45,10 @@ def xdf(*args):
     subprocess.run(["xdftool", *args], check=True, capture_output=True)
 
 
+BOOT_LINE = "C:fujinet-nio-baud FROM=S:FujiNet-Config"
+DEFAULT = "; FujiNet boot settings, written by Config\nBAUD=38400\n"
+
+
 @unittest.skipUnless(shutil.which("xdftool"), "xdftool (amitools) not installed")
 class BootdiskTest(unittest.TestCase):
     def setUp(self):
@@ -139,7 +143,8 @@ class BootdiskTest(unittest.TestCase):
         self.assertEqual(total, 0xFFFFFFFF)
         prof = {"name": "s", "scratch": True, "volume": "Scratch", "output": "S.adf",
                 "dirs": ["C", "S", "Tools"], "config_nio_dst": "Tools/config-nio",
-                "startup_sequence": "Tools/config-nio\n", "min_free_bytes": 1024,
+                "startup_sequence": "Tools/config-nio\n", "boot_config": DEFAULT,
+                "min_free_bytes": 1024,
                 "package": [{"src": "fmount", "dst": "C/fmount"}]}
         out, _ = build.build(prof, None, self.pkg, self.cfg,
                              os.path.join(self.tmp, "out2"))
@@ -148,6 +153,12 @@ class BootdiskTest(unittest.TestCase):
         _, entries = build.listing(out)
         for path in ("C/fmount", "Tools/config-nio", "S/Startup-Sequence"):
             self.assertIn(path, entries)
+        for path in ("S/FujiNet-Config",):
+            self.assertIn(path, entries)
+        got = os.path.join(self.tmp, "cfg.out")
+        build.xdf(out, "read", "S/FujiNet-Config", got)
+        with open(got, newline="") as f:
+            self.assertEqual(f.read(), DEFAULT)
 
     def test_real_profiles_parse(self):
         for name in ("wb204",):
@@ -172,18 +183,26 @@ class BootdiskTest(unittest.TestCase):
                 self.assertIn(item["src"], project)
             self.assertNotIn("Mount", prof["startup_sequence"])
 
-    def test_free_profile_sets_38400_before_config(self):
-        # 38400 is the rate verified on Kickstart 1.3 and 3.1 (stock and
-        # PiStorm); the FujiNet must be set to match.
-        prof = build.load_profile("free")
-        lines = prof["startup_sequence"].splitlines()
-        self.assertIn("C:fujinet-nio-baud 38400", lines)
-        self.assertLess(lines.index("C:fujinet-nio-baud 38400"),
-                        lines.index("Tools/config-nio"))
-        baud = [p for p in prof["package"] if p["src"] == "fujinet-nio-baud"]
+    def test_profiles_apply_boot_config(self):
+        for name in ("free", "wb204", "wb13"):
+            prof = build.load_profile(name)
+            self.assertEqual(prof["boot_config"], DEFAULT, name)
+            dsts = [p["dst"].lower() for p in prof["package"]]
+            self.assertIn("c/fujinet-nio-baud", dsts, name)
+        free = build.load_profile("free")
+        lines = free["startup_sequence"].splitlines()
+        self.assertLess(lines.index(BOOT_LINE), lines.index("Tools/config-nio"))
+        self.assertNotIn("C:fujinet-nio-baud 38400", lines)
+        baud = [p for p in free["package"] if p["src"] == "fujinet-nio-baud"]
         self.assertEqual(baud, [{"src": "fujinet-nio-baud",
                                  "dst": "C/fujinet-nio-baud",
                                  "from": "tools"}])
+        wb204 = build.load_profile("wb204")["user_startup"].splitlines()
+        self.assertLess(
+            wb204.index("C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device"),
+            wb204.index(BOOT_LINE))
+        ins = build.load_profile("wb13")["edit"][0]["insert"]
+        self.assertEqual(ins[-1], BOOT_LINE)
 
 
 if __name__ == "__main__":

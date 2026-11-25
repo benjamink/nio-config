@@ -45,6 +45,11 @@ tool_icon = "config-nio.info"
 desktop_file = "ConfigNIO"
 desktop_icon = "FujiNet-Config.info"
 
+# S:FujiNet-Config: the serial rate the StartupII line applies; Config edits it.
+boot_config = """; FujiNet boot settings, written by Config
+BAUD=38400
+"""
+
 # Text edits to the base disk's startup files.
 [[edit]]
 file = "s/StartupII"
@@ -53,6 +58,7 @@ before = "Break 1 C ;signal to other process it's OK to finish"
 insert = [
   "C:fujinet-load-resident DEVS:fujinet-nio.device fujinet-nio.device",
   "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device",
+  "C:fujinet-nio-baud FROM=S:FujiNet-Config",
 ]
 
 # Start Config once Workbench is up.
@@ -81,6 +87,9 @@ dst = "devs/fujinet-disk.device"
 [[package]]
 src = "fujinet-load-resident"
 dst = "c/fujinet-load-resident"
+[[package]]
+src = "fujinet-nio-baud"
+dst = "c/fujinet-nio-baud"
 [[package]]
 src = "fmount"
 dst = "c/fmount"

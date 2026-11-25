@@ -22,8 +22,8 @@
 # - fmountrestore is left off: on a bare system it crashed when no FujiNet
 #   answered, so saved drives are not remounted at boot; mount from Config.
 # - The RS-232 rate is 38400, verified on Kickstart 1.3 and 3.1 (stock and
-#   PiStorm; PiStorm on 1.3 needs Zorro II RAM).  The FujiNet must match.  To
-#   use another rate, change the fujinet-nio-baud line in S/Startup-Sequence.
+#   PiStorm; PiStorm on 1.3 needs Zorro II RAM).  The FujiNet must match.  The
+#   rate comes from S:FujiNet-Config (BAUD=38400 as shipped); Config changes it.
 
 name = "free"
 description = "FujiNet NIO + Config boot disk, no Workbench (Kickstart 1.3 and 2.0+)"
@@ -42,9 +42,13 @@ C:fujinet-load-resident DEVS:fujinet-serial.device fujinet-serial.device
 C:fujinet-nio-serial fujinet-serial.device
 C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device
 ; The FujiNet must use the same rate: on its console, uart.baud 38400 then
-; uart.save.  Edit this line to use another rate.
-C:fujinet-nio-baud 38400
+; uart.save.  The rate comes from S:FujiNet-Config; Config changes it.
+C:fujinet-nio-baud FROM=S:FujiNet-Config
 Tools/config-nio
+"""
+
+boot_config = """; FujiNet boot settings, written by Config
+BAUD=38400
 """
 
 [[package]]

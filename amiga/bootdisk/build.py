@@ -230,7 +230,8 @@ def build(profile, base, pkg, config_nio, out_dir, allow_unknown_base=False,
             xdf(out, "write", text, path)
 
         for key, dst in (("startup_sequence", "S/Startup-Sequence"),
-                         ("user_startup", "S/User-Startup")):
+                         ("user_startup", "S/User-Startup"),
+                         ("boot_config", "S/FujiNet-Config")):
             if key in profile:
                 text = os.path.join(workdir, key)
                 with open(text, "w", encoding="latin-1", newline="") as f:
