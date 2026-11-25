@@ -156,7 +156,7 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "MAC address, Firmware and Profile read \"Needs newer firmware\" when "
   "the FujiNet's firmware cannot report them.\n"
   "\n"
-  "To change the Serial rate, press Change rate... on the Device tab, "
+  "To change the Serial rate, press Rate... on the Device tab, "
   "pick a rate and press Use (or double-click it). Config switches the "
   "Amiga to the new rate at once. Then, on the FujiNet's console, type "
   "uart.baud <rate> (for example uart.baud 57600) and then uart.save. "

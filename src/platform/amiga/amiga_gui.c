@@ -16,6 +16,7 @@
 #include "amiga_layout.h"
 #include "amiga_logo.h"
 #include "amiga_net.h"
+#include "amiga_rate.h"
 #include "amiga_script.h"
 #include "amiga_splash.h"
 #include "amiga_theme.h"
@@ -1659,6 +1660,9 @@ enum {
   CA_OTHER,
   CA_CANCEL,
   CA_HELP_BACK,
+  CA_RATE_BEGIN,
+  CA_RATE_USE,
+  CA_RATE_CANCEL,
   CA_CLOSE
 };
 
@@ -1667,15 +1671,20 @@ static const char *const cfg_tab_labels[AMIGA_CFG_TAB_COUNT] = {
 };
 
 /* Per view (AMIGA_NET_VIEW_*), then the help shown over any of them;
- * Close is on every one. */
-#define CFG_HELP_BUTTONS 3
-static const gui_button_t cfg_buttons[4][AMIGA_CFG_BUTTON_COUNT] = {
-  { { "Refresh", CA_REFRESH }, { NULL, CA_NONE }, { NULL, CA_NONE },
+ * Close is on every one but the rate wait, where only Cancel works.
+ * "Rate..." is Change rate...: the longer label does not fit a button. */
+#define CFG_HELP_BUTTONS (AMIGA_NET_VIEW_RATE_WAIT + 1)
+static const gui_button_t cfg_buttons[CFG_HELP_BUTTONS + 1][AMIGA_CFG_BUTTON_COUNT] = {
+  { { "Refresh", CA_REFRESH }, { "Rate...", CA_RATE_BEGIN }, { NULL, CA_NONE },
     { NULL, CA_NONE }, { "Close", CA_CLOSE } },
   { { "Refresh", CA_REFRESH }, { "Join...", CA_JOIN_BEGIN },
     { NULL, CA_NONE }, { NULL, CA_NONE }, { "Close", CA_CLOSE } },
   { { "Join", CA_JOIN }, { "Rescan", CA_RESCAN }, { "Other...", CA_OTHER },
     { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } },
+  { { "Use", CA_RATE_USE }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } },
+  { { "Cancel", CA_RATE_CANCEL }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { NULL, CA_NONE }, { NULL, CA_NONE } },
   { { "Back", CA_HELP_BACK }, { NULL, CA_NONE }, { NULL, CA_NONE },
     { NULL, CA_NONE }, { "Close", CA_CLOSE } }
 };
@@ -1694,6 +1703,16 @@ static uint16_t cfg_last_index = AMIGA_LIST_NONE;
 static uint8_t cfg_help;
 static uint8_t cfg_help_topic;
 static amiga_list_t cfg_help_list;
+/* Change rate...: the picker's rows (amiga_rate_choices), and the wait
+ * view's rows with the flow's state. */
+#define RATE_WAIT_ROWS 5
+static amiga_list_t cfg_rates;
+static amiga_list_t cfg_rate_wait;
+static uint32_t rate_new;
+static uint8_t rate_cancelled;   /* Cancel pressed during the wait */
+static uint8_t rate_abortable;   /* the hook may abort exchanges */
+static ULONG rate_start;         /* CurrentTime() seconds at the switch */
+static ULONG rate_shown = ~0UL;  /* seconds left as last drawn */
 
 static const gui_button_t *cfg_button(uint8_t i)
 {
@@ -1709,6 +1728,10 @@ static amiga_list_t *cfg_list(void)
     return &cfg_device;
   case AMIGA_NET_VIEW_JOIN:
     return &gctl->networks;
+  case AMIGA_NET_VIEW_RATE:
+    return &cfg_rates;
+  case AMIGA_NET_VIEW_RATE_WAIT:
+    return &cfg_rate_wait;
   default:
     /* The controller counts every row; this tab shows the network ones. */
     amiga_list_set_count(&gctl->netinfo, AMIGA_NET_NETWORK_ROWS);
@@ -1738,10 +1761,17 @@ static uint8_t cfg_ssid_cols(void)
   return w > FN_WIFI_MAX_SSID ? FN_WIFI_MAX_SSID : w;
 }
 
+/* The views that belong to the Network tab; the rest are the Device tab's. */
+static int cfg_on_network(void)
+{
+  return gctl->net.view == AMIGA_NET_VIEW_NETWORK ||
+         gctl->net.view == AMIGA_NET_VIEW_JOIN;
+}
+
 static void cfg_paint_tabs(void)
 {
   paint_tab_row(cfg.tab, AMIGA_CFG_TAB_COUNT, cfg_tab_labels,
-                gctl->net.view == AMIGA_NET_VIEW_DEVICE ? 0 : 1, &cfg.page);
+                cfg_on_network() ? 1 : 0, &cfg.page);
 }
 
 static void cfg_paint_info(void)
@@ -1753,6 +1783,13 @@ static void cfg_paint_info(void)
     break;
   case AMIGA_NET_VIEW_DEVICE:
     strcpy(tmp_text, "FujiNet device");
+    break;
+  case AMIGA_NET_VIEW_RATE:
+    strcpy(tmp_text, "Serial rate (* in use now)");
+    break;
+  case AMIGA_NET_VIEW_RATE_WAIT:
+    amiga_sprintf(tmp_text, "Changing the serial rate to %lu",
+                  (unsigned long) rate_new);
     break;
   case AMIGA_NET_VIEW_JOIN: {
     /* Column heads over the rows' name, signal and security columns. */
@@ -1794,12 +1831,59 @@ static void cfg_draw_bars(WORD x, WORD top, uint8_t level, int selected)
   }
 }
 
+/* Seconds left in the rate wait. */
+static ULONG rate_left(void)
+{
+  ULONG secs;
+  ULONG micros;
+  ULONG gone;
+
+  CurrentTime(&secs, &micros);
+  gone = secs - rate_start;
+  return gone >= AMIGA_RATE_WAIT_SECS ? 0 : AMIGA_RATE_WAIT_SECS - gone;
+}
+
+/* Rate picker and wait rows. */
+static void rate_row_text(uint16_t idx, char *out)
+{
+  if (gctl->net.view == AMIGA_NET_VIEW_RATE) {
+    uint32_t r = amiga_rate_choices[idx];
+
+    amiga_sprintf(out, "%s%lu",
+                  gctl->net.have_baud && r == gctl->net.baud ? "* " : "  ",
+                  (unsigned long) r);
+    return;
+  }
+  switch (idx) {
+  case 0:
+    strcpy(out, "On the FujiNet's console type:");
+    break;
+  case 1:
+    amiga_sprintf(out, "  uart.baud %lu", (unsigned long) rate_new);
+    break;
+  case 2:
+    strcpy(out, "  uart.save");
+    break;
+  case 4:
+    if (rate_cancelled)
+      strcpy(out, "Cancelling...");
+    else
+      amiga_sprintf(out, "Waiting: %lu s left", (unsigned long) rate_shown);
+    break;
+  default:
+    out[0] = 0;
+    break;
+  }
+}
+
 static void cfg_paint_rows(void)
 {
   amiga_list_t *l = cfg_list();
   amiga_rect_t in = cfg_list_interior();
   uint8_t cols = cfg_cols();
   int join = !cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN;
+  int rate = !cfg_help && (gctl->net.view == AMIGA_NET_VIEW_RATE ||
+                           gctl->net.view == AMIGA_NET_VIEW_RATE_WAIT);
   int bars;
   uint8_t bars_col = 0;
   uint8_t r;
@@ -1807,9 +1891,10 @@ static void cfg_paint_rows(void)
   for (r = 0; r < cfg.list_rows; r++) {
     amiga_rect_t row;
     uint16_t idx = (uint16_t) (l->top + r);
-    /* Only the picker's rows and help Contents are chosen from. */
-    int selected = (join || (cfg_help &&
-                             cfg_help_topic == AMIGA_HELP_CONTENTS)) &&
+    /* Only the pickers' rows and help Contents are chosen from. */
+    int selected = (join || (!cfg_help &&
+                             gctl->net.view == AMIGA_NET_VIEW_RATE) ||
+                    (cfg_help && cfg_help_topic == AMIGA_HELP_CONTENTS)) &&
                    idx == l->selected;
 
     row.left = in.left;
@@ -1831,7 +1916,9 @@ static void cfg_paint_rows(void)
       memcpy(tmp_text + hl->indent,
              amiga_help_text(cfg_help_topic) + hl->start, hl->len);
       tmp_text[hl->indent + hl->len] = 0;
-    } else if (join)
+    } else if (rate)
+      rate_row_text(idx, tmp_text);
+    else if (join)
       bars = amiga_net_scan_row_display(&gctl->net.scan[idx], cfg_ssid_cols(),
                                         tmp_text, &bars_col);
     else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
@@ -1950,17 +2037,239 @@ static int cfg_confirm(uint8_t action)
   return confirm(tmp_text);
 }
 
+/* Refresh: the FujiNet's settings, and the serial rate from
+ * fujinet-nio.device. */
+static void cfg_refresh(void)
+{
+  uint32_t baud = 0;
+
+  (void) amiga_ctl_net_refresh(gctl);
+  gctl->net.have_baud = (uint8_t) (amiga_rate_get(&baud) == FN_OK);
+  gctl->net.baud = gctl->net.have_baud ? baud : 0;
+}
+
+/* ---- Change rate... --------------------------------------------------- */
+
+/* Takes the window's pending messages during the rate wait.  Only Cancel
+ * (the button, Esc or the close gadget) does anything; the countdown row
+ * is redrawn when its second changes. */
+static void rate_drain(void)
+{
+  struct IntuiMessage *msg;
+  int changed = 0;
+  ULONG left;
+
+  while ((msg = (struct IntuiMessage *) GetMsg(win->UserPort)) != NULL) {
+    ULONG cls = msg->Class;
+    UWORD code = msg->Code;
+    UWORD qual = msg->Qualifier;
+    struct Gadget *g = (struct Gadget *) msg->IAddress;
+    int cancel = 0;
+
+    ReplyMsg((struct Message *) msg);
+    if (cls == CLOSEWINDOW)
+      cancel = 1;
+    else if (cls == GADGETUP && g->GadgetID >= CFG_BTN0 &&
+             g->GadgetID < CFG_GID_COUNT)
+      cancel = cfg_button((uint8_t) (g->GadgetID - CFG_BTN0))->action ==
+               CA_RATE_CANCEL;
+    else if (cls == RAWKEY)
+      cancel = amiga_key_from_raw(code, qual) == AMIGA_KEY_CANCEL;
+    if (cancel && !rate_cancelled) {
+      rate_cancelled = 1;
+      changed = 1;
+    }
+  }
+  left = rate_left();
+  if (left != rate_shown) {
+    rate_shown = left;
+    changed = 1;
+  }
+  if (changed && gctl->net.view == AMIGA_NET_VIEW_RATE_WAIT)
+    cfg_paint_rows();
+}
+
+static uint8_t rate_op_set(uint32_t baud, void *ctx)
+{
+  (void) ctx;
+  return amiga_rate_set(baud);
+}
+
+static uint8_t rate_op_small(void *ctx)
+{
+  (void) ctx;
+  return amiga_rate_probe_small();
+}
+
+static uint8_t rate_op_large(void *ctx)
+{
+  (void) ctx;
+  return amiga_rate_probe_large();
+}
+
+static uint32_t rate_op_elapsed(void *ctx)
+{
+  (void) ctx;
+  return (uint32_t) (AMIGA_RATE_WAIT_SECS - rate_left());
+}
+
+/* Between probes the flow asks here, so Cancel is seen there too. */
+static int rate_op_cancelled(void *ctx)
+{
+  (void) ctx;
+  rate_drain();
+  return rate_cancelled;
+}
+
+static int rate_op_save(uint32_t baud, void *ctx)
+{
+  (void) ctx;
+  return amiga_rate_save(baud);
+}
+
+static void rate_op_abortable(int on, void *ctx)
+{
+  (void) ctx;
+  rate_abortable = (uint8_t) (on != 0);
+}
+
+static const amiga_rate_ops_t rate_ops = {
+  rate_op_set, rate_op_small, rate_op_large, rate_op_elapsed,
+  rate_op_cancelled, rate_op_save, rate_op_abortable
+};
+
+/* fujinet-nio-lib calls this when the window's signal arrives during an
+ * exchange.  It aborts only while the flow allows it (never during the
+ * revert's check or the save). */
+static int rate_hook(void *ctx)
+{
+  (void) ctx;
+  rate_drain();
+  return rate_abortable && amiga_rate_should_abort(&rate_ops, NULL);
+}
+
+/* Device > Change rate...: the picker, on the rate in use. */
+static void rate_begin(void)
+{
+  uint16_t i;
+  uint16_t sel = 0;
+
+  if (!gctl->net.have_baud) {
+    config_nio_set_status(gctl->state,
+                          "The serial rate is unknown; press Refresh");
+    return;
+  }
+  for (i = 0; i < AMIGA_RATE_COUNT; i++)
+    if (amiga_rate_choices[i] == gctl->net.baud)
+      sel = i;
+  amiga_list_init(&cfg_rates, cfg.list_rows);
+  amiga_list_set_count(&cfg_rates, AMIGA_RATE_COUNT);
+  amiga_list_select(&cfg_rates, sel);
+  gctl->net.view = AMIGA_NET_VIEW_RATE;
+  config_nio_set_status(gctl->state, "Choose a rate and press Use");
+}
+
+/* Use: confirm, switch, wait for the FujiNet, then keep or revert. */
+static void rate_use(void)
+{
+  static char text[96];
+  uint16_t sel = cfg_rates.selected;
+  uint32_t old_baud = gctl->net.baud;
+  uint32_t new_baud;
+  amiga_rate_result_t r;
+  ULONG micros;
+  ULONG idcmp;
+  int persist = 1;
+  int present;
+
+  if (sel >= AMIGA_RATE_COUNT) {
+    config_nio_set_status(gctl->state, "Choose a rate first");
+    cfg_paint_status();
+    return;
+  }
+  new_baud = amiga_rate_choices[sel];
+  if (new_baud == old_baud) {
+    amiga_rate_result_text(AMIGA_RATE_UNCHANGED, old_baud, new_baud, text);
+    config_nio_set_status(gctl->state, text);
+    gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+    cfg_paint();
+    return;
+  }
+  busy_begin();
+  present = amiga_rate_boot_line_present();
+  busy_end();
+  if (!present) {
+    if (!requester(win, "This Amiga's startup does not read S:FujiNet-Config,\n"
+                   "so the new rate would be lost at the next boot.",
+                   "This session only", "Cancel"))
+      return;
+    persist = 0;
+  } else {
+    amiga_sprintf(tmp_text,
+                  "Config switches the Amiga to %lu now. Then, on the FujiNet's console,\n"
+                  "type: uart.baud %lu and uart.save. Config waits 60 seconds and switches\n"
+                  "back to %lu if the FujiNet does not answer.",
+                  (unsigned long) new_baud, (unsigned long) new_baud,
+                  (unsigned long) old_baud);
+    if (!requester(win, tmp_text, "OK", "Cancel"))
+      return;
+  }
+
+  /* The wait view stays live (no busy requester), so Cancel can be
+   * pressed; the hook and rate_drain take every message meanwhile. */
+  rate_new = new_baud;
+  rate_cancelled = 0;
+  rate_abortable = 0;
+  CurrentTime(&rate_start, &micros);
+  rate_shown = rate_left();
+  amiga_list_init(&cfg_rate_wait, cfg.list_rows);
+  amiga_list_set_count(&cfg_rate_wait, RATE_WAIT_ROWS);
+  gctl->net.view = AMIGA_NET_VIEW_RATE_WAIT;
+  config_nio_set_status(gctl->state, "Press Cancel to keep the old rate");
+  cfg_paint();
+  idcmp = win->IDCMPFlags;
+  (void) ModifyIDCMP(win, idcmp | INTUITICKS);
+  amiga_rate_probe_reset();
+  fn_amiga_set_wait_hook(1UL << win->UserPort->mp_SigBit, rate_hook, NULL);
+  r = amiga_rate_change(&rate_ops, NULL, old_baud, new_baud, persist);
+  fn_amiga_set_wait_hook(0, NULL, NULL);
+  (void) ModifyIDCMP(win, idcmp);
+
+  busy_begin();
+  /* At the old rate again with no answer: the delete would only time out. */
+  if (r != AMIGA_RATE_LOST)
+    amiga_rate_probe_cleanup();
+  else
+    amiga_rate_probe_reset();
+  cfg_refresh();
+  /* Messages from the wait (a late Cancel or Esc) must not act on the
+   * Device tab. */
+  rate_drain();
+  gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+  busy_end();
+  amiga_rate_result_text(r, old_baud, new_baud, text);
+  config_nio_set_status(gctl->state, text);
+  cfg_paint();
+}
+
 static void cfg_do_action(uint8_t action)
 {
   uint8_t old_view = gctl->net.view;
   char ssid[FN_WIFI_MAX_SSID + 1];
 
-  if (action == CA_NONE || !cfg_confirm(action))
+  if (action == CA_NONE || action == CA_RATE_CANCEL || !cfg_confirm(action))
     return;
+  if (action == CA_RATE_USE) {   /* its own busy and paint */
+    rate_use();
+    return;
+  }
   busy_begin();
   switch (action) {
   case CA_REFRESH:
-    (void) amiga_ctl_net_refresh(gctl);
+    cfg_refresh();
+    break;
+  case CA_RATE_BEGIN:
+    rate_begin();
     break;
   case CA_JOIN_BEGIN:
     if (amiga_ctl_wifi_begin(gctl) && gctl->net.scan_count)
@@ -1971,7 +2280,11 @@ static void cfg_do_action(uint8_t action)
       amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
     break;
   case CA_CANCEL:
-    amiga_ctl_wifi_cancel(gctl);
+    if (gctl->net.view == AMIGA_NET_VIEW_RATE) {
+      gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+      config_nio_set_status(gctl->state, "");
+    } else
+      amiga_ctl_wifi_cancel(gctl);
     break;
   case CA_HELP_BACK:
     cfg_help = 0;
@@ -2059,7 +2372,7 @@ static void cfg_set_view(uint8_t view)
   cfg_paint();
 }
 
-/* Return / double-click: Join in the picker, else Refresh. */
+/* Return / double-click: Join or Use in a picker, else Refresh. */
 static void cfg_activate(void)
 {
   if (cfg_help) {
@@ -2068,7 +2381,9 @@ static void cfg_activate(void)
       cfg_open_help((uint8_t) (cfg_help_list.selected + 1));
     return;
   }
-  cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN : CA_REFRESH);
+  cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN
+                : gctl->net.view == AMIGA_NET_VIEW_RATE ? CA_RATE_USE
+                                                         : CA_REFRESH);
 }
 
 static void cfg_select(uint16_t index)
@@ -2088,7 +2403,8 @@ static void cfg_list_click(struct IntuiMessage *msg)
   uint16_t index;
 
   int choosing = cfg_help ? cfg_help_topic == AMIGA_HELP_CONTENTS
-                         : gctl->net.view == AMIGA_NET_VIEW_JOIN;
+                         : gctl->net.view == AMIGA_NET_VIEW_JOIN ||
+                           gctl->net.view == AMIGA_NET_VIEW_RATE;
 
   if (!choosing ||
       !amiga_list_hit(cfg_list(), (int16_t) (msg->MouseY - in.top), cfg.row_h,
@@ -2168,15 +2484,16 @@ static int cfg_handle_key(UWORD code, UWORD qualifier)
     cfg_activate();
     return 0;
   case AMIGA_KEY_CANCEL:
-    if (gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+    if (gctl->net.view == AMIGA_NET_VIEW_JOIN ||
+        gctl->net.view == AMIGA_NET_VIEW_RATE) {
       cfg_do_action(CA_CANCEL);
       return 0;
     }
     return 1;
   case AMIGA_KEY_NEXT_PAGE:
   case AMIGA_KEY_PREV_PAGE:
-    cfg_set_view(gctl->net.view == AMIGA_NET_VIEW_DEVICE
-                   ? AMIGA_NET_VIEW_NETWORK : AMIGA_NET_VIEW_DEVICE);
+    cfg_set_view(cfg_on_network() ? AMIGA_NET_VIEW_DEVICE
+                                  : AMIGA_NET_VIEW_NETWORK);
     return 0;
   default:
     return 0;
@@ -2377,7 +2694,7 @@ static int gui_open_config(void)
   config_nio_set_status(gctl->state, "Reading the FujiNet's settings...");
   cfg_paint();
   busy_begin();
-  (void) amiga_ctl_net_refresh(gctl);
+  cfg_refresh();
   busy_end();
   cfg_paint();
 
