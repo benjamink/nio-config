@@ -80,4 +80,7 @@ void test_help(void)
   CHECK(strstr(amiga_help_text(amiga_help_find("Configuration")),
                "Configure") != NULL);
   CHECK(strstr(amiga_help_text(amiga_help_find("Settings")), "Configure") != NULL);
+  /* The serial rate row and its change flow. */
+  CHECK(strstr(amiga_help_text(amiga_help_find("Configuration")),
+               "uart.baud") != NULL);
 }
