@@ -46,6 +46,7 @@ Copy SYS:C/fujinet-load-resident "{TO}C/" CLONE QUIET
 Copy SYS:C/fmount "{TO}C/" CLONE QUIET
 Copy SYS:C/fumount "{TO}C/" CLONE QUIET
 Copy SYS:C/fmountrestore "{TO}C/" CLONE QUIET
+Copy SYS:C/fujinet-nio-baud "{TO}C/" CLONE QUIET
 
 Echo "Copying FujiNet Config to {TO}Tools"
 If NOT EXISTS "{TO}Tools"
@@ -72,6 +73,15 @@ EndIf
 Search >NIL: "{TO}S/User-Startup" "DEVS:fujinet-disk.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>"{TO}S/User-Startup"
+EndIf
+; Default boot settings; an existing S:FujiNet-Config is never replaced.
+If NOT EXISTS "{TO}S/FujiNet-Config"
+  Copy SYS:S/FujiNet-Config "{TO}S/" CLONE QUIET
+EndIf
+; Apply the saved serial rate at boot, after the devices are loaded.
+Search >NIL: "{TO}S/User-Startup" "FROM=S:FujiNet-Config"
+If WARN
+  Echo "C:fujinet-nio-baud FROM=S:FujiNet-Config" >>"{TO}S/User-Startup"
 EndIf
 ; Mount the saved FujiNet drives again, in the background so a FujiNet that is
 ; off or unreachable cannot hold up the boot.

@@ -59,6 +59,9 @@ EndIf
 If NOT EXISTS SYS:C/fujinet-load-resident
   Copy "{FROM}fujinet-load-resident" SYS:C/ CLONE QUIET
 EndIf
+If NOT EXISTS SYS:C/fujinet-nio-baud
+  Copy "{FROM}fujinet-nio-baud" SYS:C/ CLONE QUIET
+EndIf
 If NOT EXISTS SYS:C/fmountrestore
   Copy "{FROM}fmountrestore" SYS:C/ CLONE QUIET
 EndIf
@@ -84,6 +87,16 @@ EndIf
 Search >NIL: S:User-Startup "DEVS:fujinet-disk.device"
 If WARN
   Echo "C:fujinet-load-resident DEVS:fujinet-disk.device fujinet-disk.device" >>S:User-Startup
+  Set reboot "yes"
+EndIf
+; Default boot settings; an existing S:FujiNet-Config is never replaced.
+If NOT EXISTS S:FujiNet-Config
+  Copy "{FROM}FujiNet-Config" S: CLONE QUIET
+EndIf
+; Apply the saved serial rate at boot, after the devices are loaded.
+Search >NIL: S:User-Startup "FROM=S:FujiNet-Config"
+If WARN
+  Echo "C:fujinet-nio-baud FROM=S:FujiNet-Config" >>S:User-Startup
   Set reboot "yes"
 EndIf
 ; Some minimal systems (e.g. the Workbench 3.2 install floppy) never run
