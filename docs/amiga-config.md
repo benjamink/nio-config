@@ -236,6 +236,32 @@ from the FujiNet.
 A FujiNet whose Wi-Fi is managed by its host computer (POSIX host mode) can
 be viewed but not switched.
 
+### Serial rate
+
+The **Device** tab also shows **Serial rate**, the RS-232 rate between the
+Amiga and the FujiNet, with a **Rate...** button. To change it:
+
+1. Press **Rate...**. The list shows 9600, 19200, 38400, 57600 and 115200,
+   with `*` marking the current rate. Select one and press **Use** (or
+   double-click).
+2. If no startup file runs `fujinet-nio-baud FROM=S:FujiNet-Config`, a
+   requester offers **This session only** or Cancel.
+3. A requester explains what to do on the FujiNet's console: type
+   `uart.baud <rate>` and `uart.save`. Config then waits 60 seconds, showing a
+   countdown and a **Cancel** button. Cancel shows `Cancelling...` and the old
+   rate comes back within about 5 seconds.
+4. When the FujiNet answers at the new rate, Config runs a long-reply check:
+   it writes a 512-byte pattern to the FujiNet app store (`config-nio`,
+   `rate-check`) and reads it back 3 times. If that fails, Config reverts and
+   says `<rate> lost data on long replies; back to <old rate>`.
+5. If it works, Config saves `BAUD=<rate>` to `S:FujiNet-Config`, keeping the
+   file's other lines, and says `Serial rate <rate> saved`. If the save fails
+   (disk full or write-protected), the rate stays for this session and the
+   status says it is not saved.
+
+If the FujiNet does not answer, the status is `No answer at <rate>; back to
+<old rate>`. Cancelling gives `Cancelled; back to <old rate>`.
+
 ## Drives, FMOUNT and FMOUNTRESTORE
 
 Mount and Eject run the standard `FMOUNT` and `FUMOUNT` commands. The

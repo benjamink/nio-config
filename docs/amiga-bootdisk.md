@@ -70,11 +70,27 @@ exec, dos, intuition and graphics, and its shell runs the disk's
 serial driver, sets the RS-232 rate to 38400 and runs `Tools/config-nio`.
 
 **Set the FujiNet to 38400 too** (on its console: `uart.baud 38400`, then
-`uart.save`); the two ends must match. To use another rate, change the
-`C:fujinet-nio-baud 38400` line in `S/Startup-Sequence`. The disk has no
-editor, so edit the ADF on another machine (for example `xdftool`) or from a
-Workbench system. For one session, quit Config and type
+`uart.save`); the two ends must match. The rate comes from `S:FujiNet-Config`,
+which the disk ships with `BAUD=38400`; `S/Startup-Sequence` runs
+`C:fujinet-nio-baud FROM=S:FujiNet-Config` to apply it. To change it, use
+Config's **Serial rate** setting (Configuration window, Device tab, **Rate...**;
+see `docs/amiga-config.md`). It tests the new rate with the FujiNet and then
+saves `BAUD=<rate>` in `S:FujiNet-Config`, keeping any other lines, so no
+editor is needed. You can also edit the one-line file on another machine
+(for example with `xdftool`). For one session, quit Config and type
 `C:fujinet-nio-baud <rate>` then `Tools/config-nio` at the boot CLI.
+
+`fujinet-nio-baud FROM=<file>` is silent and returns 0 when the file (or its
+volume) is missing. A bad or missing `BAUD=` value, or any other failure,
+prints one line and returns 5; it never returns 20.
+
+The Workbench disks (`wb204`, `wb13`) and the installers (`Install-HD`,
+`Install-config-nio`, `Install-FujiNet-WB13`) ship `C:fujinet-nio-baud` and a
+default `S:FujiNet-Config` as well, now at 38400 (the Workbench disks
+previously ran at the driver's built-in 19200). The installers copy the file
+only when none exists. `Install-HD` and `Install-config-nio` append the boot
+line to `S:User-Startup`; `Install-FujiNet-WB13` tells you to add it to
+`S:StartupII`.
 
 A bare system differs from a Workbench one in ways that matter here, all
 found by testing:
