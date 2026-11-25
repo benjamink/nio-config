@@ -79,7 +79,7 @@ void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out)
   static const char *const labels[AMIGA_NET_ROWS] = {
     "Wi-Fi", "Network", "Signal", "Access point", "IP address",
     "Subnet mask", "Gateway", "DNS server", "MAC address", "Wi-Fi control",
-    "Firmware", "Profile"
+    "Firmware", "Profile", "Serial rate"
   };
   const fn_wifi_status_t *s = &net->status;
   uint8_t hs = net->have_status;
@@ -152,6 +152,12 @@ void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out)
     else
       strcpy(value, net->info_error == FN_ERR_UNSUPPORTED
                       ? "Needs newer firmware" : "Unknown");
+    break;
+  case AMIGA_NET_ROW_RATE:
+    if (net->have_baud)
+      amiga_sprintf(value, "%lu", (unsigned long) net->baud);
+    else
+      strcpy(value, "Unknown");
     break;
   case AMIGA_NET_ROW_CONTROL:
     strcpy(value, hs ? control_text(s) : "Unknown");

@@ -152,6 +152,16 @@ void test_net(void)
   amiga_net_row_text(&net, AMIGA_NET_ROW_PROFILE, text);
   CHECK_STR(text, "Profile       Unknown");
 
+  /* Device tab: the serial rate, or Unknown until it has been read. */
+  memset(&net, 0, sizeof(net));
+  amiga_net_row_text(&net, AMIGA_NET_ROW_RATE, text);
+  CHECK_STR(text, "Serial rate   Unknown");
+  net.have_baud = 1;
+  net.baud = 38400;
+  amiga_net_row_text(&net, AMIGA_NET_ROW_RATE, text);
+  CHECK_STR(text, "Serial rate   38400");
+  CHECK(AMIGA_NET_DEVICE_ROWS == 3);
+
   /* Join picker rows: the name padded or cut to its column. */
   memset(&r, 0, sizeof(r));
   strcpy(r.ssid, "home");
