@@ -54,7 +54,8 @@ typedef struct {
    * and the old rate does not answer: the user must set the FujiNet back.
    * The GUI shows "uart.baud <old_baud>" / "uart.save" in its wait view,
    * restarts the 60 s clock (elapsed_secs counts from 0 again) and forgets
-   * an earlier Cancel, so a second Cancel ends the second wait. */
+   * an earlier Cancel, so a second Cancel ends the second wait.  Must not
+   * be NULL. */
   void (*wait_back)(uint32_t old_baud, void *ctx);
 } amiga_rate_ops_t;
 
