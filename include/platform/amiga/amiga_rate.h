@@ -48,4 +48,23 @@ void amiga_rate_result_text(amiga_rate_result_t r, uint32_t old_baud,
 /* Config-side deadline test the GUI's wait hook uses: 1 = abort now. */
 int amiga_rate_should_abort(const amiga_rate_ops_t *ops, void *ctx);
 
+#ifdef __AMIGA__
+/* Amiga glue (amiga_rate_dos.c).  get/set use Config's own
+ * fujinet-nio.device handle: FN_OK or an FN_ERR_* code. */
+uint8_t amiga_rate_get(uint32_t *baud);
+uint8_t amiga_rate_set(uint32_t baud);
+/* 1 if S:Startup-Sequence, S:User-Startup or S:StartupII runs the boot
+ * line.  Never writes them. */
+int amiga_rate_boot_line_present(void);
+/* BAUD=<baud> into S:FujiNet-Config, other lines kept; 1 when written. */
+int amiga_rate_save(uint32_t baud);
+uint8_t amiga_rate_probe_small(void);
+uint8_t amiga_rate_probe_large(void);
+/* Call reset before amiga_rate_change (the next probe_large writes the
+ * check pattern) and cleanup after it, with the wait hook off (deletes the
+ * check key if one was written). */
+void amiga_rate_probe_reset(void);
+void amiga_rate_probe_cleanup(void);
+#endif
+
 #endif

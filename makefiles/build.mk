@@ -3,6 +3,7 @@ SHELL := /usr/bin/env bash
 
 TARGET ?= msdos
 FUJINET_NIO_LIB ?= ../fujinet-nio-lib
+FUJINET_NIO_DRIVER ?= ../fujinet-nio-driver
 # cc65 checkout; BBC assembly includes its libsrc/bbc headers (oslib/os.inc).
 CC65_HOME ?= ../cc65
 
@@ -86,7 +87,8 @@ CONFIG_NIO_EXTRA_SRCS_amiga := \
 	$(SRC_DIR)/platform/portable/config_nio_store.c \
 	$(SRC_DIR)/platform/portable/config_nio_tables.c \
 	$(SRC_DIR)/platform/portable/fnsvc.c \
-	$(SRC_DIR)/platform/linux/fnctl.c
+	$(SRC_DIR)/platform/linux/fnctl.c \
+	$(FUJINET_NIO_DRIVER)/amiga/common/fujinet_boot_config.c
 CONFIG_NIO_SRCS += $(CONFIG_NIO_EXTRA_SRCS_$(TARGET))
 # Atari and C64 share a full-screen front end (compact_app.c, with its own main) on
 # a compact core (compact_core.c): the shared portable layer does not fit in 48K.
