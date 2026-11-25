@@ -190,6 +190,8 @@ static amiga_help_line_t help_lines[HELP_LINES_MAX];
 
 static char row_text[ROW_TEXT_MAX + 1];
 static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
+/* Change rate...'s requester texts are built in tmp_text. */
+typedef char rate_ask_fits_tmp_text[sizeof(tmp_text) >= AMIGA_RATE_ASK_MAX ? 1 : -1];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
 /* ---- Menus ------------------------------------------------------------ */
 
@@ -1709,9 +1711,13 @@ static amiga_list_t cfg_help_list;
 static amiga_list_t cfg_rates;
 static amiga_list_t cfg_rate_wait;
 static uint32_t rate_new;
+static uint32_t rate_wait_baud;  /* the rate the wait view asks for */
+static uint8_t rate_persist;     /* the wait view asks for uart.save */
+static uint8_t rate_back;        /* the second wait: set the FujiNet back */
 static uint8_t rate_cancelled;   /* Cancel pressed during the wait */
-static uint8_t rate_abortable;   /* the hook may abort exchanges */
-static ULONG rate_start;         /* CurrentTime() seconds at the switch */
+static uint8_t rate_abort_mode;  /* AMIGA_RATE_ABORT_*: when the hook aborts */
+static ULONG rate_start;         /* CurrentTime() seconds at the switch, or at
+                                    the start of the second wait */
 static ULONG rate_shown = ~0UL;  /* seconds left as last drawn */
 
 static const gui_button_t *cfg_button(uint8_t i)
@@ -1788,8 +1794,9 @@ static void cfg_paint_info(void)
     strcpy(tmp_text, "Serial rate (* in use now)");
     break;
   case AMIGA_NET_VIEW_RATE_WAIT:
-    amiga_sprintf(tmp_text, "Changing the serial rate to %lu",
-                  (unsigned long) rate_new);
+    amiga_sprintf(tmp_text, rate_back ? "Setting the serial rate back to %lu"
+                                      : "Changing the serial rate to %lu",
+                  (unsigned long) rate_wait_baud);
     break;
   case AMIGA_NET_VIEW_JOIN: {
     /* Column heads over the rows' name, signal and security columns. */
@@ -1859,10 +1866,15 @@ static void rate_row_text(uint16_t idx, char *out)
     strcpy(out, "On the FujiNet's console type:");
     break;
   case 1:
-    amiga_sprintf(out, "  uart.baud %lu", (unsigned long) rate_new);
+    amiga_sprintf(out, "  uart.baud %lu", (unsigned long) rate_wait_baud);
     break;
   case 2:
-    strcpy(out, "  uart.save");
+    /* This session only: the FujiNet must not save the new rate.  Going
+     * back always asks for uart.save, which undoes one typed anyway. */
+    if (rate_persist || rate_back)
+      strcpy(out, "  uart.save");
+    else
+      out[0] = 0;
     break;
   case 4:
     if (rate_cancelled)
@@ -2037,15 +2049,20 @@ static int cfg_confirm(uint8_t action)
   return confirm(tmp_text);
 }
 
-/* Refresh: the FujiNet's settings, and the serial rate from
- * fujinet-nio.device. */
-static void cfg_refresh(void)
+/* The Serial rate row, from fujinet-nio.device (no FujiNet exchange). */
+static void cfg_read_baud(void)
 {
   uint32_t baud = 0;
 
-  (void) amiga_ctl_net_refresh(gctl);
   gctl->net.have_baud = (uint8_t) (amiga_rate_get(&baud) == FN_OK);
   gctl->net.baud = gctl->net.have_baud ? baud : 0;
+}
+
+/* Refresh: the FujiNet's settings, and the serial rate. */
+static void cfg_refresh(void)
+{
+  (void) amiga_ctl_net_refresh(gctl);
+  cfg_read_baud();
 }
 
 /* ---- Change rate... --------------------------------------------------- */
@@ -2127,25 +2144,44 @@ static int rate_op_save(uint32_t baud, void *ctx)
   return amiga_rate_save(baud);
 }
 
-static void rate_op_abortable(int on, void *ctx)
+static void rate_op_abortable(int mode, void *ctx)
 {
   (void) ctx;
-  rate_abortable = (uint8_t) (on != 0);
+  rate_abort_mode = (uint8_t) mode;
+}
+
+/* The FujiNet answered at the new rate but the flow went back: ask the user
+ * to set the FujiNet back, with a fresh 60 s and Cancel. */
+static void rate_op_wait_back(uint32_t old_baud, void *ctx)
+{
+  ULONG micros;
+
+  (void) ctx;
+  rate_back = 1;
+  rate_wait_baud = old_baud;
+  rate_cancelled = 0;
+  CurrentTime(&rate_start, &micros);
+  rate_shown = rate_left();
+  amiga_sprintf(tmp_text, "The Amiga is back at %lu; set the FujiNet to match",
+                (unsigned long) old_baud);
+  config_nio_set_status(gctl->state, tmp_text);
+  cfg_paint();
 }
 
 static const amiga_rate_ops_t rate_ops = {
   rate_op_set, rate_op_small, rate_op_large, rate_op_elapsed,
-  rate_op_cancelled, rate_op_save, rate_op_abortable
+  rate_op_cancelled, rate_op_save, rate_op_abortable, rate_op_wait_back
 };
 
 /* fujinet-nio-lib calls this when the window's signal arrives during an
- * exchange.  It aborts only while the flow allows it (never during the
- * revert's check or the save). */
+ * exchange.  It aborts only as the flow's abortable() mode allows: never
+ * during the revert's check or the save, on Cancel only once the FujiNet
+ * has answered at the new rate. */
 static int rate_hook(void *ctx)
 {
   (void) ctx;
   rate_drain();
-  return rate_abortable && amiga_rate_should_abort(&rate_ops, NULL);
+  return amiga_rate_should_abort(&rate_ops, NULL, rate_abort_mode);
 }
 
 /* Device > Change rate...: the picker, on the rate in use. */
@@ -2181,6 +2217,7 @@ static void rate_use(void)
   ULONG idcmp;
   int persist = 1;
   int present;
+  int writable;
 
   if (sel >= AMIGA_RATE_COUNT) {
     config_nio_set_status(gctl->state, "Choose a rate first");
@@ -2197,29 +2234,31 @@ static void rate_use(void)
   }
   busy_begin();
   present = amiga_rate_boot_line_present();
+  /* A rate the boot cannot read back, or that cannot be saved, would leave
+   * the next boot at the old rate with a FujiNet saved at the new one. */
+  writable = present && amiga_rate_can_save();
   busy_end();
-  if (!present) {
-    if (!requester(win, "This Amiga's startup does not read S:FujiNet-Config,\n"
-                   "so the new rate would be lost at the next boot.",
-                   "This session only", "Cancel"))
+  if (!writable) {
+    amiga_rate_ask_text(present ? AMIGA_RATE_ASK_NO_WRITE
+                                : AMIGA_RATE_ASK_NO_BOOT_LINE,
+                        old_baud, new_baud, tmp_text);
+    if (!requester(win, tmp_text, "This session only", "Cancel"))
       return;
     persist = 0;
-  } else {
-    amiga_sprintf(tmp_text,
-                  "Config switches the Amiga to %lu now. Then, on the FujiNet's console,\n"
-                  "type: uart.baud %lu and uart.save. Config waits 60 seconds and switches\n"
-                  "back to %lu if the FujiNet does not answer.",
-                  (unsigned long) new_baud, (unsigned long) new_baud,
-                  (unsigned long) old_baud);
-    if (!requester(win, tmp_text, "OK", "Cancel"))
-      return;
   }
+  amiga_rate_ask_text(persist ? AMIGA_RATE_ASK_CONFIRM : AMIGA_RATE_ASK_SESSION,
+                      old_baud, new_baud, tmp_text);
+  if (!requester(win, tmp_text, "OK", "Cancel"))
+    return;
 
   /* The wait view stays live (no busy requester), so Cancel can be
    * pressed; the hook and rate_drain take every message meanwhile. */
   rate_new = new_baud;
+  rate_wait_baud = new_baud;
+  rate_persist = (uint8_t) persist;
+  rate_back = 0;
   rate_cancelled = 0;
-  rate_abortable = 0;
+  rate_abort_mode = AMIGA_RATE_ABORT_OFF;
   CurrentTime(&rate_start, &micros);
   rate_shown = rate_left();
   amiga_list_init(&cfg_rate_wait, cfg.list_rows);
@@ -2236,12 +2275,15 @@ static void rate_use(void)
   (void) ModifyIDCMP(win, idcmp);
 
   busy_begin();
-  /* At the old rate again with no answer: the delete would only time out. */
-  if (r != AMIGA_RATE_LOST)
-    amiga_rate_probe_cleanup();
-  else
+  /* At the old rate again with no answer: the check key's delete and the
+   * FujiNet refresh would only time out, so read just the Amiga's rate. */
+  if (r == AMIGA_RATE_LOST || r == AMIGA_RATE_LOST_ANSWERED) {
     amiga_rate_probe_reset();
-  cfg_refresh();
+    cfg_read_baud();
+  } else {
+    amiga_rate_probe_cleanup();
+    cfg_refresh();
+  }
   /* Messages from the wait (a late Cancel or Esc) must not act on the
    * Device tab. */
   rate_drain();

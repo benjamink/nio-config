@@ -159,6 +159,19 @@ int amiga_rate_boot_line_present(void)
 
 #define RATE_CONFIG_NEW FUJINET_BOOT_CONFIG_PATH ".new"
 
+/* Before switching: whether the save can create S:FujiNet-Config.new.
+ * A write-protected disk, or one too full for a new file, fails here. */
+int amiga_rate_can_save(void)
+{
+  BPTR fh = Open((CONST_STRPTR) RATE_CONFIG_NEW, MODE_NEWFILE);
+
+  if (!fh)
+    return 0;
+  Close(fh);
+  (void) DeleteFile((CONST_STRPTR) RATE_CONFIG_NEW);
+  return 1;
+}
+
 /* Rewrites S:FujiNet-Config with BAUD=<baud>, keeping its other lines:
  * write S:FujiNet-Config.new, delete the old file, rename (Rename does not
  * overwrite on 1.3).  A missing file starts empty; one larger than the boot

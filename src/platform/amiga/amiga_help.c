@@ -163,9 +163,13 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "Config waits up to 60 seconds for the FujiNet to answer and checks a "
   "few long replies; if there is no answer, the long replies lose data or "
   "you press Cancel, it switches back to the old rate and saves nothing. "
-  "Once it works, the rate is saved in S:FujiNet-Config, which the "
-  "startup-sequence reads at every boot. If your startup does not read "
-  "that file, Config offers to change the rate for this session only.",
+  "If the FujiNet had already answered at the new rate, Config then waits "
+  "another 60 seconds while you type uart.baud <old rate> and uart.save "
+  "to set it back. Once it works, the rate is saved in S:FujiNet-Config, "
+  "which the startup-sequence reads at every boot. If your startup does "
+  "not read that file, or the disk is write-protected or full, Config "
+  "offers to change the rate for this session only; then type uart.baud "
+  "but not uart.save. FujiNet drives may not respond while Config waits.",
 
   "The Settings menu changes how the Browse page shows files. Settings "
   "are saved on the FujiNet at once.\n"
